@@ -70,7 +70,9 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
       _loading = true;
     });
     try {
-      final result = await ref.read(authRepositoryProvider).requestLoginOtp(identifier);
+      final result = await ref
+          .read(authRepositoryProvider)
+          .requestLoginOtp(identifier);
       if (!mounted) return;
       context.push(
         AuthOtpScreen.path,
@@ -106,10 +108,9 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
       _loading = true;
     });
     try {
-      final tokens = await ref.read(authRepositoryProvider).loginWithPassword(
-            identifier: identifier,
-            password: _password.text,
-          );
+      final tokens = await ref
+          .read(authRepositoryProvider)
+          .loginWithPassword(identifier: identifier, password: _password.text);
       await ref.read(authNotifierProvider.notifier).applyTokens(tokens);
       if (!mounted) return;
       context.go('/feed');
@@ -134,7 +135,9 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
       if (!mounted) return;
       context.go('/feed');
     } catch (e) {
-      final message = e is ApiException ? e.message : 'Google sign-in failed. Please try again.';
+      final message = e is ApiException
+          ? e.message
+          : 'Google sign-in failed. Please try again.';
       setState(() => _error = message);
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -152,7 +155,14 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: _goBack,
         ),
-        title: Text('SIGN IN', style: AppTextStyles.display(28, color: AppColors.primary, letterSpacing: 0.08)),
+        title: Text(
+          'LOG IN',
+          style: AppTextStyles.display(
+            28,
+            color: AppColors.primary,
+            letterSpacing: 0.08,
+          ),
+        ),
       ),
       body: LayoutBuilder(
         builder: (context, constraints) => SingleChildScrollView(
@@ -165,7 +175,11 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
               children: [
                 Text(
                   'Email or username',
-                  style: AppTextStyles.body(14, color: AppColors.mutedForeground, weight: FontWeight.w700),
+                  style: AppTextStyles.body(
+                    14,
+                    color: AppColors.mutedForeground,
+                    weight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -173,13 +187,19 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
                   readOnly: _loading,
                   keyboardType: TextInputType.emailAddress,
                   onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(hintText: 'you@example.com or username'),
+                  decoration: const InputDecoration(
+                    hintText: 'you@example.com or username',
+                  ),
                 ),
                 if (_usePassword) ...[
                   const SizedBox(height: 16),
                   Text(
                     'Password',
-                    style: AppTextStyles.body(14, color: AppColors.mutedForeground, weight: FontWeight.w700),
+                    style: AppTextStyles.body(
+                      14,
+                      color: AppColors.mutedForeground,
+                      weight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -192,45 +212,114 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
                       suffixIcon: IconButton(
                         onPressed: _loading
                             ? null
-                            : () => setState(() => _obscurePassword = !_obscurePassword),
-                        icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                            : () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
                       ),
                     ),
                   ),
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 12),
-                  Text(_error!, style: AppTextStyles.body(14, color: AppColors.destructive)),
+                  Text(
+                    _error!,
+                    style: AppTextStyles.body(14, color: AppColors.destructive),
+                  ),
                 ],
                 const SizedBox(height: 24),
                 BeTherPrimaryButton(
                   label: _loading
                       ? (_usePassword ? 'SIGNING IN...' : 'VERIFYING...')
-                      : (_usePassword ? 'SIGN IN' : 'VERIFY OTP'),
+                      : (_usePassword ? 'LOG IN' : 'VERIFY OTP'),
                   enabled: !_loading,
-                  onPressed: _usePassword ? _loginWithPassword : _requestOtpLogin,
+                  onPressed: _usePassword
+                      ? _loginWithPassword
+                      : _requestOtpLogin,
                 ),
                 const SizedBox(height: 10),
                 Align(
                   alignment: Alignment.center,
                   child: TextButton(
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.all(8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     onPressed: _loading
                         ? null
                         : () => setState(() {
-                              _error = null;
-                              _usePassword = !_usePassword;
-                            }),
+                            _error = null;
+                            _usePassword = !_usePassword;
+                          }),
                     child: Text(
-                      _usePassword ? 'Use OTP instead' : 'Login with password instead',
-                      style: AppTextStyles.body(12, color: AppColors.mutedForeground, weight: FontWeight.w700),
+                      _usePassword
+                          ? 'Use OTP instead'
+                          : 'Login with password instead',
+                      style: AppTextStyles.body(
+                        12,
+                        color: AppColors.mutedForeground,
+                        weight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                BeTherSecondaryButton(
-                  label: 'GOOGLE',
-                  enabled: !_loading,
-                  onPressed: _google,
+                Center(child: Text('OR')),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.center,
+                  child: SizedBox(
+                    width: 230,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: AppColors.card,
+                        side: BorderSide(color: AppColors.border, width: 2),
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                      ),
+                      onPressed: _loading ? null : _google,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset(
+                            'assets/images/google.png',
+                            width: 18,
+                            height: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            _loading ? 'CONNECTING...' : 'Continue with Google',
+                            style: AppTextStyles.body(
+                              13,
+                              color: AppColors.foreground,
+                              weight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: Text(
+                    'If account exists, we log you in. Otherwise, we create for you.',
+                    style: AppTextStyles.body(
+                      12,
+                      color: AppColors.mutedForeground,
+                    ),
+                  ),
                 ),
               ],
             ),

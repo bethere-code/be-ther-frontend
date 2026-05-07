@@ -77,9 +77,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
   }
 
   static final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-  static final _passwordRegex = RegExp(
-    r'^.{8,}$',
-  );
+  static final _passwordRegex = RegExp(r'^.{8,}$');
 
   String? _validate() {
     if (_name.text.trim().isEmpty) return 'Enter your name';
@@ -303,7 +301,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                   textCapitalization: TextCapitalization.words,
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
-                    hintText: 'Your full name',
+                    hintText: 'first name',
                     hintStyle: AppTextStyles.body(
                       13,
                       color: AppColors.mutedForeground,
@@ -420,8 +418,8 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                       onPressed: _loading
                           ? null
                           : () => setState(
-                                () => _obscurePassword = !_obscurePassword,
-                              ),
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
                     ),
                   ),
                 ),
@@ -437,6 +435,77 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                   label: _loading ? 'VERIFYING...' : 'VERIFY OTP',
                   enabled: !_loading,
                   onPressed: _sendOtp,
+                ),
+                const SizedBox(height: 12),
+                Center(child: Text('OR')),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.center,
+                  child: SizedBox(
+                    width: 230,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: AppColors.card,
+                        side: BorderSide(color: AppColors.border, width: 2),
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                      ),
+                      onPressed: _loading
+                          ? null
+                          : () async {
+                              setState(() {
+                                _error = null;
+                                _loading = true;
+                              });
+                              try {
+                                // One Google action for both cases:
+                                // - New Google user: sign up
+                                // - Existing Google user: sign in
+                                final tokens = await ref
+                                    .read(authRepositoryProvider)
+                                    .signInWithGoogle();
+                                await ref
+                                    .read(authNotifierProvider.notifier)
+                                    .applyTokens(tokens);
+                                if (!mounted) return;
+                                if (!context.mounted) return;
+                                context.go('/feed');
+                              } catch (e) {
+                                final message = e is ApiException
+                                    ? e.message
+                                    : 'Google sign-in failed. Please try again.';
+                                setState(() => _error = message);
+                              } finally {
+                                if (mounted) setState(() => _loading = false);
+                              }
+                            },
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset(
+                            'assets/images/google.png',
+                            width: 18,
+                            height: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            _loading ? 'CONNECTING...' : 'Continue with Google',
+                            style: AppTextStyles.body(
+                              13,
+                              color: AppColors.foreground,
+                              weight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -489,7 +558,9 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
   }) {
     return Row(
       children: [
-        Expanded(child: _fieldLabel(text, required: required, optional: optional)),
+        Expanded(
+          child: _fieldLabel(text, required: required, optional: optional),
+        ),
         _InlineFieldStatusText(
           checking: checking,
           error: error,
@@ -516,19 +587,31 @@ class _InlineFieldStatusText extends StatelessWidget {
     if (checking) {
       return Text(
         'Checking...',
-        style: AppTextStyles.body(12, color: AppColors.mutedForeground, weight: FontWeight.w700),
+        style: AppTextStyles.body(
+          12,
+          color: AppColors.mutedForeground,
+          weight: FontWeight.w700,
+        ),
       );
     }
     if (error != null) {
       return Text(
         'Not available',
-        style: AppTextStyles.body(12, color: AppColors.destructive, weight: FontWeight.w700),
+        style: AppTextStyles.body(
+          12,
+          color: AppColors.destructive,
+          weight: FontWeight.w700,
+        ),
       );
     }
     if (!available) return const SizedBox.shrink();
     return Text(
       'Available',
-      style: AppTextStyles.body(12, color: Colors.green.shade700, weight: FontWeight.w700),
+      style: AppTextStyles.body(
+        12,
+        color: Colors.green.shade700,
+        weight: FontWeight.w700,
+      ),
     );
   }
 }

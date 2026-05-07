@@ -1,4 +1,4 @@
-package com.bether.be_ther
+package com.bether.app
 
 import io.flutter.embedding.android.FlutterActivity
 

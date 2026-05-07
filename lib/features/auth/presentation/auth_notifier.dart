@@ -57,6 +57,8 @@ final unauthenticatedDioProvider = Provider<Dio>((ref) {
 });
 
 class AuthNotifier extends Notifier<AuthState> {
+  Future<void>? _hydrateInFlight;
+
   @override
   AuthState build() {
     return const AuthState();
@@ -65,6 +67,12 @@ class AuthNotifier extends Notifier<AuthState> {
   TokenStorage get _storage => ref.read(tokenStorageProvider);
 
   Future<void> hydrateFromStorage() async {
+    if (_hydrateInFlight != null) {
+      await _hydrateInFlight;
+      return;
+    }
+
+    final run = () async {
     final (access, refresh) = await _storage.read();
     if (access == null || refresh == null || access.isEmpty || refresh.isEmpty) {
       state = const AuthState();
@@ -77,6 +85,14 @@ class AuthNotifier extends Notifier<AuthState> {
     } catch (_) {
       await _storage.clear();
       state = const AuthState();
+    }
+    };
+
+    _hydrateInFlight = run();
+    try {
+      await _hydrateInFlight;
+    } finally {
+      _hydrateInFlight = null;
     }
   }
 
