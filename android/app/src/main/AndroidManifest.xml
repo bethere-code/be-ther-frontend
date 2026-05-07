@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <application
-        android:label="be_ther"
+        android:label="Be-Ther"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

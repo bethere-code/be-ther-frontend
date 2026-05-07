@@ -10,11 +10,15 @@ class AuthRepository {
 
   Future<LoginOtpRequestResult> requestLoginOtp(String identifier) async {
     try {
+      print("requestLoginOtp: $identifier");
+      print("requestLoginOtp: ${_dio.options.baseUrl}");
       final res = await _dio.post<Map<String, dynamic>>(
         '/api/v1/auth/login/otp/request',
         data: {'identifier': identifier},
       );
       final data = _unwrap(res) as Map<String, dynamic>;
+      print("requestLoginOtp: $data");
+      print(data);
       return LoginOtpRequestResult(
         destinationLabel: data['destinationLabel'] as String? ?? identifier,
       );

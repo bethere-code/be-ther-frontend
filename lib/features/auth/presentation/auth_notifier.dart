@@ -7,11 +7,7 @@ import '../../../core/storage/token_storage.dart';
 import '../data/auth_repository.dart';
 
 class AuthState {
-  const AuthState({
-    this.accessToken,
-    this.refreshToken,
-    this.user,
-  });
+  const AuthState({this.accessToken, this.refreshToken, this.user});
 
   final String? accessToken;
   final String? refreshToken;
@@ -72,21 +68,28 @@ class AuthNotifier extends Notifier<AuthState> {
       return;
     }
 
-    final run = () async {
-    final (access, refresh) = await _storage.read();
-    if (access == null || refresh == null || access.isEmpty || refresh.isEmpty) {
-      state = const AuthState();
-      return;
+    Future<Null> run() async {
+      final (access, refresh) = await _storage.read();
+      if (access == null ||
+          refresh == null ||
+          access.isEmpty ||
+          refresh.isEmpty) {
+        state = const AuthState();
+        return;
+      }
+      try {
+        final repo = ref.read(authRepositoryProvider);
+        final user = await repo.me(access);
+        state = AuthState(
+          accessToken: access,
+          refreshToken: refresh,
+          user: user,
+        );
+      } catch (_) {
+        await _storage.clear();
+        state = const AuthState();
+      }
     }
-    try {
-      final repo = ref.read(authRepositoryProvider);
-      final user = await repo.me(access);
-      state = AuthState(accessToken: access, refreshToken: refresh, user: user);
-    } catch (_) {
-      await _storage.clear();
-      state = const AuthState();
-    }
-    };
 
     _hydrateInFlight = run();
     try {
@@ -97,7 +100,10 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> applyTokens(AuthTokens tokens) async {
-    await _storage.write(accessToken: tokens.accessToken, refreshToken: tokens.refreshToken);
+    await _storage.write(
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    );
     state = AuthState(
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -111,7 +117,10 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       final repo = ref.read(authRepositoryProvider);
       final next = await repo.refresh(refresh);
-      await _storage.write(accessToken: next.accessToken, refreshToken: next.refreshToken);
+      await _storage.write(
+        accessToken: next.accessToken,
+        refreshToken: next.refreshToken,
+      );
       state = AuthState(
         accessToken: next.accessToken,
         refreshToken: next.refreshToken,
@@ -131,4 +140,6 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 }
 
-final authNotifierProvider = NotifierProvider<AuthNotifier, AuthState>(AuthNotifier.new);
+final authNotifierProvider = NotifierProvider<AuthNotifier, AuthState>(
+  AuthNotifier.new,
+);
