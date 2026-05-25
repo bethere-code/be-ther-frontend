@@ -34,18 +34,21 @@ class _SlideData {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   static const _slides = [
     _SlideData(
-      remoteUrl: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80',
+      remoteUrl:
+          'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80',
       localAsset: AppImages.onboardingDiscoverFull,
       title: 'DISCOVER',
       subtitle: 'Where your friends are going',
     ),
     _SlideData(
-      remoteUrl: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80',
+      remoteUrl:
+          'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80',
       title: 'SHARE',
       subtitle: 'Your travel adventures',
     ),
     _SlideData(
-      remoteUrl: 'https://images.unsplash.com/photo-1503220317375-aaad61436b1b?w=800&q=80',
+      remoteUrl:
+          'https://images.unsplash.com/photo-1503220317375-aaad61436b1b?w=800&q=80',
       title: 'EXPLORE',
       subtitle: 'New places together',
     ),
@@ -90,16 +93,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 if (s.localAsset != null)
                                   Image.asset(s.localAsset!, fit: BoxFit.cover)
                                 else
-                                  BeTherNetworkImage(url: s.remoteUrl, fit: BoxFit.cover),
+                                  BeTherNetworkImage(
+                                    url: s.remoteUrl,
+                                    fit: BoxFit.cover,
+                                  ),
                                 Container(
                                   decoration: BoxDecoration(
-                                    border: Border.all(color: AppColors.background, width: 4),
+                                    border: Border.all(
+                                      color: AppColors.background,
+                                      width: 4,
+                                    ),
                                     gradient: LinearGradient(
                                       begin: Alignment.bottomCenter,
                                       end: Alignment.topCenter,
                                       colors: [
-                                        AppColors.secondary.withValues(alpha: 0.95),
-                                        AppColors.secondary.withValues(alpha: 0.35),
+                                        AppColors.secondary.withValues(
+                                          alpha: 0.95,
+                                        ),
+                                        AppColors.secondary.withValues(
+                                          alpha: 0.35,
+                                        ),
                                         Colors.transparent,
                                       ],
                                     ),
@@ -114,13 +127,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                       Text(
                                         s.title,
                                         textAlign: TextAlign.center,
-                                        style: AppTextStyles.display(56, color: AppColors.primary, letterSpacing: 0.05),
+                                        style: AppTextStyles.display(
+                                          56,
+                                          color: AppColors.primary,
+                                          letterSpacing: 0.05,
+                                        ),
                                       ),
                                       const SizedBox(height: 8),
                                       Text(
                                         s.subtitle,
                                         textAlign: TextAlign.center,
-                                        style: AppTextStyles.body(20, color: AppColors.background, weight: FontWeight.w600),
+                                        style: AppTextStyles.body(
+                                          20,
+                                          color: AppColors.background,
+                                          weight: FontWeight.w600,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -153,11 +174,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 );
               }),
             ),
-            const SizedBox(height: 24),
-            Text('BE THER', style: AppTextStyles.display(40, color: AppColors.background, letterSpacing: 0.1)),
+            const SizedBox(height: 28),
+            Image.asset(
+              AppImages.beatherLogo,
+              height: 100,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(height: 8),
             Text(
               'follow what you love',
-              style: AppTextStyles.body(15, color: AppColors.background.withValues(alpha: 0.85)),
+              style: AppTextStyles.body(
+                15,
+                color: AppColors.background.withValues(alpha: 0.85),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),

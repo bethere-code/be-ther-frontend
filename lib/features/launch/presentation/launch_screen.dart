@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_colors.dart';
+import '../../../core/design/app_images.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/be_ther_buttons.dart';
 import '../../auth/presentation/auth_email_screen.dart';
@@ -40,18 +41,19 @@ class _LaunchScreenState extends State<LaunchScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    'BE THER',
-                    style: AppTextStyles.display(
-                      56,
-                      color: AppColors.primary,
-                      letterSpacing: 0.1,
-                    ),
+                  Image.asset(
+                    AppImages.beatherLogo,
+                    height: 200,
+                    fit: BoxFit.contain,
                   ),
-                  const SizedBox(height: 12),
+                  // const SizedBox(height: 32),
                   Text(
                     'follow what you love',
-                    style: AppTextStyles.body(18, color: AppColors.background, weight: FontWeight.w600),
+                    style: AppTextStyles.body(
+                      18,
+                      color: AppColors.background,
+                      weight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 48),
                   BeTherPrimaryButton(
@@ -67,7 +69,10 @@ class _LaunchScreenState extends State<LaunchScreen> {
                   Text(
                     'By continuing, you agree to our Terms & Privacy',
                     textAlign: TextAlign.center,
-                    style: AppTextStyles.body(13, color: AppColors.background.withValues(alpha: 0.85)),
+                    style: AppTextStyles.body(
+                      13,
+                      color: AppColors.background.withValues(alpha: 0.85),
+                    ),
                   ),
                 ],
               ),
