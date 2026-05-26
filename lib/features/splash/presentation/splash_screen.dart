@@ -102,19 +102,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (_wordIndex == 0)
-                        Image.asset(
-                          AppImages.beatherLogo,
-                          height: 300,
-                          fit: BoxFit.contain,
-                        )
-                      else
-                        for (
-                          var i = (_wordIndex - 1).clamp(0, _wordIndex);
-                          i <= _wordIndex;
-                          i++
-                        )
-                          _WordLayer(word: _words[i], depth: _wordIndex - i),
+                      // if (_wordIndex == 0)
+                      //   Image.asset(
+                      //     AppImages.beatherLogo,
+                      //     height: 300,
+                      //     fit: BoxFit.contain,
+                      //   )
+                      // else
+                      for (
+                        var i = (_wordIndex - 1).clamp(0, _wordIndex);
+                        i <= _wordIndex;
+                        i++
+                      )
+                        _WordLayer(word: _words[i], depth: _wordIndex - i),
                     ],
                   ),
                 ),

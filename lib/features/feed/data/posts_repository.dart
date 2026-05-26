@@ -22,14 +22,28 @@ class PostsRepository {
     await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/like');
   }
 
-  Future<void> toggleBookmark(String postId) async {
-    await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/bookmark');
+  Future<bool> toggleBookmark(String postId) async {
+    final res = await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/bookmark');
+    final data = res.data?['data'];
+    if (data is Map<String, dynamic>) {
+      return data['bookmarked'] as bool? ?? false;
+    }
+    return false;
   }
 
-  Future<void> createPost(Map<String, dynamic> payload) async {
+  Future<void> toggleCalendar(String postId) async {
+    await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/calendar');
+  }
+
+  Future<String> createPost(Map<String, dynamic> payload) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>('/api/v1/posts', data: payload);
-      _extractData(res.data, fallbackMessage: 'Failed to create post');
+      final data = _extractData(res.data, fallbackMessage: 'Failed to create post');
+      final id = data['_id']?.toString() ?? data['id']?.toString();
+      if (id == null || id.isEmpty) {
+        throw const FormatException('Create post returned empty id');
+      }
+      return id;
     } on DioException catch (e) {
       throw Exception(_apiMessage(e, fallback: 'Failed to create post'));
     }

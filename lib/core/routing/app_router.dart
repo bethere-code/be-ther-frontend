@@ -15,6 +15,7 @@ import '../../features/auth/presentation/auth_email_screen.dart';
 import '../../features/auth/presentation/auth_otp_route_extra.dart';
 import '../../features/auth/presentation/auth_otp_screen.dart';
 import '../../features/auth/presentation/auth_signup_screen.dart';
+import '../../features/search/presentation/search_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../network/api_client.dart';
 
@@ -119,6 +120,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: ProfileScreen.path,
         name: ProfileScreen.name,
         pageBuilder: (context, state) => _fadePage(state, const ProfileScreen()),
+        routes: [
+          GoRoute(
+            path: ':username',
+            name: 'profile-user',
+            pageBuilder: (context, state) => _fadePage(
+              state,
+              ProfileScreen(username: state.pathParameters['username']),
+            ),
+          ),
+        ],
       ),
       GoRoute(
         path: NotificationsScreen.path,
@@ -129,6 +140,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AddPostScreen.path,
         name: AddPostScreen.name,
         pageBuilder: (context, state) => _fadePage(state, const AddPostScreen()),
+      ),
+      GoRoute(
+        path: SearchScreen.path,
+        name: SearchScreen.name,
+        pageBuilder: (context, state) => _fadePage(state, const SearchScreen()),
       ),
       GoRoute(
         path: SettingsScreen.path,

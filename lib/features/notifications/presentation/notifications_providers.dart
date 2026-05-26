@@ -9,5 +9,20 @@ final notificationsRepositoryProvider = Provider<NotificationsRepository>((ref) 
 
 final notificationsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final repo = ref.watch(notificationsRepositoryProvider);
-  return repo.list();
+  try {
+    return await repo.list();
+  } catch (e) {
+    return [];
+  }
+});
+
+final unreadNotificationCountProvider = FutureProvider<int>((ref) async {
+  final notifications = await ref.watch(notificationsProvider.future);
+  try {
+    return notifications
+        .where((n) => n['read'] != true)
+        .length;
+  } catch (e) {
+    return 0;
+  }
 });

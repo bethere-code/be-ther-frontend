@@ -1,13 +1,13 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'package:be_ther/core/design/app_images.dart';
+import 'package:be_ther/features/auth/presentation/auth_email_screen.dart';
+import 'package:be_ther/features/auth/presentation/auth_signup_screen.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_colors.dart';
-import '../../../core/design/app_images.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/be_ther_buttons.dart';
-import '../../auth/presentation/auth_email_screen.dart';
-import '../../auth/presentation/auth_signup_screen.dart';
 
 class LaunchScreen extends StatefulWidget {
   const LaunchScreen({super.key});

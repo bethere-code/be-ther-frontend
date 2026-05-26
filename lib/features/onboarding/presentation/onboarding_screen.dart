@@ -6,6 +6,7 @@ import '../../../core/design/app_images.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/be_ther_buttons.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../core/design/widgets/branded_logo.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -175,11 +176,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               }),
             ),
             const SizedBox(height: 28),
-            Image.asset(
-              AppImages.beatherLogo,
-              height: 100,
-              fit: BoxFit.contain,
-            ),
+            const BrandedLogo(logoHeight: 100, sparkleSize: 24),
             const SizedBox(height: 8),
             Text(
               'follow what you love',

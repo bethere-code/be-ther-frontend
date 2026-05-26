@@ -1,9 +1,17 @@
+import 'package:be_ther/features/feed/presentation/add_post_screen.dart';
+import 'package:be_ther/features/feed/presentation/feed_screen.dart';
+import 'package:be_ther/features/notifications/presentation/notifications_screen.dart';
+import 'package:be_ther/features/profile/presentation/profile_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../features/auth/presentation/auth_notifier.dart';
+import '../../../features/notifications/presentation/notifications_providers.dart';
 import '../app_colors.dart';
 import '../app_dimens.dart';
 import '../app_text_styles.dart';
+import 'be_ther_network_image.dart';
 
 enum ShellTab { home, add, notifications, explore }
 
@@ -58,7 +66,7 @@ class AppShell extends StatelessWidget {
   }
 }
 
-class _BottomBar extends StatelessWidget {
+class _BottomBar extends ConsumerWidget {
   const _BottomBar({required this.activeTab});
 
   final ShellTab activeTab;
@@ -67,8 +75,10 @@ class _BottomBar extends StatelessWidget {
   static const double _verticalPadding = 10;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final auth = ref.watch(authNotifierProvider);
+    final user = auth.user;
 
     return Container(
       width: double.infinity,
@@ -89,14 +99,37 @@ class _BottomBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Text(
-            'BE THER',
-            style: AppTextStyles.display(
-              20,
-              color: AppColors.background,
-              letterSpacing: 0.15,
+          if (user != null)
+            GestureDetector(
+              onTap: () => context.push(ProfileScreen.path),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: AppColors.primary,
+                    width: AppDimens.borderThick,
+                  ),
+                  color: AppColors.muted,
+                ),
+                clipBehavior: Clip.hardEdge,
+                child: user['avatarUrl'] != null && user['avatarUrl'].isNotEmpty
+                    ? BeTherNetworkImage(
+                        url: user['avatarUrl'],
+                        fit: BoxFit.cover,
+                      )
+                    : Icon(Icons.person, color: AppColors.background),
+              ),
+            )
+          else
+            Text(
+              'BE THER',
+              style: AppTextStyles.display(
+                20,
+                color: AppColors.background,
+                letterSpacing: 0.15,
+              ),
             ),
-          ),
           const Spacer(),
           _GlobeButton(active: activeTab == ShellTab.explore),
         ],
@@ -138,32 +171,67 @@ class _GlobeButton extends StatelessWidget {
   }
 }
 
-class _RightRail extends StatelessWidget {
+class _RightRail extends ConsumerWidget {
   const _RightRail({required this.activeTab});
 
   final ShellTab activeTab;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadCount = ref.watch(unreadNotificationCountProvider);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         _RailIcon(
           icon: Icons.home,
           selected: activeTab == ShellTab.home,
-          onTap: () => context.go('/feed'),
+          onTap: () => context.push(FeedScreen.path),
         ),
         const SizedBox(height: 8),
         _RailIcon(
           icon: Icons.add_box,
           selected: activeTab == ShellTab.add,
-          onTap: () => context.go('/add'),
+          onTap: () => context.push(AddPostScreen.path),
         ),
         const SizedBox(height: 8),
-        _RailIcon(
-          icon: Icons.notifications_none,
-          selected: activeTab == ShellTab.notifications,
-          onTap: () => context.go('/notifications'),
+        Stack(
+          children: [
+            _RailIcon(
+              icon: Icons.notifications_none,
+              selected: activeTab == ShellTab.notifications,
+              onTap: () => context.push(NotificationsScreen.path),
+            ),
+            unreadCount.when(
+              data: (count) {
+                if (count == 0) return const SizedBox.shrink();
+                return Positioned(
+                  top: 4,
+                  right: 4,
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.secondary, width: 2),
+                    ),
+                    child: Center(
+                      child: Text(
+                        count > 99 ? '99+' : '$count',
+                        style: AppTextStyles.display(
+                          count > 99 ? 10 : 12,
+                          color: AppColors.primaryForeground,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+              loading: () => const SizedBox.shrink(),
+              error: (_, _) => const SizedBox.shrink(),
+            ),
+          ],
         ),
       ],
     );

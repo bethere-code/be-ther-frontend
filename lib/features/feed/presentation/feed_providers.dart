@@ -11,3 +11,8 @@ final feedProvider = FutureProvider<FeedPage>((ref) async {
   final repo = ref.watch(postsRepositoryProvider);
   return repo.fetchFeed();
 });
+
+final feedPageProvider = FutureProvider.family<FeedPage, int>((ref, skip) async {
+  final repo = ref.watch(postsRepositoryProvider);
+  return repo.fetchFeed(skip: skip);
+});

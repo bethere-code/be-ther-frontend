@@ -29,8 +29,21 @@ class UserRepository {
     }
   }
 
-  Future<void> starToggle(String username) async {
-    await _dio.post<Map<String, dynamic>>('/api/v1/users/$username/star');
+  Future<bool> starToggle(String username) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>('/api/v1/users/$username/star');
+      final body = res.data;
+      if (body == null || body['ok'] != true) {
+        throw Exception(body?['error']?.toString() ?? 'Failed to update follow');
+      }
+      final data = body['data'];
+      if (data is Map<String, dynamic>) {
+        return data['starred'] as bool? ?? false;
+      }
+      return false;
+    } on DioException catch (e) {
+      throw Exception(_errorFromDio(e, fallback: 'Failed to update follow'));
+    }
   }
 
   Future<Map<String, dynamic>> _getData(String path, {required String fallback}) async {

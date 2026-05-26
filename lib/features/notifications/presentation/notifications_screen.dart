@@ -116,7 +116,9 @@ class NotificationsScreen extends ConsumerWidget {
                                 ),
                               ),
                               TextButton(
-                                onPressed: () => context.push(ProfileScreen.path),
+                                onPressed: username.isEmpty
+                                    ? null
+                                    : () => context.push(ProfileScreen.pathForUser(username)),
                                 child: Text('View @$username', style: AppTextStyles.body(13, color: AppColors.primary, weight: FontWeight.w800)),
                               ),
                             ],
