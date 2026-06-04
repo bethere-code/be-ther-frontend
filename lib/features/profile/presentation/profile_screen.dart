@@ -204,12 +204,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                       context: context,
                                       event: event,
                                       showWishlist: !isOwnProfile,
+                                      isOwnProfile: isOwnProfile,
                                       onToggleWishlist: () async {
                                         final saved = await ref
                                             .read(postsRepositoryProvider)
                                             .toggleBookmark(event.postId);
                                         ref.invalidate(profileCalendarProvider(username));
                                         return saved;
+                                      },
+                                      onCalendarChanged: () {
+                                        ref.invalidate(profileCalendarProvider(username));
+                                        ref.invalidate(feedProvider);
+                                        if (isOwnProfile) {
+                                          ref.invalidate(profileViewProvider(widget.username));
+                                        }
                                       },
                                     ),
                           );

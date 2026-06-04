@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -6,6 +7,8 @@ import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../../core/design/widgets/post_more_menu_button.dart';
+import '../../../feed/presentation/feed_providers.dart';
 
 class ProfileCalendarEvent {
   const ProfileCalendarEvent({
@@ -18,6 +21,10 @@ class ProfileCalendarEvent {
     this.ticketUrl,
     this.time,
     this.bookmarked = false,
+    this.source = 'authored',
+    this.isAuthoredByMe = false,
+    this.inCalendar = false,
+    this.hiddenOnProfile = false,
   });
 
   final String postId;
@@ -29,6 +36,10 @@ class ProfileCalendarEvent {
   final String? ticketUrl;
   final String? time;
   final bool bookmarked;
+  final String source;
+  final bool isAuthoredByMe;
+  final bool inCalendar;
+  final bool hiddenOnProfile;
 
   factory ProfileCalendarEvent.fromJson(Map<String, dynamic> json) {
     final rawDate = json['date'] as String? ?? '';
@@ -42,6 +53,10 @@ class ProfileCalendarEvent {
       ticketUrl: json['ticketUrl'] as String?,
       time: json['time'] as String?,
       bookmarked: json['bookmarked'] as bool? ?? false,
+      source: json['source'] as String? ?? 'authored',
+      isAuthoredByMe: json['isAuthoredByMe'] as bool? ?? false,
+      inCalendar: json['inCalendar'] as bool? ?? false,
+      hiddenOnProfile: json['hiddenOnProfile'] as bool? ?? false,
     );
   }
 
@@ -56,15 +71,23 @@ class ProfileCalendarEvent {
       ticketUrl: ticketUrl,
       time: time,
       bookmarked: bookmarked ?? this.bookmarked,
+      source: source,
+      isAuthoredByMe: isAuthoredByMe,
+      inCalendar: inCalendar,
+      hiddenOnProfile: hiddenOnProfile,
     );
   }
+
+  bool get canMarkNotGoing => inCalendar || (isAuthoredByMe && status == 'going');
 }
 
 Future<void> showProfileEventSheet({
   required BuildContext context,
   required ProfileCalendarEvent event,
   required bool showWishlist,
+  required bool isOwnProfile,
   required Future<bool> Function() onToggleWishlist,
+  required VoidCallback onCalendarChanged,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -73,27 +96,33 @@ Future<void> showProfileEventSheet({
     builder: (context) => _ProfileEventSheet(
       event: event,
       showWishlist: showWishlist,
+      isOwnProfile: isOwnProfile,
       onToggleWishlist: onToggleWishlist,
+      onCalendarChanged: onCalendarChanged,
     ),
   );
 }
 
-class _ProfileEventSheet extends StatefulWidget {
+class _ProfileEventSheet extends ConsumerStatefulWidget {
   const _ProfileEventSheet({
     required this.event,
     required this.showWishlist,
+    required this.isOwnProfile,
     required this.onToggleWishlist,
+    required this.onCalendarChanged,
   });
 
   final ProfileCalendarEvent event;
   final bool showWishlist;
+  final bool isOwnProfile;
   final Future<bool> Function() onToggleWishlist;
+  final VoidCallback onCalendarChanged;
 
   @override
-  State<_ProfileEventSheet> createState() => _ProfileEventSheetState();
+  ConsumerState<_ProfileEventSheet> createState() => _ProfileEventSheetState();
 }
 
-class _ProfileEventSheetState extends State<_ProfileEventSheet> {
+class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   late bool _bookmarked;
   bool _busy = false;
 
@@ -141,9 +170,66 @@ class _ProfileEventSheetState extends State<_ProfileEventSheet> {
     }
   }
 
+  Future<void> _runAction(Future<void> Function() action, {required String success}) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+      if (!mounted) return;
+      widget.onCalendarChanged();
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success)));
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('DELETE EVENT?', style: AppTextStyles.display(20, color: AppColors.secondary)),
+        content: const Text('This permanently removes the event and cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.destructive),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('DELETE'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    await _runAction(
+      () => ref.read(postsRepositoryProvider).deletePost(widget.event.postId),
+      success: 'Event deleted',
+    );
+  }
+
+  Future<void> _hideEvent() async {
+    await _runAction(
+      () => ref.read(postsRepositoryProvider).hideOnProfile(widget.event.postId),
+      success: 'Hidden from your public profile',
+    );
+  }
+
+  Future<void> _notGoing() async {
+    await _runAction(
+      () => ref.read(postsRepositoryProvider).markNotGoing(widget.event.postId),
+      success: 'Removed from your calendar',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateLabel = DateFormat.yMMMMEEEEd().format(widget.event.date);
+    final showMenu = widget.isOwnProfile;
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -165,7 +251,7 @@ class _ProfileEventSheetState extends State<_ProfileEventSheet> {
                       Container(color: AppColors.muted),
                     Positioned(
                       top: 12,
-                      right: 12,
+                      left: 12,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
@@ -178,6 +264,72 @@ class _ProfileEventSheetState extends State<_ProfileEventSheet> {
                         ),
                       ),
                     ),
+                    if (widget.event.hiddenOnProfile)
+                      Positioned(
+                        bottom: 12,
+                        left: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          color: AppColors.secondary.withValues(alpha: 0.85),
+                          child: Text(
+                            'HIDDEN ON PROFILE',
+                            style: AppTextStyles.display(10, color: AppColors.background),
+                          ),
+                        ),
+                      ),
+                    if (showMenu)
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: PopupMenuButton<String>(
+                          enabled: !_busy,
+                          padding: EdgeInsets.zero,
+                          offset: const Offset(0, 8),
+                          color: AppColors.card,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                            side: const BorderSide(color: AppColors.border, width: AppDimens.border),
+                          ),
+                          child: const PostMoreMenuIcon(),
+                          onSelected: (value) {
+                            switch (value) {
+                              case 'hide':
+                                _hideEvent();
+                              case 'delete':
+                                _confirmDelete();
+                              case 'not_going':
+                                _notGoing();
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: 'hide',
+                              enabled: !widget.event.hiddenOnProfile,
+                              child: Text(
+                                widget.event.hiddenOnProfile ? 'Already hidden' : 'Hide event',
+                                style: AppTextStyles.body(14, weight: FontWeight.w700),
+                              ),
+                            ),
+                            if (widget.event.isAuthoredByMe)
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Text(
+                                  'Delete event',
+                                  style: AppTextStyles.body(
+                                    14,
+                                    weight: FontWeight.w700,
+                                    color: AppColors.destructive,
+                                  ),
+                                ),
+                              ),
+                            if (widget.event.canMarkNotGoing)
+                              const PopupMenuItem(
+                                value: 'not_going',
+                                child: Text('Not going'),
+                              ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -298,7 +450,7 @@ class _ProfileEventSheetState extends State<_ProfileEventSheet> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                         ),
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: _busy ? null : () => Navigator.of(context).pop(),
                         child: Text('CLOSE', style: AppTextStyles.display(18, color: AppColors.secondaryForeground)),
                       ),
                     ),

@@ -18,6 +18,7 @@ import '../../features/auth/presentation/auth_signup_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../network/api_client.dart';
+import 'app_route_observer.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
@@ -40,6 +41,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: SplashScreen.path,
+    observers: [appRouteObserver],
     refreshListenable: refresh,
     redirect: (context, state) {
       final auth = ref.read(authNotifierProvider);

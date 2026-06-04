@@ -1,68 +1,61 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../../core/utils/link_utils.dart';
+import '../../../feed/presentation/feed_providers.dart';
 
 Future<void> showExploreEventSheet({
   required BuildContext context,
   required Map<String, dynamic> event,
-  required bool bookmarked,
-  required Future<bool> Function() onToggleBookmark,
 }) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (context) => _ExploreEventSheet(
-      event: event,
-      initialBookmarked: bookmarked,
-      onToggleBookmark: onToggleBookmark,
-    ),
+    builder: (context) => _ExploreEventSheet(event: event),
   );
 }
 
-class _ExploreEventSheet extends StatefulWidget {
-  const _ExploreEventSheet({
-    required this.event,
-    required this.initialBookmarked,
-    required this.onToggleBookmark,
-  });
+class _ExploreEventSheet extends ConsumerStatefulWidget {
+  const _ExploreEventSheet({required this.event});
 
   final Map<String, dynamic> event;
-  final bool initialBookmarked;
-  final Future<bool> Function() onToggleBookmark;
 
   @override
-  State<_ExploreEventSheet> createState() => _ExploreEventSheetState();
+  ConsumerState<_ExploreEventSheet> createState() => _ExploreEventSheetState();
 }
 
-class _ExploreEventSheetState extends State<_ExploreEventSheet> {
-  late bool _bookmarked;
-  bool _busy = false;
+class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
+  late bool _inCalendar;
+  bool _calendarBusy = false;
 
   @override
   void initState() {
     super.initState();
-    _bookmarked = widget.initialBookmarked;
+    _inCalendar = widget.event['inCalendar'] as bool? ?? false;
   }
 
-  Future<void> _toggleBookmark() async {
-    if (_busy) return;
-    setState(() => _busy = true);
+  String get _postId =>
+      widget.event['postId']?.toString() ?? widget.event['_id']?.toString() ?? '';
+
+  Future<void> _toggleCalendar() async {
+    if (_postId.isEmpty || _calendarBusy) return;
+    setState(() => _calendarBusy = true);
     try {
-      final next = await widget.onToggleBookmark();
-      if (mounted) setState(() => _bookmarked = next);
-    } catch (_) {
+      final next = await ref.read(postsRepositoryProvider).toggleCalendar(_postId);
+      if (mounted) setState(() => _inCalendar = next);
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not update wishlist')),
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
         );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _calendarBusy = false);
     }
   }
 
@@ -70,6 +63,7 @@ class _ExploreEventSheetState extends State<_ExploreEventSheet> {
   Widget build(BuildContext context) {
     final title = widget.event['title'] as String? ?? '';
     final location = widget.event['location'] as String? ?? '';
+    final country = widget.event['country'] as String? ?? '';
     final date = widget.event['date'] as String? ?? '';
     final venue = widget.event['venue'] as String? ?? '';
     final image = widget.event['image'] as String? ?? widget.event['imageUrl'] as String? ?? '';
@@ -95,18 +89,54 @@ class _ExploreEventSheetState extends State<_ExploreEventSheet> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
             children: [
               Center(
-                child: Container(
-                  width: 48,
-                  height: 4,
-                  color: AppColors.muted,
-                ),
+                child: Container(width: 48, height: 4, color: AppColors.muted),
               ),
-              const SizedBox(height: 16),
-              if (image.isNotEmpty)
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Text(
+                    'EVENT DETAILS',
+                    style: AppTextStyles.display(20, color: AppColors.primary, letterSpacing: 0.05),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: AppColors.secondary, size: 26),
+                  ),
+                ],
+              ),
+              if (image.isNotEmpty) ...[
+                const SizedBox(height: 8),
                 AspectRatio(
                   aspectRatio: 16 / 10,
-                  child: BeTherNetworkImage(url: image, fit: BoxFit.cover),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      BeTherNetworkImage(url: image, fit: BoxFit.cover),
+                      if (country.isNotEmpty)
+                        Positioned(
+                          top: 12,
+                          right: 12,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            color: AppColors.secondary.withValues(alpha: 0.9),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.place, size: 14, color: AppColors.background),
+                                const SizedBox(width: 6),
+                                Text(
+                                  country.toUpperCase(),
+                                  style: AppTextStyles.display(12, color: AppColors.background),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
+              ],
               const SizedBox(height: 16),
               if (trending)
                 Container(
@@ -118,68 +148,111 @@ class _ExploreEventSheetState extends State<_ExploreEventSheet> {
                   ),
                 ),
               if (trending) const SizedBox(height: 8),
-              Text(
-                title,
-                style: AppTextStyles.display(24, color: AppColors.secondary),
-              ),
-              const SizedBox(height: 8),
-              Text(location, style: AppTextStyles.body(14, weight: FontWeight.w700)),
-              if (status.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  status == 'been' ? 'BEEN' : status == 'going' ? 'GOING' : 'INTERESTED',
-                  style: AppTextStyles.display(12, color: AppColors.primary),
+              Text(title, style: AppTextStyles.display(24, color: AppColors.secondary)),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.muted.withValues(alpha: 0.5),
+                  border: const Border(
+                    top: BorderSide(color: AppColors.border, width: AppDimens.borderThick),
+                    bottom: BorderSide(color: AppColors.border, width: AppDimens.borderThick),
+                  ),
                 ),
-              ],
-              if (date.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text('DATE\n$date', style: AppTextStyles.body(14, weight: FontWeight.w700)),
-              ],
-              if (venue.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text('VENUE\n$venue', style: AppTextStyles.body(14, weight: FontWeight.w700)),
-              ],
-              const SizedBox(height: 8),
-              Text(
-                '$attendees likes',
-                style: AppTextStyles.body(13, color: AppColors.mutedForeground, weight: FontWeight.w700),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (date.isNotEmpty) _DetailBlock(label: 'DATE', value: date),
+                    if (venue.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _DetailBlock(label: 'VENUE', value: venue),
+                    ],
+                    if (location.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _DetailBlock(label: 'LOCATION', value: location),
+                    ],
+                    const SizedBox(height: 12),
+                    _DetailBlock(label: 'ATTENDEES', value: '$attendees going'),
+                    if (status.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        status == 'been' ? 'BEEN' : status == 'going' ? 'GOING' : 'INTERESTED',
+                        style: AppTextStyles.display(12, color: AppColors.primary),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 40,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _inCalendar ? AppColors.primary : AppColors.accent,
+                          foregroundColor:
+                              _inCalendar ? AppColors.primaryForeground : AppColors.accentForeground,
+                          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                        ),
+                        onPressed: _calendarBusy ? null : _toggleCalendar,
+                        child: _calendarBusy
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Text(
+                                _inCalendar ? 'ADDED TO CALENDAR' : 'ADD TO CALENDAR',
+                                style: AppTextStyles.display(
+                                  14,
+                                  color: _inCalendar
+                                      ? AppColors.primaryForeground
+                                      : AppColors.accentForeground,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _busy ? null : _toggleBookmark,
-                      child: Text(_bookmarked ? 'SAVED' : 'SAVE TO WISHLIST'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
                   IconButton(
                     onPressed: () => sharePostContent(
                       location: title.isNotEmpty ? title : location,
                       ticketUrl: ticketUrl,
                     ),
-                    icon: const Icon(Icons.share),
+                    icon: const Icon(Icons.share_outlined),
                   ),
+                  const Spacer(),
+                  if (ticketUrl != null && ticketUrl.trim().isNotEmpty)
+                    IconButton(
+                      onPressed: () => openExternalUrl(context, ticketUrl),
+                      icon: const Icon(Icons.link),
+                    ),
                 ],
               ),
-              if (ticketUrl != null && ticketUrl.trim().isNotEmpty) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () => openExternalUrl(context, ticketUrl),
-                    child: Text(
-                      'GET TICKETS',
-                      style: AppTextStyles.display(14, color: AppColors.primaryForeground),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _DetailBlock extends StatelessWidget {
+  const _DetailBlock({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: AppTextStyles.body(12, color: AppColors.mutedForeground, weight: FontWeight.w600)),
+        const SizedBox(height: 2),
+        Text(value, style: AppTextStyles.body(14, weight: FontWeight.w600)),
+      ],
     );
   }
 }

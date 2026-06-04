@@ -12,6 +12,7 @@ import '../../../features/profile/presentation/profile_providers.dart';
 import '../../utils/badge_colors.dart';
 import '../app_colors.dart';
 import '../app_dimens.dart';
+import '../app_images.dart';
 import '../app_text_styles.dart';
 import 'be_ther_network_image.dart';
 
@@ -75,6 +76,12 @@ class _BottomBar extends ConsumerWidget {
 
   static const double _horizontalPadding = 16;
   static const double _verticalPadding = 10;
+  static const double _leadingHeight = 40;
+
+  static bool _isProfileRoute(BuildContext context) {
+    final path = GoRouterState.of(context).uri.path;
+    return path == ProfileScreen.path || path.startsWith('${ProfileScreen.path}/');
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -83,6 +90,7 @@ class _BottomBar extends ConsumerWidget {
     final user = auth.user;
     final me = ref.watch(profileMeProvider);
     final badge = me.value?['badge'] as String? ?? user?['badge'] as String?;
+    final onProfile = _isProfileRoute(context);
 
     return Container(
       width: double.infinity,
@@ -103,12 +111,26 @@ class _BottomBar extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          if (user != null)
+          if (onProfile)
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => context.go(FeedScreen.path),
+                child: SizedBox(
+                  height: _leadingHeight,
+                  child: Image.asset(
+                    AppImages.beatherLogo,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            )
+          else if (user != null)
             GestureDetector(
               onTap: () => context.push(ProfileScreen.path),
               child: Container(
-                width: 40,
-                height: 40,
+                width: _leadingHeight,
+                height: _leadingHeight,
                 decoration: BoxDecoration(
                   border: Border.all(
                     color: badgeBorderColor(badge),

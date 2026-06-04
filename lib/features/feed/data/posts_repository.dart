@@ -36,6 +36,52 @@ class PostsRepository {
     return false;
   }
 
+  Future<void> hideOnProfile(String postId) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/hide-on-profile');
+      _extractData(res.data, fallbackMessage: 'Failed to hide event');
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to hide event'));
+    }
+  }
+
+  Future<void> deletePost(String postId) async {
+    try {
+      final res = await _dio.delete<Map<String, dynamic>>('/api/v1/posts/$postId');
+      _extractData(res.data, fallbackMessage: 'Failed to delete event');
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to delete event'));
+    }
+  }
+
+  Future<void> markNotGoing(String postId) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/not-going');
+      _extractData(res.data, fallbackMessage: 'Failed to update event');
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to update event'));
+    }
+  }
+
+  Future<void> submitReport({
+    required String postId,
+    required String type,
+    String details = '',
+  }) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/posts/$postId/reports',
+        data: {
+          'type': type,
+          if (details.isNotEmpty) 'details': details,
+        },
+      );
+      _extractData(res.data, fallbackMessage: 'Failed to submit report');
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to submit report'));
+    }
+  }
+
   Future<bool> toggleCalendar(String postId) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/calendar');

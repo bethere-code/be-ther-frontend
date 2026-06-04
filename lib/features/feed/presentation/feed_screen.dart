@@ -14,6 +14,9 @@ import '../../../core/design/widgets/author_avatar.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../core/design/widgets/post_interaction_row.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
+import 'widgets/feed_permissions_coordinator.dart';
+import 'widgets/feed_post_more_menu.dart';
+import '../../../core/routing/app_route_observer.dart';
 import '../../../core/utils/link_utils.dart';
 import '../../../core/utils/post_author.dart';
 import '../../profile/presentation/profile_screen.dart';
@@ -30,24 +33,82 @@ class FeedScreen extends ConsumerStatefulWidget {
   ConsumerState<FeedScreen> createState() => _FeedScreenState();
 }
 
-class _FeedScreenState extends ConsumerState<FeedScreen> {
+class _FeedScreenState extends ConsumerState<FeedScreen> with RouteAware, WidgetsBindingObserver {
   late ScrollController _scrollController;
   List<Map<String, dynamic>> _allItems = [];
   int _currentSkip = 0;
   bool _isLoadingMore = false;
   bool _hasMore = true;
+  bool _routeSubscribed = false;
+  bool _permissionCheckQueued = false;
+  GoRouter? _goRouter;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addObserver(this);
+    _schedulePermissionCheck();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (!_routeSubscribed && route is PageRoute<void>) {
+      appRouteObserver.subscribe(this, route);
+      _routeSubscribed = true;
+    }
+
+    final router = GoRouter.of(context);
+    if (_goRouter != router) {
+      _goRouter?.routerDelegate.removeListener(_onNavigation);
+      _goRouter = router;
+      router.routerDelegate.addListener(_onNavigation);
+    }
   }
 
   @override
   void dispose() {
+    _goRouter?.routerDelegate.removeListener(_onNavigation);
+    if (_routeSubscribed) {
+      appRouteObserver.unsubscribe(this);
+    }
+    WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onNavigation() {
+    if (!mounted) return;
+    if (ModalRoute.of(context)?.isCurrent != true) return;
+    if (GoRouterState.of(context).matchedLocation != FeedScreen.path) return;
+    _schedulePermissionCheck();
+  }
+
+  @override
+  void didPopNext() {
+    _schedulePermissionCheck();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        GoRouterState.of(context).matchedLocation == FeedScreen.path) {
+      _schedulePermissionCheck();
+    }
+  }
+
+  void _schedulePermissionCheck() {
+    if (_permissionCheckQueued) return;
+    _permissionCheckQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _permissionCheckQueued = false;
+      if (!mounted) return;
+      if (ModalRoute.of(context)?.isCurrent != true) return;
+      await FeedPermissionsCoordinator.ensure(context);
+    });
   }
 
   void _onScroll() {
@@ -386,7 +447,6 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
     final badge = postAuthorBadge(item);
     final liked = item['liked'] as bool? ?? false;
     final location = item['location'] as String? ?? '';
-    final country = item['country'] as String? ?? '';
     final status = item['status'] as String? ?? 'going';
     final imageUrl = item['imageUrl'] as String? ?? '';
     final caption = item['caption'] as String? ?? '';
@@ -501,32 +561,37 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
                 Positioned(
                   top: 12,
                   right: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    color: AppColors.secondary.withValues(alpha: 0.9),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.place,
-                          color: AppColors.background,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          country,
-                          style: AppTextStyles.display(
-                            12,
-                            color: AppColors.background,
-                            letterSpacing: 0.05,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  child: FeedPostMoreMenu(postId: id),
                 ),
+                // Positioned(
+                //   top: 12,
+                //   right: 12,
+                //   child: Container(
+                //     padding: const EdgeInsets.symmetric(
+                //       horizontal: 10,
+                //       vertical: 8,
+                //     ),
+                //     color: AppColors.secondary.withValues(alpha: 0.9),
+                //     child: Row(
+                //       children: [
+                //         const Icon(
+                //           Icons.place,
+                //           color: AppColors.background,
+                //           size: 16,
+                //         ),
+                //         const SizedBox(width: 6),
+                //         Text(
+                //           country,
+                //           style: AppTextStyles.display(
+                //             12,
+                //             color: AppColors.background,
+                //             letterSpacing: 0.05,
+                //           ),
+                //         ),
+                //       ],
+                //     ),
+                //   ),
+                // ),
               ],
             ),
           ),
@@ -570,8 +635,8 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
             decoration: const BoxDecoration(
               border: Border(
                 top: BorderSide(
-                  color: AppColors.border,
-                  width: AppDimens.borderThin,
+                  color: AppColors.mutedForeground,
+                  width: AppDimens.borderThinnest,
                 ),
               ),
             ),
@@ -628,7 +693,8 @@ class _EventDetails extends StatelessWidget {
     final displayDate = _formatDisplayDate(dateRaw);
     final displayTime = time?.trim();
     final displayVenue = venue?.trim();
-    final hasMeta = displayDate != null ||
+    final hasMeta =
+        displayDate != null ||
         (displayTime != null && displayTime.isNotEmpty) ||
         (displayVenue != null && displayVenue.isNotEmpty);
 
@@ -639,7 +705,10 @@ class _EventDetails extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.muted.withValues(alpha: 0.5),
         border: const Border(
-          top: BorderSide(color: AppColors.border, width: AppDimens.borderThin),
+          top: BorderSide(
+            color: AppColors.mutedForeground,
+            width: AppDimens.borderThinnest,
+          ),
         ),
       ),
       child: Column(
