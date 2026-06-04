@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../features/auth/presentation/auth_notifier.dart';
 import '../../../features/notifications/presentation/notifications_providers.dart';
+import '../../../features/profile/presentation/profile_providers.dart';
+import '../../utils/badge_colors.dart';
 import '../app_colors.dart';
 import '../app_dimens.dart';
 import '../app_text_styles.dart';
@@ -79,6 +81,8 @@ class _BottomBar extends ConsumerWidget {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final auth = ref.watch(authNotifierProvider);
     final user = auth.user;
+    final me = ref.watch(profileMeProvider);
+    final badge = me.value?['badge'] as String? ?? user?['badge'] as String?;
 
     return Container(
       width: double.infinity,
@@ -107,7 +111,7 @@ class _BottomBar extends ConsumerWidget {
                 height: 40,
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color: AppColors.primary,
+                    color: badgeBorderColor(badge),
                     width: AppDimens.borderThick,
                   ),
                   color: AppColors.muted,

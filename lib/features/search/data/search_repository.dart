@@ -18,7 +18,7 @@ class SearchRepository {
     int skip = 0,
   }) async {
     try {
-      final response = await _dio.get(
+      final response = await _dio.get<Map<String, dynamic>>(
         '/api/v1/posts/search',
         queryParameters: {
           'query': query,
@@ -27,14 +27,31 @@ class SearchRepository {
         },
       );
 
-      final data = response.data['data'] as Map<String, dynamic>;
-      final items = (data['items'] as List<dynamic>)
-          .cast<Map<String, dynamic>>();
-      final nextSkip = data['nextSkip'] as int?;
+      final body = response.data;
+      if (body == null || body['ok'] != true) {
+        throw Exception(body?['error']?.toString() ?? 'Search failed');
+      }
+      final data = body['data'];
+      if (data is! Map<String, dynamic>) {
+        throw Exception('Invalid search response');
+      }
+      final items = (data['items'] as List<dynamic>? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      final nextSkipRaw = data['nextSkip'];
+      final nextSkip = nextSkipRaw is int ? nextSkipRaw : int.tryParse('$nextSkipRaw');
 
       return SearchResult(items: items, nextSkip: nextSkip);
-    } on DioException {
-      rethrow;
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (data is Map<String, dynamic>) {
+        final err = data['error'];
+        if (err is Map<String, dynamic>) {
+          final message = err['message']?.toString();
+          if (message != null && message.isNotEmpty) throw Exception(message);
+        }
+      }
+      throw Exception(e.message ?? 'Search failed');
     }
   }
 }

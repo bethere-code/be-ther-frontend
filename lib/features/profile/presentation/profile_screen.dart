@@ -9,7 +9,7 @@ import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../feed/presentation/feed_providers.dart';
-import '../../search/presentation/search_screen.dart';
+import '../../settings/presentation/settings_screen.dart';
 import 'profile_providers.dart';
 import 'widgets/profile_event_sheet.dart';
 
@@ -142,7 +142,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             username: username,
             isOwnProfile: isOwnProfile,
             onBack: () => context.pop(),
-            onSearch: () => context.push(SearchScreen.path),
+            onSettings: isOwnProfile ? () => context.push(SettingsScreen.path) : null,
           ),
           child: RefreshIndicator(
             onRefresh: () => _refresh(username),
@@ -270,13 +270,13 @@ class _ProfileHeader extends StatelessWidget implements PreferredSizeWidget {
     required this.username,
     required this.isOwnProfile,
     required this.onBack,
-    required this.onSearch,
+    this.onSettings,
   });
 
   final String username;
   final bool isOwnProfile;
   final VoidCallback onBack;
-  final VoidCallback onSearch;
+  final VoidCallback? onSettings;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -306,10 +306,13 @@ class _ProfileHeader extends StatelessWidget implements PreferredSizeWidget {
               style: AppTextStyles.display(24, color: AppColors.primary, letterSpacing: 0.1),
             ),
           ),
-          IconButton(
-            onPressed: onSearch,
-            icon: const Icon(Icons.search, color: AppColors.background, size: 24),
-          ),
+          if (onSettings != null)
+            IconButton(
+              onPressed: onSettings,
+              icon: const Icon(Icons.settings, color: AppColors.background, size: 24),
+            )
+          else
+            const SizedBox(width: 48),
         ],
       ),
     );

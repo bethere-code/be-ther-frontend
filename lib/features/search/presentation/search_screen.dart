@@ -5,7 +5,11 @@ import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
+import '../../../core/design/widgets/author_avatar.dart';
+import '../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../core/design/widgets/post_interaction_row.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
+import '../../../core/utils/post_author.dart';
 import '../../../core/utils/time_utils.dart';
 import 'search_providers.dart';
 
@@ -22,25 +26,10 @@ class SearchScreen extends ConsumerStatefulWidget {
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   late TextEditingController _searchController;
   late ScrollController _scrollController;
-  String _selectedCountry = '';
   int _currentSkip = 0;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
   List<Map<String, dynamic>> _allResults = [];
-
-  final List<String> _countries = [
-    'United States',
-    'Canada',
-    'United Kingdom',
-    'Australia',
-    'Germany',
-    'France',
-    'Spain',
-    'Italy',
-    'Japan',
-    'India',
-    'Brazil',
-    'Mexico',
-    'Other',
-  ];
 
   @override
   void initState() {
@@ -58,31 +47,36 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 500) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 500) {
       _loadMore();
     }
   }
 
   void _loadMore() {
-    if (_searchController.text.trim().isEmpty) return;
+    if (_searchController.text.trim().isEmpty || _isLoadingMore || !_hasMore)
+      return;
     setState(() {
+      _isLoadingMore = true;
       _currentSkip += 10;
     });
   }
 
   void _performSearch() {
-    _allResults.clear();
-    _currentSkip = 0;
-    setState(() {});
+    setState(() {
+      _allResults.clear();
+      _currentSkip = 0;
+      _isLoadingMore = false;
+      _hasMore = true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final query = _searchController.text.trim();
-    final country = _selectedCountry.isEmpty ? null : _selectedCountry;
 
     final searchResults = ref.watch(
-      searchResultsProvider((query: query, country: country, skip: _currentSkip)),
+      searchResultsProvider((query: query, country: null, skip: _currentSkip)),
     );
 
     return AppShell(
@@ -102,110 +96,95 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   ),
                 ),
               ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          decoration: InputDecoration(
-                            hintText: 'Search locations...',
-                            hintStyle: AppTextStyles.body(14, color: AppColors.mutedForeground),
-                            prefixIcon: const Icon(Icons.search, color: AppColors.mutedForeground),
-                            suffixIcon: _searchController.text.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear, color: AppColors.mutedForeground),
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      _allResults.clear();
-                                      _currentSkip = 0;
-                                      setState(() {});
-                                    },
-                                  )
-                                : null,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            filled: true,
-                            fillColor: AppColors.card,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: const BorderSide(
-                                color: AppColors.border,
-                                width: AppDimens.border,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: const BorderSide(
-                                color: AppColors.border,
-                                width: AppDimens.border,
-                              ),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        enableSuggestions: false,
+                        autocorrect: false,
+                        decoration: InputDecoration(
+                          hintText: 'Search locations...',
+                          hintStyle: AppTextStyles.body(
+                            14,
+                            color: AppColors.mutedForeground,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: AppColors.mutedForeground,
+                          ),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(
+                                    Icons.clear,
+                                    color: AppColors.mutedForeground,
+                                  ),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    _allResults.clear();
+                                    _currentSkip = 0;
+                                    setState(() {});
+                                  },
+                                )
+                              : null,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 14,
+                          ),
+                          filled: true,
+                          fillColor: AppColors.card,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
+                            borderSide: const BorderSide(
+                              color: AppColors.border,
+                              width: AppDimens.border,
                             ),
                           ),
-                          onChanged: (_) {
-                            setState(() {});
-                          },
-                          onSubmitted: (_) {
-                            _performSearch();
-                          },
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
+                            borderSide: const BorderSide(
+                              color: AppColors.border,
+                              width: AppDimens.border,
+                            ),
+                          ),
                         ),
+                        onChanged: (_) {
+                          setState(() {});
+                        },
+                        onSubmitted: (_) {
+                          _performSearch();
+                        },
                       ),
-                      const SizedBox(width: 8),
-                      Material(
-                        color: _searchController.text.isNotEmpty ? AppColors.primary : AppColors.muted,
-                        child: InkWell(
-                          onTap: _searchController.text.isNotEmpty ? _performSearch : null,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            child: Text(
-                              'SEARCH',
-                              style: AppTextStyles.display(
-                                13,
-                                color: _searchController.text.isNotEmpty
-                                    ? AppColors.primaryForeground
-                                    : AppColors.mutedForeground,
-                                letterSpacing: 0.05,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 40,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: _CountryChip(
-                            label: 'All',
-                            isSelected: _selectedCountry.isEmpty,
-                            onTap: () {
-                              setState(() => _selectedCountry = '');
-                              _performSearch();
-                            },
-                          ),
-                        ),
-                        ..._countries.map((country) {
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: _CountryChip(
-                              label: country,
-                              isSelected: _selectedCountry == country,
-                              onTap: () {
-                                setState(() => _selectedCountry = country);
-                                _performSearch();
-                              },
-                            ),
-                          );
-                        }),
-                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Material(
+                      color: _searchController.text.isNotEmpty
+                          ? AppColors.primary
+                          : AppColors.muted,
+                      child: InkWell(
+                        onTap: _searchController.text.isNotEmpty
+                            ? _performSearch
+                            : null,
+                        child: Container(
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text(
+                            'SEARCH',
+                            style: AppTextStyles.display(
+                              13,
+                              color: _searchController.text.isNotEmpty
+                                  ? AppColors.primaryForeground
+                                  : AppColors.mutedForeground,
+                              letterSpacing: 0.05,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             Expanded(
@@ -216,24 +195,41 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   } else {
                     _allResults.addAll(result.items);
                   }
+                  _hasMore = result.nextSkip != null;
+                  if (mounted && _isLoadingMore) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) setState(() => _isLoadingMore = false);
+                    });
+                  }
 
-                  if (_allResults.isEmpty && _searchController.text.isNotEmpty) {
+                  if (_allResults.isEmpty &&
+                      _searchController.text.isNotEmpty) {
                     return Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.search, size: 48, color: AppColors.muted),
+                            Icon(
+                              Icons.search,
+                              size: 48,
+                              color: AppColors.muted,
+                            ),
                             const SizedBox(height: 16),
                             Text(
                               'No results found',
-                              style: AppTextStyles.display(18, color: AppColors.secondary),
+                              style: AppTextStyles.display(
+                                18,
+                                color: AppColors.secondary,
+                              ),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               'Try searching with different keywords',
-                              style: AppTextStyles.body(14, color: AppColors.mutedForeground),
+                              style: AppTextStyles.body(
+                                14,
+                                color: AppColors.mutedForeground,
+                              ),
                             ),
                           ],
                         ),
@@ -243,7 +239,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
                   return ListView.builder(
                     controller: _scrollController,
-                    itemCount: _allResults.length + (result.nextSkip != null ? 1 : 0),
+                    itemCount:
+                        _allResults.length +
+                        (_isLoadingMore && _hasMore ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (index == _allResults.length) {
                         return const Padding(
@@ -252,7 +250,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         );
                       }
                       final item = _allResults[index];
-                      return RepaintBoundary(child: _SearchResultCard(item: item));
+                      return RepaintBoundary(
+                        child: _SearchResultCard(item: item),
+                      );
                     },
                   );
                 },
@@ -267,24 +267,32 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.search, size: 48, color: AppColors.muted),
+                              Icon(
+                                Icons.search,
+                                size: 48,
+                                color: AppColors.muted,
+                              ),
                               const SizedBox(height: 16),
                               Text(
                                 'Search for events',
-                                style: AppTextStyles.display(18, color: AppColors.secondary),
+                                style: AppTextStyles.display(
+                                  18,
+                                  color: AppColors.secondary,
+                                ),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 'Enter a location above to discover events',
-                                style: AppTextStyles.body(14, color: AppColors.mutedForeground),
+                                style: AppTextStyles.body(
+                                  14,
+                                  color: AppColors.mutedForeground,
+                                ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                error: (error, _) => Center(
-                  child: Text('Error: $error'),
-                ),
+                error: (error, _) => Center(child: Text('Error: $error')),
               ),
             ),
           ],
@@ -294,67 +302,43 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 }
 
-class _CountryChip extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _CountryChip({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.card,
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.border,
-            width: AppDimens.border,
-          ),
-        ),
-        child: Text(
-          label,
-          style: AppTextStyles.body(
-            12,
-            color: isSelected ? AppColors.primaryForeground : AppColors.foreground,
-            weight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _SearchResultCard extends StatelessWidget {
-  final Map<String, dynamic> item;
-
   const _SearchResultCard({required this.item});
 
+  final Map<String, dynamic> item;
+
   @override
   Widget build(BuildContext context) {
-    final author = item['authorId'] is Map<String, dynamic>
-        ? item['authorId'] as Map<String, dynamic>
-        : <String, dynamic>{};
-    final name = author['displayName'] as String? ?? author['username'] as String? ?? 'User';
+    final author = readPostAuthor(item);
+    final name =
+        author['displayName'] as String? ??
+        author['username'] as String? ??
+        'User';
+    final username = author['username'] as String? ?? '';
+    final avatar = author['avatarUrl'] as String? ?? '';
+    final badge = postAuthorBadge(item);
     final location = item['location'] as String? ?? '';
     final status = item['status'] as String? ?? 'going';
     final caption = item['caption'] as String? ?? '';
     final likes = item['likesCount'] as int? ?? 0;
+    final comments = item['commentsCount'] as int? ?? 0;
+    final imageUrl = item['imageUrl'] as String? ?? '';
+    final id = item['_id']?.toString() ?? '';
+    final liked = item['liked'] as bool? ?? false;
+    final details = item['eventDetails'] as Map<String, dynamic>?;
+    final ticketUrl = details?['ticketUrl'] as String?;
     final createdAt = item['createdAt'] as String?;
-    final timestamp = createdAt != null ? DateTime.parse(createdAt) : DateTime.now();
+    final timestamp = DateTime.tryParse(createdAt ?? '') ?? DateTime.now();
     final relativeTime = getRelativeTime(timestamp);
 
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.card,
         border: Border(
-          bottom: BorderSide(color: AppColors.border, width: AppDimens.borderThick),
+          bottom: BorderSide(
+            color: AppColors.border,
+            width: AppDimens.borderThick,
+          ),
         ),
       ),
       child: Column(
@@ -364,23 +348,52 @@ class _SearchResultCard extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
+                AuthorAvatar(
+                  avatarUrl: avatar,
+                  username: username,
+                  badge: badge,
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(name, style: AppTextStyles.body(15, weight: FontWeight.w800)),
-                      Text(relativeTime, style: AppTextStyles.body(12, color: AppColors.mutedForeground)),
+                      Text(
+                        name,
+                        style: AppTextStyles.body(15, weight: FontWeight.w800),
+                      ),
+                      Text(
+                        relativeTime,
+                        style: AppTextStyles.body(
+                          12,
+                          color: AppColors.mutedForeground,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
-                    color: status == 'been' ? AppColors.primary : status == 'going' ? AppColors.accent : AppColors.muted,
-                    border: Border.all(color: AppColors.border, width: AppDimens.border),
+                    color: status == 'been'
+                        ? AppColors.primary
+                        : status == 'going'
+                        ? AppColors.accent
+                        : AppColors.muted,
+                    border: Border.all(
+                      color: AppColors.border,
+                      width: AppDimens.border,
+                    ),
                   ),
                   child: Text(
-                    status == 'been' ? 'BEEN' : status == 'going' ? 'GOING' : 'INTERESTED',
+                    status == 'been'
+                        ? 'BEEN'
+                        : status == 'going'
+                        ? 'GOING'
+                        : 'INTERESTED',
                     style: AppTextStyles.display(
                       14,
                       color: status == 'been'
@@ -397,32 +410,41 @@ class _SearchResultCard extends StatelessWidget {
           ),
           AspectRatio(
             aspectRatio: 16 / 10,
-            child: Container(color: AppColors.muted),
+            child: imageUrl.isNotEmpty
+                ? BeTherNetworkImage(url: imageUrl, fit: BoxFit.cover)
+                : Container(color: AppColors.muted),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Text(
               location,
-              style: AppTextStyles.display(22, color: AppColors.secondary, letterSpacing: 0.02),
+              style: AppTextStyles.display(
+                22,
+                color: AppColors.secondary,
+                letterSpacing: 0.02,
+              ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Text(
-              caption,
-              style: AppTextStyles.body(15),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+          if (caption.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                caption,
+                style: AppTextStyles.body(15),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Icon(Icons.favorite_border, size: 20, color: AppColors.foreground),
-                const SizedBox(width: 6),
-                Text('$likes', style: AppTextStyles.body(14, weight: FontWeight.w800)),
-              ],
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: PostInteractionRow(
+              postId: id,
+              liked: liked,
+              likesCount: likes,
+              commentsCount: comments,
+              location: location,
+              caption: caption,
+              ticketUrl: ticketUrl,
             ),
           ),
         ],

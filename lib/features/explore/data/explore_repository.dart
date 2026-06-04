@@ -5,15 +5,11 @@ class ExploreRepository {
 
   final Dio _dio;
 
-  Future<List<Map<String, dynamic>>> fetchEvents(String type) async {
+  Future<List<Map<String, dynamic>>> fetchEvents({int skip = 0}) async {
     try {
-      final normalizedType = switch (type) {
-        'events' || 'places' || 'all' => type,
-        _ => 'all',
-      };
       final res = await _dio.get<Map<String, dynamic>>(
         '/api/v1/explore/events',
-        queryParameters: {'type': normalizedType},
+        queryParameters: {'skip': skip},
       );
       final body = res.data;
       if (body == null || body['ok'] != true) {
@@ -29,6 +25,33 @@ class ExploreRepository {
         if (message != null && message.isNotEmpty) throw Exception(message);
       }
       throw Exception(e.message ?? 'Failed to load explore');
+    }
+  }
+
+  Future<bool> toggleBookmark(String eventId) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/explore/events/$eventId/bookmark',
+      );
+      final body = res.data;
+      if (body == null || body['ok'] != true) {
+        throw Exception(body?['error']?.toString() ?? 'Failed to update wishlist');
+      }
+      final data = body['data'];
+      if (data is Map<String, dynamic>) {
+        return data['bookmarked'] as bool? ?? false;
+      }
+      return false;
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (data is Map<String, dynamic>) {
+        final err = data['error'];
+        if (err is Map<String, dynamic>) {
+          final message = err['message']?.toString();
+          if (message != null && message.isNotEmpty) throw Exception(message);
+        }
+      }
+      throw Exception(e.message ?? 'Failed to update wishlist');
     }
   }
 }

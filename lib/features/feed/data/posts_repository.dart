@@ -18,8 +18,13 @@ class PostsRepository {
     }
   }
 
-  Future<void> toggleLike(String postId) async {
-    await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/like');
+  Future<bool> toggleLike(String postId) async {
+    final res = await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/like');
+    final data = res.data?['data'];
+    if (data is Map<String, dynamic>) {
+      return data['liked'] as bool? ?? false;
+    }
+    return false;
   }
 
   Future<bool> toggleBookmark(String postId) async {
@@ -31,22 +36,41 @@ class PostsRepository {
     return false;
   }
 
-  Future<void> toggleCalendar(String postId) async {
-    await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/calendar');
+  Future<bool> toggleCalendar(String postId) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/calendar');
+      final data = res.data?['data'];
+      if (data is Map<String, dynamic>) {
+        return data['inCalendar'] as bool? ?? false;
+      }
+      return false;
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to update calendar'));
+    }
   }
 
   Future<String> createPost(Map<String, dynamic> payload) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>('/api/v1/posts', data: payload);
       final data = _extractData(res.data, fallbackMessage: 'Failed to create post');
-      final id = data['_id']?.toString() ?? data['id']?.toString();
-      if (id == null || id.isEmpty) {
+      final id = _readPostId(data);
+      if (id.isEmpty) {
         throw const FormatException('Create post returned empty id');
       }
       return id;
     } on DioException catch (e) {
       throw Exception(_apiMessage(e, fallback: 'Failed to create post'));
     }
+  }
+
+  String _readPostId(Map<String, dynamic> data) {
+    final raw = data['postId'] ?? data['id'] ?? data['_id'];
+    if (raw is String) return raw;
+    if (raw is Map) {
+      final oid = raw[r'$oid'] ?? raw['oid'];
+      if (oid is String) return oid;
+    }
+    return raw?.toString() ?? '';
   }
 
   Future<String> uploadImage(String filePath) async {
@@ -83,11 +107,20 @@ class PostsRepository {
     return data;
   }
 
+  String apiMessage(DioException e, {required String fallback}) {
+    return _apiMessage(e, fallback: fallback);
+  }
+
   String _apiMessage(DioException e, {required String fallback}) {
     final data = e.response?.data;
     if (data is Map<String, dynamic>) {
-      final error = data['error']?.toString();
-      if (error != null && error.isNotEmpty) return error;
+      final error = data['error'];
+      if (error is Map<String, dynamic>) {
+        final message = error['message']?.toString();
+        if (message != null && message.isNotEmpty) return message;
+      }
+      final flat = error?.toString();
+      if (flat != null && flat.isNotEmpty && flat != 'null') return flat;
     }
     return e.message ?? fallback;
   }

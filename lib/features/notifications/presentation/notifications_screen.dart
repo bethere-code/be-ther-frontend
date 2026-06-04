@@ -7,14 +7,43 @@ import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../core/design/widgets/shell_header_avatar.dart';
 import '../../profile/presentation/profile_screen.dart';
 import 'notifications_providers.dart';
+import 'widgets/notification_post_sheet.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
 
   static const path = '/notifications';
   static const name = 'notifications';
+
+  static String _messageForType(String type) {
+    switch (type) {
+      case 'wishlist':
+        return ' saved your event to their wishlist';
+      case 'calendar':
+        return ' added your event to their calendar';
+      case 'star':
+      default:
+        return ' starred your profile';
+    }
+  }
+
+  static void _showMessagesInfo(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('MESSAGES', style: AppTextStyles.display(22, color: AppColors.secondary)),
+        content: const Text(
+          'Direct messages are available when you and another user star each other. Coming in a future update.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -32,24 +61,16 @@ class NotificationsScreen extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              InkWell(
-                onTap: () => context.push(ProfileScreen.path),
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.primary, width: AppDimens.borderThick),
-                    color: AppColors.muted,
-                  ),
-                  child: const Icon(Icons.person, color: AppColors.background),
-                ),
-              ),
+              const ShellHeaderAvatar(),
               Expanded(
                 child: Center(
                   child: Text('ALERTS', style: AppTextStyles.display(28, color: AppColors.primary, letterSpacing: 0.1)),
                 ),
               ),
-              IconButton(onPressed: () {}, icon: const Icon(Icons.mail_outline, color: AppColors.background)),
+              IconButton(
+                onPressed: () => _showMessagesInfo(context),
+                icon: const Icon(Icons.mail_outline, color: AppColors.background),
+              ),
             ],
           ),
         ),
@@ -60,7 +81,11 @@ class NotificationsScreen extends ConsumerWidget {
             return Center(child: Text('No notifications yet', style: AppTextStyles.body(16, color: AppColors.mutedForeground)));
           }
           return RefreshIndicator(
-            onRefresh: () => ref.refresh(notificationsProvider.future),
+            onRefresh: () async {
+              ref.invalidate(notificationsProvider);
+              ref.invalidate(unreadNotificationCountProvider);
+              await ref.read(notificationsProvider.future);
+            },
             child: ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
               itemCount: items.length,
@@ -73,12 +98,30 @@ class NotificationsScreen extends ConsumerWidget {
                 final avatar = actor['avatarUrl'] as String? ?? '';
                 final type = n['type'] as String? ?? 'star';
                 final id = n['_id']?.toString() ?? '';
+                final mutual = n['mutualStar'] as bool? ?? false;
+                final post = n['postId'] is Map<String, dynamic> ? n['postId'] as Map<String, dynamic> : null;
+                final postImage = post?['imageUrl'] as String? ?? '';
 
                 return InkWell(
                   onTap: () async {
                     if (!read && id.isNotEmpty) {
                       await ref.read(notificationsRepositoryProvider).markRead(id);
                       ref.invalidate(notificationsProvider);
+                      ref.invalidate(unreadNotificationCountProvider);
+                    }
+                    if (!context.mounted) return;
+                    if (type == 'star' && username.isNotEmpty) {
+                      context.push(ProfileScreen.pathForUser(username));
+                      return;
+                    }
+                    if (post != null && post.isNotEmpty) {
+                      await showNotificationPostSheet(
+                        context: context,
+                        post: post,
+                        actorUsername: username,
+                      );
+                    } else if (username.isNotEmpty) {
+                      context.push(ProfileScreen.pathForUser(username));
                     }
                   },
                   child: Container(
@@ -90,14 +133,22 @@ class NotificationsScreen extends ConsumerWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(border: Border.all(color: AppColors.border, width: AppDimens.border)),
-                          clipBehavior: Clip.hardEdge,
-                          child: avatar.isNotEmpty
-                              ? BeTherNetworkImage(url: avatar, fit: BoxFit.cover)
-                              : Icon(Icons.person, color: AppColors.foreground),
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: username.isEmpty
+                                ? null
+                                : () => context.push(ProfileScreen.pathForUser(username)),
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(border: Border.all(color: AppColors.border, width: AppDimens.border)),
+                              clipBehavior: Clip.hardEdge,
+                              child: avatar.isNotEmpty
+                                  ? BeTherNetworkImage(url: avatar, fit: BoxFit.cover)
+                                  : Icon(Icons.person, color: AppColors.foreground),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -109,21 +160,47 @@ class NotificationsScreen extends ConsumerWidget {
                                   children: [
                                     TextSpan(text: name, style: AppTextStyles.body(15, weight: FontWeight.w800)),
                                     TextSpan(
-                                      text: type == 'star' ? ' starred your profile' : ' interacted with your content',
+                                      text: _messageForType(type),
                                       style: AppTextStyles.body(15),
                                     ),
                                   ],
                                 ),
                               ),
-                              TextButton(
-                                onPressed: username.isEmpty
-                                    ? null
-                                    : () => context.push(ProfileScreen.pathForUser(username)),
-                                child: Text('View @$username', style: AppTextStyles.body(13, color: AppColors.primary, weight: FontWeight.w800)),
-                              ),
+                              if (mutual && type == 'star') ...[
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  color: AppColors.accent,
+                                  child: Text(
+                                    'MUTUAL',
+                                    style: AppTextStyles.display(10, color: AppColors.accentForeground),
+                                  ),
+                                ),
+                              ],
+                              if (!read) ...[
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  color: AppColors.primary,
+                                  child: Text(
+                                    'NEW',
+                                    style: AppTextStyles.display(10, color: AppColors.primaryForeground),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
+                        if (postImage.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(border: Border.all(color: AppColors.border, width: AppDimens.border)),
+                            clipBehavior: Clip.hardEdge,
+                            child: BeTherNetworkImage(url: postImage, fit: BoxFit.cover),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -133,7 +210,25 @@ class NotificationsScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: SelectableText('$e')),
+        error: (e, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SelectableText('$e', textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () {
+                    ref.invalidate(notificationsProvider);
+                    ref.invalidate(unreadNotificationCountProvider);
+                  },
+                  child: const Text('RETRY'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

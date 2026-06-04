@@ -37,7 +37,6 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   String? _imagePath;
   bool _busy = false;
   bool _attemptedSubmit = false;
-  bool _showTagInput = false;
   final _touched = <String, bool>{};
   final _taggedUsers = <String>[];
   DateTime? _selectedDate;
@@ -81,15 +80,17 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
   String? _validateEventName(String value) {
     if (value.trim().isEmpty) return 'Event name is required';
-    if (value.trim().length > 200)
+    if (value.trim().length > 200) {
       return 'Event name must be less than 200 characters';
+    }
     return null;
   }
 
   String? _validateLocation(String value) {
     if (value.trim().isEmpty) return 'Location is required';
-    if (value.trim().length > 200)
+    if (value.trim().length > 200) {
       return 'Location must be less than 200 characters';
+    }
     return null;
   }
 
@@ -99,8 +100,9 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   }
 
   String? _validateDescription(String value) {
-    if (value.trim().length > 2000)
+    if (value.trim().length > 2000) {
       return 'Description must be less than 2000 characters';
+    }
     return null;
   }
 
@@ -162,20 +164,6 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     return DateFormat.jm().format(dt);
   }
 
-  void _addTag() {
-    final tag = _tagInput.text.trim().replaceFirst(RegExp(r'^@'), '');
-    if (tag.isEmpty || _taggedUsers.contains(tag)) return;
-    setState(() {
-      _taggedUsers.add(tag);
-      _tagInput.clear();
-      _showTagInput = false;
-    });
-  }
-
-  void _removeTag(String tag) {
-    setState(() => _taggedUsers.remove(tag));
-  }
-
   Future<void> _pickDate() async {
     _markTouched(_fieldDate);
     final picked = await showDatePicker(
@@ -224,32 +212,28 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         'time': ?_formatTimeForApi(),
         'ticketUrl': ?ticketUrl,
       };
-      final postId = await posts.createPost({
+      await posts.createPost({
         'location': _eventName.text.trim(),
         'country': _location.text.trim(),
         'status': 'going',
         'imageUrl': url,
         'caption': _description.text.trim(),
         'isPrivate': _private,
+        'addToCalendar': _addToCalendar,
         if (_taggedUsers.isNotEmpty) 'taggedUsernames': _taggedUsers,
         'eventDetails': eventDetails,
       });
-      if (_addToCalendar) {
-        await posts.toggleCalendar(postId);
-      }
       ref.invalidate(feedProvider);
       if (!mounted) return;
       _close(context);
     } on DioException catch (e) {
       if (!mounted) return;
-      final errorMessage = e.message ?? 'Failed to post event';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Error: $errorMessage. Check your internet and try again.',
-          ),
-        ),
-      );
+      final message = PostsRepository(
+        ref.read(apiClientProvider),
+      ).apiMessage(e, fallback: 'Failed to post event');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -262,12 +246,11 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final canPost =
+    final hasRequiredFields =
         _eventName.text.trim().isNotEmpty &&
         _location.text.trim().isNotEmpty &&
         _selectedDate != null &&
-        _imagePath != null &&
-        !_hasValidationErrors();
+        _imagePath != null;
 
     return Scaffold(
       backgroundColor: Colors.black.withValues(alpha: 0.8),
@@ -682,7 +665,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                       ),
                     ),
                     child: Material(
-                      color: canPost && !_busy
+                      color: hasRequiredFields && !_busy
                           ? AppColors.primary
                           : AppColors.mutedForeground,
                       child: InkWell(
@@ -695,7 +678,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                               color: AppColors.border,
                               width: AppDimens.borderThick,
                             ),
-                            boxShadow: canPost && !_busy
+                            boxShadow: hasRequiredFields && !_busy
                                 ? AppDimens.primaryButtonShadow
                                 : null,
                           ),
