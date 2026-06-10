@@ -17,33 +17,13 @@ import 'widgets/explore_event_sheet.dart';
 /// Shared sizes so grid [childAspectRatio] matches tile content exactly.
 abstract final class _ExploreTileLayout {
   static const double calendarHeight = 36;
-  static const double detailsPaddingVertical = 18; // 10 top + 8 bottom
-  static const double titleBlockHeight = 36; // 2 lines @ display 15
+  // 10 top + 8 bottom
+  // 2 lines @ display 15
   static const double metaRowHeight = 16;
   static const double metaGap = 4;
-  static const double metaBlockHeight = metaRowHeight + metaGap + metaRowHeight;
   static const double attendeesBlockHeight = 26; // divider + row
-  static const double detailsBodyHeight =
-      titleBlockHeight + 6 + metaBlockHeight + 8 + attendeesBlockHeight;
-  static const double detailsSectionHeight =
-      detailsPaddingVertical + detailsBodyHeight;
-  static const double footerHeight = detailsSectionHeight + calendarHeight;
-
-  static double tileWidth(double gridWidth) {
-    const horizontalPad = 16.0;
-    const gap = 16.0;
-    return (gridWidth - horizontalPad * 2 - gap) / 2;
-  }
 
   static double imageHeight(double tileWidth) => tileWidth * 5 / 5;
-
-  static double tileHeight(double tileWidth) =>
-      imageHeight(tileWidth) + footerHeight;
-
-  static double aspectRatio(double gridWidth) {
-    final w = tileWidth(gridWidth);
-    return w / tileHeight(w);
-  }
 }
 
 class ExploreScreen extends ConsumerWidget {

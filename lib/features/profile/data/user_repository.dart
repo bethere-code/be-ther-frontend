@@ -29,6 +29,27 @@ class UserRepository {
     }
   }
 
+  /// Persists OS notification/location permission state on the user profile for stats.
+  Future<void> syncDevicePermissions({
+    required String notification,
+    required String location,
+  }) async {
+    try {
+      final res = await _dio.patch<Map<String, dynamic>>(
+        '/api/v1/users/me/device-permissions',
+        data: {
+          'notification': notification,
+          'location': location,
+        },
+      );
+      if (res.data == null || res.data!['ok'] != true) {
+        throw Exception(res.data?['error']?.toString() ?? 'Failed to sync permissions');
+      }
+    } on DioException catch (e) {
+      throw Exception(_errorFromDio(e, fallback: 'Failed to sync permissions'));
+    }
+  }
+
   Future<bool> starToggle(String username) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>('/api/v1/users/$username/star');

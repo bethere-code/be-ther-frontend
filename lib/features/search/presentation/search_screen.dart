@@ -54,8 +54,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _loadMore() {
-    if (_searchController.text.trim().isEmpty || _isLoadingMore || !_hasMore)
+    if (_searchController.text.trim().isEmpty || _isLoadingMore || !_hasMore) {
       return;
+    }
     setState(() {
       _isLoadingMore = true;
       _currentSkip += 10;

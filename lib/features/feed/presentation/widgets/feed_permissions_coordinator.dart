@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
+import '../../../profile/data/user_repository.dart';
 
 /// Requests notification then location when the user opens the feed.
 class FeedPermissionsCoordinator {
@@ -18,7 +19,10 @@ class FeedPermissionsCoordinator {
       !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   /// Notification first, then location. Runs on every feed visit while not granted.
-  static Future<void> ensure(BuildContext context) async {
+  static Future<void> ensure(
+    BuildContext context, {
+    UserRepository? userRepository,
+  }) async {
     if (!_supported || _inFlight) return;
 
     _inFlight = true;
@@ -40,9 +44,35 @@ class FeedPermissionsCoordinator {
             'Allow location access to discover events and places near you and '
             'keep your feed relevant to where you are.',
       );
+      await syncToProfile(userRepository);
     } finally {
       _inFlight = false;
     }
+  }
+
+  /// Reads current OS permission state and saves it on the user profile.
+  static Future<void> syncToProfile(UserRepository? userRepository) async {
+    if (!_supported || userRepository == null) return;
+    try {
+      final notification = await Permission.notification.status;
+      final location = await Permission.locationWhenInUse.status;
+      await userRepository.syncDevicePermissions(
+        notification: statusToApi(notification),
+        location: statusToApi(location),
+      );
+    } catch (_) {
+      // Stats sync must not block the feed.
+    }
+  }
+
+  static String statusToApi(PermissionStatus status) {
+    if (status.isGranted) return 'granted';
+    if (status.isLimited) return 'limited';
+    if (status.isProvisional) return 'provisional';
+    if (status.isPermanentlyDenied) return 'permanently_denied';
+    if (status.isRestricted) return 'restricted';
+    if (status.isDenied) return 'denied';
+    return 'unknown';
   }
 
   static Future<void> _ensure(

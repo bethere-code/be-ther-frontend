@@ -15,10 +15,11 @@ import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../core/design/widgets/post_interaction_row.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
 import 'widgets/feed_permissions_coordinator.dart';
-import 'widgets/feed_post_more_menu.dart';
+import 'widgets/feed_post_report_flow.dart';
 import '../../../core/routing/app_route_observer.dart';
 import '../../../core/utils/link_utils.dart';
 import '../../../core/utils/post_author.dart';
+import '../../profile/presentation/profile_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
 import 'add_post_screen.dart';
 import 'feed_providers.dart';
@@ -33,7 +34,8 @@ class FeedScreen extends ConsumerStatefulWidget {
   ConsumerState<FeedScreen> createState() => _FeedScreenState();
 }
 
-class _FeedScreenState extends ConsumerState<FeedScreen> with RouteAware, WidgetsBindingObserver {
+class _FeedScreenState extends ConsumerState<FeedScreen>
+    with RouteAware, WidgetsBindingObserver {
   late ScrollController _scrollController;
   List<Map<String, dynamic>> _allItems = [];
   int _currentSkip = 0;
@@ -107,7 +109,11 @@ class _FeedScreenState extends ConsumerState<FeedScreen> with RouteAware, Widget
       _permissionCheckQueued = false;
       if (!mounted) return;
       if (ModalRoute.of(context)?.isCurrent != true) return;
-      await FeedPermissionsCoordinator.ensure(context);
+      final userRepo = ref.read(userRepositoryProvider);
+      await FeedPermissionsCoordinator.ensure(
+        context,
+        userRepository: userRepo,
+      );
     });
   }
 
@@ -447,7 +453,6 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
     final badge = postAuthorBadge(item);
     final liked = item['liked'] as bool? ?? false;
     final location = item['location'] as String? ?? '';
-    final status = item['status'] as String? ?? 'going';
     final imageUrl = item['imageUrl'] as String? ?? '';
     final caption = item['caption'] as String? ?? '';
     final likes = item['likesCount'] as int? ?? 0;
@@ -516,39 +521,40 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
                     ),
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: status == 'been'
-                        ? AppColors.primary
-                        : status == 'going'
-                        ? AppColors.accent
-                        : AppColors.muted,
-                    border: Border.all(
-                      color: AppColors.border,
-                      width: AppDimens.border,
-                    ),
-                  ),
-                  child: Text(
-                    status == 'been'
-                        ? 'BEEN'
-                        : status == 'going'
-                        ? 'GOING'
-                        : 'INTERESTED',
-                    style: AppTextStyles.display(
-                      14,
-                      color: status == 'been'
-                          ? AppColors.primaryForeground
-                          : status == 'going'
-                          ? AppColors.accentForeground
-                          : AppColors.foreground,
-                      letterSpacing: 0.05,
-                    ),
-                  ),
-                ),
+                _FeedCardMoreMenu(postId: id),
+                // Container(
+                //   padding: const EdgeInsets.symmetric(
+                //     horizontal: 12,
+                //     vertical: 6,
+                //   ),
+                //   decoration: BoxDecoration(
+                //     color: status == 'been'
+                //         ? AppColors.primary
+                //         : status == 'going'
+                //         ? AppColors.accent
+                //         : AppColors.muted,
+                //     border: Border.all(
+                //       color: AppColors.border,
+                //       width: AppDimens.border,
+                //     ),
+                //   ),
+                //   child: Text(
+                //     status == 'been'
+                //         ? 'BEEN'
+                //         : status == 'going'
+                //         ? 'GOING'
+                //         : 'INTERESTED',
+                //     style: AppTextStyles.display(
+                //       14,
+                //       color: status == 'been'
+                //           ? AppColors.primaryForeground
+                //           : status == 'going'
+                //           ? AppColors.accentForeground
+                //           : AppColors.foreground,
+                //       letterSpacing: 0.05,
+                //     ),
+                //   ),
+                // ),
               ],
             ),
           ),
@@ -558,11 +564,6 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
               fit: StackFit.expand,
               children: [
                 BeTherNetworkImage(url: imageUrl, fit: BoxFit.contain),
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: FeedPostMoreMenu(postId: id),
-                ),
                 // Positioned(
                 //   top: 12,
                 //   right: 12,
@@ -814,6 +815,70 @@ class _EventDetailMeta extends StatelessWidget {
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FeedCardMoreMenu extends ConsumerWidget {
+  const _FeedCardMoreMenu({required this.postId});
+
+  final String postId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (postId.isEmpty) return const SizedBox.shrink();
+
+    return PopupMenuButton<String>(
+      padding: EdgeInsets.zero,
+      offset: const Offset(0, 8),
+      color: AppColors.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+        side: const BorderSide(
+          color: AppColors.border,
+          width: AppDimens.border,
+        ),
+      ),
+      icon: const Icon(Icons.more_vert, color: AppColors.border, size: 22),
+      onSelected: (value) {
+        final type = switch (value) {
+          'event_cancelled' => FeedPostReportType.eventCancelled,
+          'spam' => FeedPostReportType.spam,
+          'bug' => FeedPostReportType.bug,
+          _ => null,
+        };
+        if (type != null) {
+          handleFeedPostReport(
+            context: context,
+            ref: ref,
+            postId: postId,
+            type: type,
+          );
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'event_cancelled',
+          child: Text(
+            'Event is cancelled',
+            style: AppTextStyles.body(14, weight: FontWeight.w700),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'spam',
+          child: Text(
+            'Spam event',
+            style: AppTextStyles.body(14, weight: FontWeight.w700),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'bug',
+          child: Text(
+            'Report a bug',
+            style: AppTextStyles.body(14, weight: FontWeight.w700),
           ),
         ),
       ],

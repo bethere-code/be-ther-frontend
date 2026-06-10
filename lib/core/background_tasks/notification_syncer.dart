@@ -23,12 +23,14 @@ class NotificationSyncer {
 
   /// Perform a single notification sync
   void _syncNotifications() {
+    unawaited(_refreshNotifications());
+  }
+
+  Future<void> _refreshNotifications() async {
     try {
-      // Ignore return value since this runs in background
-      unawaited(ref.refresh(notificationsProvider.future));
-    } catch (e) {
+      final _ = await ref.refresh(notificationsProvider.future);
+    } catch (_) {
       // Silently handle errors to avoid disrupting the app
-      // NotificationSyncer should be resilient to network issues
     }
   }
 
@@ -40,11 +42,7 @@ class NotificationSyncer {
 
   /// Manually trigger a sync (e.g., on app resume)
   Future<void> syncNow() async {
-    try {
-      await ref.refresh(notificationsProvider.future);
-    } catch (e) {
-      // Silently handle errors
-    }
+    await _refreshNotifications();
   }
 
   /// Dispose of resources
