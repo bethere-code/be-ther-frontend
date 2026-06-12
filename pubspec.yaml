@@ -48,6 +48,10 @@ dependencies:
   url_launcher: ^6.3.2
   share_plus: ^10.1.4
   permission_handler: ^11.4.0
+  image_cropper: ^12.2.1
+  flutter_image_compress: ^2.4.0
+  path_provider: ^2.1.5
+  path: ^1.9.1
 
 dev_dependencies:
   flutter_test:

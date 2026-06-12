@@ -158,6 +158,11 @@ class PostsRepository {
   }
 
   String _apiMessage(DioException e, {required String fallback}) {
+    final status = e.response?.statusCode;
+    if (status == 413) {
+      return 'Photo is too large. Please choose a smaller image (under 8 MB).';
+    }
+
     final data = e.response?.data;
     if (data is Map<String, dynamic>) {
       final error = data['error'];
@@ -168,7 +173,15 @@ class PostsRepository {
       final flat = error?.toString();
       if (flat != null && flat.isNotEmpty && flat != 'null') return flat;
     }
-    return e.message ?? fallback;
+
+    final dioMessage = e.message ?? '';
+    if (dioMessage.contains('validateStatus') ||
+        dioMessage.contains('status code of') ||
+        dioMessage.contains('DioException')) {
+      return fallback;
+    }
+    if (dioMessage.isNotEmpty) return dioMessage;
+    return fallback;
   }
 }
 
