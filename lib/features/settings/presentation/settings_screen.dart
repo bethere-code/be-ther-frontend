@@ -8,6 +8,7 @@ import '../../../core/design/app_text_styles.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../launch/presentation/launch_screen.dart';
 import '../../profile/presentation/profile_providers.dart';
+import 'widgets/profile_edit_section.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -66,6 +67,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           return ListView(
             children: [
               _sectionTitle('PROFILE'),
+              const ProfileEditSection(),
               SwitchListTile(
                 title: Text(_private ? 'Private Profile' : 'Public Profile', style: AppTextStyles.body(16, weight: FontWeight.w800)),
                 subtitle: Text(

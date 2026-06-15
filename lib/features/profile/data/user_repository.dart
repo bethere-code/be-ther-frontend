@@ -18,14 +18,46 @@ class UserRepository {
     return (data['items'] as List<dynamic>? ?? []).whereType<Map<String, dynamic>>().toList();
   }
 
-  Future<void> patchMe(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> patchMe(Map<String, dynamic> payload) async {
     try {
       final res = await _dio.patch<Map<String, dynamic>>('/api/v1/users/me', data: payload);
       if (res.data == null || res.data!['ok'] != true) {
         throw Exception(res.data?['error']?.toString() ?? 'Update failed');
       }
+      final data = res.data!['data'];
+      if (data is! Map<String, dynamic>) {
+        throw Exception('Update failed');
+      }
+      return data;
     } on DioException catch (e) {
       throw Exception(_errorFromDio(e, fallback: 'Update failed'));
+    }
+  }
+
+  Future<String> uploadImage(String filePath) async {
+    try {
+      final form = FormData.fromMap({
+        'file': await MultipartFile.fromFile(filePath),
+      });
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/media/upload',
+        data: form,
+      );
+      final body = res.data;
+      if (body == null || body['ok'] != true) {
+        throw Exception(body?['error']?.toString() ?? 'Upload failed');
+      }
+      final data = body['data'];
+      if (data is! Map<String, dynamic>) {
+        throw Exception('Upload failed');
+      }
+      final url = data['url']?.toString();
+      if (url == null || url.isEmpty) {
+        throw Exception('Upload returned empty URL');
+      }
+      return url;
+    } on DioException catch (e) {
+      throw Exception(_errorFromDio(e, fallback: 'Upload failed'));
     }
   }
 

@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../auth/presentation/auth_notifier.dart';
+import '../../feed/presentation/feed_providers.dart';
 import '../data/user_repository.dart';
 
 final userRepositoryProvider = Provider<UserRepository>((ref) {
@@ -31,3 +33,10 @@ final profileCalendarProvider = FutureProvider.family<List<Map<String, dynamic>>
     return repo.calendar(username);
   },
 );
+
+void refreshProfileCaches(WidgetRef ref, Map<String, dynamic> user) {
+  ref.read(authNotifierProvider.notifier).updateUser(user);
+  ref.invalidate(profileMeProvider);
+  ref.invalidate(profileViewProvider(null));
+  ref.invalidate(feedProvider);
+}

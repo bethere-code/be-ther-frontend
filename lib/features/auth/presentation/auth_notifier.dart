@@ -138,6 +138,12 @@ class AuthNotifier extends Notifier<AuthState> {
     await _storage.clear();
     state = const AuthState();
   }
+
+  void updateUser(Map<String, dynamic> patch) {
+    final u = state.user;
+    if (u == null) return;
+    state = state.copyWith(user: {...u, ...patch});
+  }
 }
 
 final authNotifierProvider = NotifierProvider<AuthNotifier, AuthState>(
