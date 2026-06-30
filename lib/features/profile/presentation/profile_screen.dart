@@ -9,6 +9,7 @@ import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../feed/presentation/feed_providers.dart';
+import '../../../core/utils/event_date_utils.dart';
 import '../../settings/presentation/settings_screen.dart';
 import 'profile_providers.dart';
 import 'widgets/profile_event_sheet.dart';
@@ -225,7 +226,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         childCount: _dayCount,
                       ),
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                    const SliverToBoxAdapter(child: SizedBox(height: 32)),
                   ],
                 );
               },
@@ -552,13 +553,25 @@ class _CalendarDayCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = event?.status == 'been' ? AppColors.primary : AppColors.accent;
-    final statusFg = event?.status == 'been' ? AppColors.primaryForeground : AppColors.accentForeground;
-    final statusLabel = event?.status == 'been'
-        ? 'BEEN'
-        : event?.status == 'going'
-            ? 'GOING'
-            : 'INTERESTED';
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    final eventIsPast = event != null &&
+        DateTime(event!.date.year, event!.date.month, event!.date.day)
+            .isBefore(todayDate);
+    final statusColor = eventIsPast
+        ? AppColors.muted
+        : (event?.status == 'been' ? AppColors.primary : AppColors.accent);
+    final statusFg = eventIsPast
+        ? AppColors.mutedForeground
+        : (event?.status == 'been'
+            ? AppColors.primaryForeground
+            : AppColors.accentForeground);
+    final statusLabel = event == null
+        ? ''
+        : EventDateUtils.statusLabel(
+            status: event!.status,
+            isPast: eventIsPast,
+          );
 
     return Opacity(
       opacity: faded ? 0.4 : 1,

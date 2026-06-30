@@ -17,6 +17,7 @@ import '../../../core/design/widgets/post_skeleton.dart';
 import 'widgets/feed_permissions_coordinator.dart';
 import 'widgets/feed_post_report_flow.dart';
 import '../../../core/routing/app_route_observer.dart';
+import '../../../core/utils/event_date_utils.dart';
 import '../../../core/utils/link_utils.dart';
 import '../../../core/utils/post_author.dart';
 import '../../profile/presentation/profile_providers.dart';
@@ -460,6 +461,7 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
     final id = item['_id']?.toString() ?? '';
     final details = item['eventDetails'] as Map<String, dynamic>?;
     final ticketUrl = details?['ticketUrl'] as String?;
+    final isPast = EventDateUtils.isPostPast(item);
     final createdAt = item['createdAt'] as String?;
     final timestamp = createdAt != null
         ? DateTime.parse(createdAt)
@@ -563,7 +565,7 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                BeTherNetworkImage(url: imageUrl, fit: BoxFit.contain),
+                BeTherNetworkImage(url: imageUrl, fit: BoxFit.cover),
                 // Positioned(
                 //   top: 12,
                 //   right: 12,
@@ -625,6 +627,7 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
           if (details != null && details.isNotEmpty)
             _EventDetails(
               details,
+              isPast: isPast,
               ticketUrl: ticketUrl,
               inCalendar: _inCalendar,
               isLoading: _isCalendarLoading,
@@ -660,6 +663,7 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
 class _EventDetails extends StatelessWidget {
   const _EventDetails(
     this.details, {
+    this.isPast = false,
     this.ticketUrl,
     this.inCalendar = false,
     this.isLoading = false,
@@ -668,6 +672,7 @@ class _EventDetails extends StatelessWidget {
   });
 
   final Map<String, dynamic> details;
+  final bool isPast;
   final String? ticketUrl;
   final bool inCalendar;
   final bool isLoading;
@@ -739,6 +744,21 @@ class _EventDetails extends StatelessWidget {
               ],
             ),
           if (hasMeta) const SizedBox(height: 12),
+          if (isPast) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              color: AppColors.muted,
+              child: Text(
+                'PAST EVENT',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.display(
+                  14,
+                  color: AppColors.mutedForeground,
+                ),
+              ),
+            ),
+          ] else ...[
           if (ticketUrl != null && ticketUrl!.trim().isNotEmpty) ...[
             SizedBox(
               width: double.infinity,
@@ -778,6 +798,7 @@ class _EventDetails extends StatelessWidget {
               ),
             ),
           ),
+          ],
           if (error != null) ...[
             const SizedBox(height: 8),
             Text(

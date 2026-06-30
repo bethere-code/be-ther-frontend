@@ -9,7 +9,9 @@ import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../core/design/widgets/shell_header_avatar.dart';
 import '../../../core/utils/link_utils.dart';
+import '../../../core/utils/event_date_utils.dart';
 import '../../feed/presentation/feed_providers.dart';
+import '../../feed/presentation/feed_screen.dart';
 import '../../search/presentation/search_screen.dart';
 import 'explore_providers.dart';
 import 'widgets/explore_event_sheet.dart';
@@ -36,9 +38,14 @@ class ExploreScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final events = ref.watch(exploreEventsProvider);
 
-    return AppShell(
-      activeTab: ShellTab.explore,
-      header: PreferredSize(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.go(FeedScreen.path);
+      },
+      child: AppShell(
+        activeTab: ShellTab.explore,
+        header: PreferredSize(
         preferredSize: const Size.fromHeight(56),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -136,6 +143,7 @@ class ExploreScreen extends ConsumerWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }
@@ -233,12 +241,12 @@ class _ExploreTileState extends ConsumerState<_ExploreTile> {
     final attendees = event['attendees'] as int? ?? 0;
     final trending = event['trending'] as bool? ?? false;
     final ticketUrl = event['ticketUrl'] as String?;
+    final isPast = EventDateUtils.isExploreItemPast(event);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final cardWidth = constraints.maxWidth;
         final imageHeight = _ExploreTileLayout.imageHeight(cardWidth);
-        print('cardWidth: $cardWidth, imageHeight: $imageHeight');
         return Container(
           decoration: BoxDecoration(
             color: AppColors.card,
@@ -404,7 +412,8 @@ class _ExploreTileState extends ConsumerState<_ExploreTile> {
                                             ),
                                           ),
                                           const Spacer(),
-                                          if (ticketUrl != null &&
+                                          if (!isPast &&
+                                              ticketUrl != null &&
                                               ticketUrl.trim().isNotEmpty)
                                             GestureDetector(
                                               onTap: () => openExternalUrl(
@@ -443,8 +452,9 @@ class _ExploreTileState extends ConsumerState<_ExploreTile> {
                     ),
                     _ExploreCalendarButton(
                       inCalendar: _inCalendar,
+                      isPast: isPast,
                       loading: _calendarBusy,
-                      onPressed: postId.isEmpty
+                      onPressed: postId.isEmpty || isPast
                           ? null
                           : () => _toggleCalendar(postId),
                     ),
@@ -496,11 +506,13 @@ class _MetaRow extends StatelessWidget {
 class _ExploreCalendarButton extends StatelessWidget {
   const _ExploreCalendarButton({
     required this.inCalendar,
+    required this.isPast,
     required this.loading,
     required this.onPressed,
   });
 
   final bool inCalendar;
+  final bool isPast;
   final bool loading;
   final VoidCallback? onPressed;
 
@@ -508,10 +520,20 @@ class _ExploreCalendarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bg = isPast
+        ? AppColors.muted
+        : (inCalendar ? AppColors.primary : AppColors.accent);
+    final fg = isPast
+        ? AppColors.mutedForeground
+        : (inCalendar ? AppColors.primaryForeground : AppColors.accentForeground);
+    final label = isPast
+        ? 'PAST EVENT'
+        : (inCalendar ? 'ADDED' : 'ADD TO CALENDAR');
+
     return SizedBox(
       height: _height,
       child: Material(
-        color: inCalendar ? AppColors.primary : AppColors.accent,
+        color: bg,
         child: InkWell(
           onTap: loading ? null : onPressed,
           child: DecoratedBox(
@@ -530,18 +552,14 @@ class _ExploreCalendarButton extends StatelessWidget {
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: inCalendar
-                            ? AppColors.primaryForeground
-                            : AppColors.accentForeground,
+                        color: fg,
                       ),
                     )
                   : Text(
-                      inCalendar ? 'ADDED' : 'ADD TO CALENDAR',
+                      label,
                       style: AppTextStyles.display(
                         11,
-                        color: inCalendar
-                            ? AppColors.primaryForeground
-                            : AppColors.accentForeground,
+                        color: fg,
                         letterSpacing: 0.05,
                       ),
                     ),

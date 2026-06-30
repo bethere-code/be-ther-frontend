@@ -12,16 +12,20 @@ Future<void> showNotificationPostSheet({
   required Map<String, dynamic> post,
   required String actorUsername,
 }) {
+  final location = post['location'] as String? ?? '';
+  final imageUrl = post['imageUrl'] as String? ?? '';
+  final caption = post['caption'] as String? ?? '';
+  final status = post['status'] as String? ?? 'going';
+
   return showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
+    isDismissible: true,
+    enableDrag: true,
     backgroundColor: Colors.transparent,
-    builder: (context) {
-      final location = post['location'] as String? ?? '';
-      final imageUrl = post['imageUrl'] as String? ?? '';
-      final caption = post['caption'] as String? ?? '';
-      final status = post['status'] as String? ?? 'going';
-
-      return Container(
+    builder: (context) => PopScope(
+      canPop: true,
+      child: Container(
         padding: const EdgeInsets.all(16),
         decoration: const BoxDecoration(
           color: AppColors.background,
@@ -60,7 +64,7 @@ Future<void> showNotificationPostSheet({
               ),
           ],
         ),
-      );
-    },
+      ),
+    ),
   );
 }

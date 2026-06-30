@@ -60,8 +60,9 @@ class AuthRepository {
       final payload = <String, dynamic>{};
       if (username != null) payload['username'] = username;
       if (email != null) payload['email'] = email;
+      print("checkSignupAvailability: $payload");
       final res = await _dio.post<Map<String, dynamic>>(
-        '/api/v1/auth/signup/availability',
+        'v1/auth/signup/availability',
         data: payload,
         // Live validation should fail fast and not block typing UX.
         options: Options(
@@ -70,6 +71,7 @@ class AuthRepository {
           receiveTimeout: const Duration(seconds: 4),
         ),
       );
+      print("checkSignupAvailability: $res");
       final data = _unwrap(res) as Map<String, dynamic>;
       return SignupAvailability.fromJson(data);
     } on DioException catch (e) {
@@ -192,23 +194,25 @@ class AuthRepository {
     if (data is Map<String, dynamic>) {
       final error = data['error'];
       if (error is Map && error['message'] != null) {
-        return ApiException(error['message'].toString());
+        return ApiException(error['message'].toString(), statusCode: status);
       }
       if (error is String && error.isNotEmpty) {
-        return ApiException(error);
+        return ApiException(error, statusCode: status);
       }
     }
     if (status == 404) {
       return ApiException(
         'Auth API route not found. Ensure backend is running latest code (`npm run dev`) on port 3000.',
+        statusCode: status,
       );
     }
     if (status == 500) {
       return ApiException(
         'Server error while processing auth. Check backend logs.',
+        statusCode: status,
       );
     }
-    return ApiException(e.message ?? fallback);
+    return ApiException(e.message ?? fallback, statusCode: status);
   }
 }
 

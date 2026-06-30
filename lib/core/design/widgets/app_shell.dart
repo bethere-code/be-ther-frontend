@@ -45,8 +45,21 @@ class AppShell extends StatelessWidget {
           children: [
             Column(
               children: [
-                ?header,
-                Expanded(child: child),
+                if (header != null)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      right: showRail ? AppDimens.railWidth : 0,
+                    ),
+                    child: header,
+                  ),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      right: showRail ? AppDimens.railWidth : 0,
+                    ),
+                    child: child,
+                  ),
+                ),
                 if (showBottomBar) _BottomBar(activeTab: activeTab),
               ],
             ),

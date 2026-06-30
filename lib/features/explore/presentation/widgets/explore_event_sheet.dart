@@ -5,6 +5,7 @@ import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../../core/utils/event_date_utils.dart';
 import '../../../../core/utils/link_utils.dart';
 import '../../../feed/presentation/feed_providers.dart';
 
@@ -15,8 +16,13 @@ Future<void> showExploreEventSheet({
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    isDismissible: true,
+    enableDrag: true,
     backgroundColor: Colors.transparent,
-    builder: (context) => _ExploreEventSheet(event: event),
+    builder: (context) => PopScope(
+      canPop: true,
+      child: _ExploreEventSheet(event: event),
+    ),
   );
 }
 
@@ -71,6 +77,7 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
     final attendees = widget.event['attendees'] as int? ?? 0;
     final trending = widget.event['trending'] as bool? ?? false;
     final ticketUrl = widget.event['ticketUrl'] as String?;
+    final isPast = EventDateUtils.isExploreItemPast(widget.event);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.72,
@@ -176,39 +183,54 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                     if (status.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
-                        status == 'been' ? 'BEEN' : status == 'going' ? 'GOING' : 'INTERESTED',
-                        style: AppTextStyles.display(12, color: AppColors.primary),
+                        EventDateUtils.statusLabel(status: status, isPast: isPast),
+                        style: AppTextStyles.display(
+                          12,
+                          color: isPast ? AppColors.mutedForeground : AppColors.primary,
+                        ),
                       ),
                     ],
                     const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 40,
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _inCalendar ? AppColors.primary : AppColors.accent,
-                          foregroundColor:
-                              _inCalendar ? AppColors.primaryForeground : AppColors.accentForeground,
-                          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                    if (isPast)
+                      Container(
+                        width: double.infinity,
+                        height: 40,
+                        alignment: Alignment.center,
+                        color: AppColors.muted,
+                        child: Text(
+                          'PAST EVENT',
+                          style: AppTextStyles.display(14, color: AppColors.mutedForeground),
                         ),
-                        onPressed: _calendarBusy ? null : _toggleCalendar,
-                        child: _calendarBusy
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Text(
-                                _inCalendar ? 'ADDED TO CALENDAR' : 'ADD TO CALENDAR',
-                                style: AppTextStyles.display(
-                                  14,
-                                  color: _inCalendar
-                                      ? AppColors.primaryForeground
-                                      : AppColors.accentForeground,
+                      )
+                    else
+                      SizedBox(
+                        width: double.infinity,
+                        height: 40,
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _inCalendar ? AppColors.primary : AppColors.accent,
+                            foregroundColor:
+                                _inCalendar ? AppColors.primaryForeground : AppColors.accentForeground,
+                            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                          ),
+                          onPressed: _calendarBusy ? null : _toggleCalendar,
+                          child: _calendarBusy
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : Text(
+                                  _inCalendar ? 'ADDED TO CALENDAR' : 'ADD TO CALENDAR',
+                                  style: AppTextStyles.display(
+                                    14,
+                                    color: _inCalendar
+                                        ? AppColors.primaryForeground
+                                        : AppColors.accentForeground,
+                                  ),
                                 ),
-                              ),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -223,7 +245,7 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                     icon: const Icon(Icons.share_outlined),
                   ),
                   const Spacer(),
-                  if (ticketUrl != null && ticketUrl.trim().isNotEmpty)
+                  if (!isPast && ticketUrl != null && ticketUrl.trim().isNotEmpty)
                     IconButton(
                       onPressed: () => openExternalUrl(context, ticketUrl),
                       icon: const Icon(Icons.link),

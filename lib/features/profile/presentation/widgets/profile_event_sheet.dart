@@ -8,6 +8,7 @@ import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../../core/design/widgets/post_more_menu_button.dart';
+import '../../../../core/utils/event_date_utils.dart';
 import '../../../feed/presentation/feed_providers.dart';
 
 class ProfileCalendarEvent {
@@ -78,7 +79,10 @@ class ProfileCalendarEvent {
     );
   }
 
-  bool get canMarkNotGoing => inCalendar || (isAuthoredByMe && status == 'going');
+  bool get isPast => EventDateUtils.isEventPastFromDateTime(date, timeRaw: time);
+
+  bool get canMarkNotGoing =>
+      !isPast && (inCalendar || (isAuthoredByMe && status == 'going'));
 }
 
 Future<void> showProfileEventSheet({
@@ -92,13 +96,18 @@ Future<void> showProfileEventSheet({
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    isDismissible: true,
+    enableDrag: true,
     backgroundColor: Colors.transparent,
-    builder: (context) => _ProfileEventSheet(
-      event: event,
-      showWishlist: showWishlist,
-      isOwnProfile: isOwnProfile,
-      onToggleWishlist: onToggleWishlist,
-      onCalendarChanged: onCalendarChanged,
+    builder: (context) => PopScope(
+      canPop: true,
+      child: _ProfileEventSheet(
+        event: event,
+        showWishlist: showWishlist,
+        isOwnProfile: isOwnProfile,
+        onToggleWishlist: onToggleWishlist,
+        onCalendarChanged: onCalendarChanged,
+      ),
     ),
   );
 }
@@ -133,22 +142,23 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   }
 
   Color get _statusColor {
+    if (widget.event.isPast) return AppColors.muted;
     if (widget.event.status == 'been') return AppColors.primary;
     if (widget.event.status == 'going') return AppColors.accent;
     return AppColors.muted;
   }
 
   Color get _statusFg {
+    if (widget.event.isPast) return AppColors.mutedForeground;
     if (widget.event.status == 'been') return AppColors.primaryForeground;
     if (widget.event.status == 'going') return AppColors.accentForeground;
     return AppColors.foreground;
   }
 
-  String get _statusLabel {
-    if (widget.event.status == 'been') return 'BEEN';
-    if (widget.event.status == 'going') return 'GOING';
-    return 'INTERESTED';
-  }
+  String get _statusLabel => EventDateUtils.statusLabel(
+        status: widget.event.status,
+        isPast: widget.event.isPast,
+      );
 
   Future<void> _toggleWishlist() async {
     if (_busy) return;
@@ -373,7 +383,9 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                       ],
                     ),
                     const SizedBox(height: 20),
-                    if (widget.showWishlist || (widget.event.ticketUrl?.isNotEmpty ?? false))
+                    if (widget.showWishlist ||
+                        (!widget.event.isPast &&
+                            (widget.event.ticketUrl?.isNotEmpty ?? false)))
                       Row(
                         children: [
                           if (widget.showWishlist)
@@ -409,9 +421,11 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                                 ),
                               ),
                             ),
-                          if (widget.showWishlist && (widget.event.ticketUrl?.isNotEmpty ?? false))
+                          if (widget.showWishlist &&
+                              !widget.event.isPast &&
+                              (widget.event.ticketUrl?.isNotEmpty ?? false))
                             const SizedBox(width: 12),
-                          if (widget.event.ticketUrl?.isNotEmpty ?? false)
+                          if (!widget.event.isPast && (widget.event.ticketUrl?.isNotEmpty ?? false))
                             Expanded(
                               child: Material(
                                 color: AppColors.accent,

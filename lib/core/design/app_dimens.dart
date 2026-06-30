@@ -9,7 +9,8 @@ abstract final class AppDimens {
   static const double border = 3;
   static const double borderThick = 4;
 
-  static const double railWidth = 56;
+  /// Right rail footprint: 60px control + 8px padding on each side.
+  static const double railWidth = 76;
 
   /// Primary CTA shadow: `0 6px 0` cream block.
   static const List<BoxShadow> primaryButtonShadow = [

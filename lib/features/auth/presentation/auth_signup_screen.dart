@@ -132,9 +132,11 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
     _usernameDebounce = Timer(const Duration(milliseconds: 450), () async {
       final requestId = ++_usernameRequestId;
       try {
+        print("checkSignupAvailability: $username");
         final result = await ref
             .read(authRepositoryProvider)
             .checkSignupAvailability(username: username);
+        print("checkSignupAvailability: $result");
         if (!mounted ||
             requestId != _usernameRequestId ||
             _username.text.trim() != username) {

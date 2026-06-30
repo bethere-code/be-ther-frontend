@@ -9,6 +9,7 @@ import '../../../core/design/widgets/author_avatar.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../core/design/widgets/post_interaction_row.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
+import '../../../core/utils/event_date_utils.dart';
 import '../../../core/utils/post_author.dart';
 import '../../../core/utils/time_utils.dart';
 import 'search_providers.dart';
@@ -320,6 +321,8 @@ class _SearchResultCard extends StatelessWidget {
     final badge = postAuthorBadge(item);
     final location = item['location'] as String? ?? '';
     final status = item['status'] as String? ?? 'going';
+    final isPast = EventDateUtils.isPostPast(item);
+    final statusLabel = EventDateUtils.statusLabel(status: status, isPast: isPast);
     final caption = item['caption'] as String? ?? '';
     final likes = item['likesCount'] as int? ?? 0;
     final comments = item['commentsCount'] as int? ?? 0;
@@ -379,7 +382,9 @@ class _SearchResultCard extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: status == 'been'
+                    color: isPast
+                        ? AppColors.muted
+                        : status == 'been'
                         ? AppColors.primary
                         : status == 'going'
                         ? AppColors.accent
@@ -390,14 +395,12 @@ class _SearchResultCard extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    status == 'been'
-                        ? 'BEEN'
-                        : status == 'going'
-                        ? 'GOING'
-                        : 'INTERESTED',
+                    statusLabel,
                     style: AppTextStyles.display(
                       14,
-                      color: status == 'been'
+                      color: isPast
+                          ? AppColors.mutedForeground
+                          : status == 'been'
                           ? AppColors.primaryForeground
                           : status == 'going'
                           ? AppColors.accentForeground

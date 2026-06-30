@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
+import '../../../../core/utils/badge_colors.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../../core/media/photo_picker.dart';
 import '../../../profile/presentation/profile_providers.dart';
@@ -294,6 +295,7 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
         final name = user['displayName'] as String? ?? '';
         final bio = user['bio'] as String? ?? '';
         final username = user['username'] as String? ?? '';
+        final badge = user['badge'] as String?;
 
         return Column(
           children: [
@@ -316,7 +318,10 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                           height: 88,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.border, width: AppDimens.borderThick),
+                            border: Border.all(
+                              color: badgeBorderColor(badge),
+                              width: AppDimens.borderThick,
+                            ),
                           ),
                           clipBehavior: Clip.hardEdge,
                           child: avatar.isNotEmpty

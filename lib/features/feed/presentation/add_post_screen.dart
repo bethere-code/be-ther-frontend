@@ -299,7 +299,12 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     return Scaffold(
       backgroundColor: Colors.black.withValues(alpha: 0.8),
       resizeToAvoidBottomInset: false,
-      body: Align(
+      body: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _close(context);
+        },
+        child: Align(
         alignment: Alignment.bottomCenter,
         child: MediaQuery.removeViewInsets(
           context: context,
@@ -768,6 +773,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
             ),
           ),
         ),
+        ),
       ),
     );
   }
@@ -973,14 +979,14 @@ class _EventStatusToggle extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  going ? 'Going To' : 'Add to Calendar',
+                  going ? 'Going To' : 'Interested',
                   style: AppTextStyles.body(16, weight: FontWeight.w700),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   going
                       ? 'Confirm your attendance'
-                      : 'Save for future reference',
+                      : 'Show interest without confirming',
                   style: AppTextStyles.body(
                     14,
                     color: AppColors.mutedForeground,

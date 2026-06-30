@@ -3,6 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/auth_repository.dart';
 
@@ -70,22 +71,38 @@ class AuthNotifier extends Notifier<AuthState> {
 
     Future<Null> run() async {
       final (access, refresh) = await _storage.read();
-      if (access == null ||
-          refresh == null ||
-          access.isEmpty ||
-          refresh.isEmpty) {
+      if (refresh == null || refresh.isEmpty) {
         state = const AuthState();
         return;
       }
-      try {
-        final repo = ref.read(authRepositoryProvider);
-        final user = await repo.me(access);
-        state = AuthState(
-          accessToken: access,
-          refreshToken: refresh,
-          user: user,
-        );
-      } catch (_) {
+
+      final repo = ref.read(authRepositoryProvider);
+      final hasAccess = access != null && access.isNotEmpty;
+
+      if (hasAccess) {
+        try {
+          final user = await repo.me(access);
+          state = AuthState(
+            accessToken: access,
+            refreshToken: refresh,
+            user: user,
+          );
+          return;
+        } on ApiException catch (e) {
+          final authExpired = e.statusCode == 401 || e.statusCode == 403;
+          if (!authExpired) {
+            // Offline or server error — keep tokens so the session survives relaunch.
+            state = AuthState(accessToken: access, refreshToken: refresh);
+            return;
+          }
+        } catch (_) {
+          state = AuthState(accessToken: access, refreshToken: refresh);
+          return;
+        }
+      }
+
+      final restored = await _restoreViaRefresh(refresh);
+      if (!restored) {
         await _storage.clear();
         state = const AuthState();
       }
@@ -114,21 +131,36 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<bool> tryRefresh() async {
     final refresh = state.refreshToken;
     if (refresh == null || refresh.isEmpty) return false;
+    final ok = await _restoreViaRefresh(refresh);
+    if (!ok) await logout();
+    return ok;
+  }
+
+  Future<bool> _restoreViaRefresh(String refreshToken) async {
     try {
       final repo = ref.read(authRepositoryProvider);
-      final next = await repo.refresh(refresh);
+      final next = await repo.refresh(refreshToken);
       await _storage.write(
         accessToken: next.accessToken,
         refreshToken: next.refreshToken,
       );
+
+      Map<String, dynamic>? user = next.user;
+      if (user == null) {
+        try {
+          user = await repo.me(next.accessToken);
+        } catch (_) {
+          // Tokens are valid; profile can load after the first API call.
+        }
+      }
+
       state = AuthState(
         accessToken: next.accessToken,
         refreshToken: next.refreshToken,
-        user: state.user,
+        user: user,
       );
       return true;
     } catch (_) {
-      await logout();
       return false;
     }
   }
