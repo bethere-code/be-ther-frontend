@@ -79,7 +79,8 @@ class ProfileCalendarEvent {
     );
   }
 
-  bool get isPast => EventDateUtils.isEventPastFromDateTime(date, timeRaw: time);
+  bool get isPast =>
+      EventDateUtils.isEventPastFromDateTime(date, timeRaw: time);
 
   bool get canMarkNotGoing =>
       !isPast && (inCalendar || (isAuthoredByMe && status == 'going'));
@@ -156,9 +157,9 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   }
 
   String get _statusLabel => EventDateUtils.statusLabel(
-        status: widget.event.status,
-        isPast: widget.event.isPast,
-      );
+    status: widget.event.status,
+    isPast: widget.event.isPast,
+  );
 
   Future<void> _toggleWishlist() async {
     if (_busy) return;
@@ -180,7 +181,10 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
     }
   }
 
-  Future<void> _runAction(Future<void> Function() action, {required String success}) async {
+  Future<void> _runAction(
+    Future<void> Function() action, {
+    required String success,
+  }) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -188,11 +192,15 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
       if (!mounted) return;
       widget.onCalendarChanged();
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(success)));
     } catch (e) {
       if (!mounted) return;
       final message = e.toString().replaceFirst('Exception: ', '');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -202,12 +210,22 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('DELETE EVENT?', style: AppTextStyles.display(20, color: AppColors.secondary)),
-        content: const Text('This permanently removes the event and cannot be undone.'),
+        title: Text(
+          'DELETE EVENT?',
+          style: AppTextStyles.display(20, color: AppColors.secondary),
+        ),
+        content: const Text(
+          'This permanently removes the event and cannot be undone.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('CANCEL'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.destructive),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.destructive,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('DELETE'),
           ),
@@ -224,7 +242,8 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
 
   Future<void> _hideEvent() async {
     await _runAction(
-      () => ref.read(postsRepositoryProvider).hideOnProfile(widget.event.postId),
+      () =>
+          ref.read(postsRepositoryProvider).hideOnProfile(widget.event.postId),
       success: 'Hidden from your public profile',
     );
   }
@@ -256,17 +275,26 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                   fit: StackFit.expand,
                   children: [
                     if (widget.event.imageUrl.isNotEmpty)
-                      BeTherNetworkImage(url: widget.event.imageUrl, fit: BoxFit.cover)
+                      BeTherNetworkImage(
+                        url: widget.event.imageUrl,
+                        fit: BoxFit.cover,
+                      )
                     else
                       Container(color: AppColors.muted),
                     Positioned(
                       top: 12,
                       left: 12,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: _statusColor,
-                          border: Border.all(color: AppColors.background, width: 2),
+                          border: Border.all(
+                            color: AppColors.background,
+                            width: 2,
+                          ),
                         ),
                         child: Text(
                           _statusLabel,
@@ -279,11 +307,17 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                         bottom: 12,
                         left: 12,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           color: AppColors.secondary.withValues(alpha: 0.85),
                           child: Text(
                             'HIDDEN ON PROFILE',
-                            style: AppTextStyles.display(10, color: AppColors.background),
+                            style: AppTextStyles.display(
+                              10,
+                              color: AppColors.background,
+                            ),
                           ),
                         ),
                       ),
@@ -298,7 +332,10 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                           color: AppColors.card,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.zero,
-                            side: const BorderSide(color: AppColors.border, width: AppDimens.border),
+                            side: const BorderSide(
+                              color: AppColors.border,
+                              width: AppDimens.border,
+                            ),
                           ),
                           child: const PostMoreMenuIcon(),
                           onSelected: (value) {
@@ -316,8 +353,13 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                               value: 'hide',
                               enabled: !widget.event.hiddenOnProfile,
                               child: Text(
-                                widget.event.hiddenOnProfile ? 'Already hidden' : 'Hide event',
-                                style: AppTextStyles.body(14, weight: FontWeight.w700),
+                                widget.event.hiddenOnProfile
+                                    ? 'Already hidden'
+                                    : 'Hide event',
+                                style: AppTextStyles.body(
+                                  14,
+                                  weight: FontWeight.w700,
+                                ),
                               ),
                             ),
                             if (widget.event.isAuthoredByMe)
@@ -350,18 +392,29 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                   children: [
                     Text(
                       widget.event.location,
-                      style: AppTextStyles.display(28, color: AppColors.secondary, letterSpacing: 0.02),
+                      style: AppTextStyles.display(
+                        28,
+                        color: AppColors.secondary,
+                        letterSpacing: 0.02,
+                      ),
                     ),
                     if (widget.event.venue.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          Icon(Icons.place, size: 16, color: AppColors.mutedForeground),
+                          Icon(
+                            Icons.place,
+                            size: 16,
+                            color: AppColors.mutedForeground,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               widget.event.venue,
-                              style: AppTextStyles.body(15, weight: FontWeight.w600),
+                              style: AppTextStyles.body(
+                                15,
+                                weight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],
@@ -370,14 +423,22 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Icon(Icons.calendar_today, size: 16, color: AppColors.mutedForeground),
+                        Icon(
+                          Icons.calendar_today,
+                          size: 16,
+                          color: AppColors.mutedForeground,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            widget.event.time != null && widget.event.time!.isNotEmpty
+                            widget.event.time != null &&
+                                    widget.event.time!.isNotEmpty
                                 ? '$dateLabel · ${widget.event.time}'
                                 : dateLabel,
-                            style: AppTextStyles.body(15, weight: FontWeight.w600),
+                            style: AppTextStyles.body(
+                              15,
+                              weight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -391,28 +452,47 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                           if (widget.showWishlist)
                             Expanded(
                               child: Material(
-                                color: _bookmarked ? AppColors.primary : AppColors.muted,
+                                color: _bookmarked
+                                    ? AppColors.primary
+                                    : AppColors.muted,
                                 child: InkWell(
                                   onTap: _busy ? null : _toggleWishlist,
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
                                     decoration: BoxDecoration(
-                                      border: Border.all(color: AppColors.border, width: AppDimens.borderThick),
-                                      boxShadow: const [BoxShadow(color: AppColors.border, offset: Offset(0, 4))],
+                                      border: Border.all(
+                                        color: AppColors.border,
+                                        width: AppDimens.borderThick,
+                                      ),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: AppColors.border,
+                                          offset: Offset(0, 4),
+                                        ),
+                                      ],
                                     ),
                                     child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         Icon(
-                                          _bookmarked ? Icons.bookmark : Icons.bookmark_border,
-                                          color: _bookmarked ? AppColors.primaryForeground : AppColors.foreground,
+                                          _bookmarked
+                                              ? Icons.bookmark
+                                              : Icons.bookmark_border,
+                                          color: _bookmarked
+                                              ? AppColors.primaryForeground
+                                              : AppColors.foreground,
                                         ),
                                         const SizedBox(width: 8),
                                         Text(
                                           _bookmarked ? 'SAVED' : 'WISHLIST',
                                           style: AppTextStyles.display(
                                             15,
-                                            color: _bookmarked ? AppColors.primaryForeground : AppColors.foreground,
+                                            color: _bookmarked
+                                                ? AppColors.primaryForeground
+                                                : AppColors.foreground,
                                           ),
                                         ),
                                       ],
@@ -425,26 +505,44 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                               !widget.event.isPast &&
                               (widget.event.ticketUrl?.isNotEmpty ?? false))
                             const SizedBox(width: 12),
-                          if (!widget.event.isPast && (widget.event.ticketUrl?.isNotEmpty ?? false))
+                          if (!widget.event.isPast &&
+                              (widget.event.ticketUrl?.isNotEmpty ?? false))
                             Expanded(
                               child: Material(
                                 color: AppColors.accent,
                                 child: InkWell(
                                   onTap: _openTickets,
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 8,
+                                    ),
                                     decoration: BoxDecoration(
-                                      border: Border.all(color: AppColors.border, width: AppDimens.borderThick),
-                                      boxShadow: const [BoxShadow(color: AppColors.border, offset: Offset(0, 4))],
+                                      border: Border.all(
+                                        color: AppColors.border,
+                                        width: AppDimens.borderThick,
+                                      ),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: AppColors.border,
+                                          offset: Offset(0, 4),
+                                        ),
+                                      ],
                                     ),
                                     child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.open_in_new, color: AppColors.accentForeground),
+                                        Icon(
+                                          Icons.open_in_new,
+                                          color: AppColors.background,
+                                        ),
                                         const SizedBox(width: 8),
                                         Text(
                                           'TICKETS',
-                                          style: AppTextStyles.display(15, color: AppColors.accentForeground),
+                                          style: AppTextStyles.display(
+                                            15,
+                                            color: AppColors.background,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -462,10 +560,20 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                           backgroundColor: AppColors.secondary,
                           foregroundColor: AppColors.secondaryForeground,
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
                         ),
-                        onPressed: _busy ? null : () => Navigator.of(context).pop(),
-                        child: Text('CLOSE', style: AppTextStyles.display(18, color: AppColors.secondaryForeground)),
+                        onPressed: _busy
+                            ? null
+                            : () => Navigator.of(context).pop(),
+                        child: Text(
+                          'CLOSE',
+                          style: AppTextStyles.display(
+                            18,
+                            color: AppColors.secondaryForeground,
+                          ),
+                        ),
                       ),
                     ),
                   ],

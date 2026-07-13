@@ -24,7 +24,7 @@ class AppShell extends StatelessWidget {
     super.key,
     required this.child,
     required this.activeTab,
-    this.showRail = true,
+    this.showRail = false,
     this.showBottomBar = true,
     this.header,
   });
@@ -45,34 +45,19 @@ class AppShell extends StatelessWidget {
           children: [
             Column(
               children: [
-                if (header != null)
-                  Padding(
-                    padding: EdgeInsets.only(
-                      right: showRail ? AppDimens.railWidth : 0,
-                    ),
-                    child: header,
-                  ),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      right: showRail ? AppDimens.railWidth : 0,
-                    ),
-                    child: child,
-                  ),
-                ),
+                ?header,
+                Expanded(child: child),
                 if (showBottomBar) _BottomBar(activeTab: activeTab),
               ],
             ),
             if (showRail)
               Positioned(
-                right: 0,
+                right: 8,
                 top: 0,
                 bottom: 0,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: _RightRail(activeTab: activeTab),
-                  ),
+                child: Align(
+                  alignment: Alignment.center,
+                  child: _RightRail(activeTab: activeTab),
                 ),
               ),
           ],

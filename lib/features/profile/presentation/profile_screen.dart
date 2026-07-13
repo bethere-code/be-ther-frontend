@@ -123,12 +123,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return profileAsync.when(
       loading: () => AppShell(
         activeTab: ShellTab.home,
-        showRail: true,
         child: const Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => AppShell(
         activeTab: ShellTab.home,
-        showRail: true,
         child: Center(child: SelectableText('$e')),
       ),
       data: (user) {
@@ -138,7 +136,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
         return AppShell(
           activeTab: ShellTab.home,
-          showRail: true,
           header: _ProfileHeader(
             username: username,
             isOwnProfile: isOwnProfile,
@@ -177,55 +174,55 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                     ),
                     SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 4,
-                        childAspectRatio: 1,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final date = _gridStart.add(Duration(days: index));
-                          final dateKey = DateFormat('yyyy-MM-dd').format(date);
-                          final event = eventsByDate[dateKey];
-                          final isToday = date.year == todayDate.year &&
-                              date.month == todayDate.month &&
-                              date.day == todayDate.day;
-                          final isPast = date.isBefore(todayDate);
-                          final faded = isPast && event == null;
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 4,
+                          childAspectRatio: 1,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final date = _gridStart.add(Duration(days: index));
+                            final dateKey = DateFormat('yyyy-MM-dd').format(date);
+                            final event = eventsByDate[dateKey];
+                            final isToday = date.year == todayDate.year &&
+                                date.month == todayDate.month &&
+                                date.day == todayDate.day;
+                            final isPast = date.isBefore(todayDate);
+                            final faded = isPast && event == null;
 
-                          return _CalendarDayCell(
-                            date: date,
-                            event: event,
-                            isToday: isToday,
-                            faded: faded,
-                            monthNames: _monthNames,
-                            dayNames: _dayNames,
-                            onTap: event == null
-                                ? null
-                                : () => showProfileEventSheet(
-                                      context: context,
-                                      event: event,
-                                      showWishlist: !isOwnProfile,
-                                      isOwnProfile: isOwnProfile,
-                                      onToggleWishlist: () async {
-                                        final saved = await ref
-                                            .read(postsRepositoryProvider)
-                                            .toggleBookmark(event.postId);
-                                        ref.invalidate(profileCalendarProvider(username));
-                                        return saved;
-                                      },
-                                      onCalendarChanged: () {
-                                        ref.invalidate(profileCalendarProvider(username));
-                                        ref.invalidate(feedProvider);
-                                        if (isOwnProfile) {
-                                          ref.invalidate(profileViewProvider(widget.username));
-                                        }
-                                      },
-                                    ),
-                          );
-                        },
-                        childCount: _dayCount,
+                            return _CalendarDayCell(
+                              date: date,
+                              event: event,
+                              isToday: isToday,
+                              faded: faded,
+                              monthNames: _monthNames,
+                              dayNames: _dayNames,
+                              onTap: event == null
+                                  ? null
+                                  : () => showProfileEventSheet(
+                                        context: context,
+                                        event: event,
+                                        showWishlist: !isOwnProfile,
+                                        isOwnProfile: isOwnProfile,
+                                        onToggleWishlist: () async {
+                                          final saved = await ref
+                                              .read(postsRepositoryProvider)
+                                              .toggleBookmark(event.postId);
+                                          ref.invalidate(profileCalendarProvider(username));
+                                          return saved;
+                                        },
+                                        onCalendarChanged: () {
+                                          ref.invalidate(profileCalendarProvider(username));
+                                          ref.invalidate(feedProvider);
+                                          if (isOwnProfile) {
+                                            ref.invalidate(profileViewProvider(widget.username));
+                                          }
+                                        },
+                                      ),
+                            );
+                          },
+                          childCount: _dayCount,
+                        ),
                       ),
-                    ),
                     const SliverToBoxAdapter(child: SizedBox(height: 32)),
                   ],
                 );

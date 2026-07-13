@@ -159,6 +159,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       ),
       child: AppShell(
         activeTab: ShellTab.home,
+        showRail: true,
         header: PreferredSize(
           preferredSize: const Size.fromHeight(feedHeaderHeight),
           child: Container(
