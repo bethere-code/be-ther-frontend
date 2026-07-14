@@ -16,3 +16,9 @@ final feedPageProvider = FutureProvider.family<FeedPage, int>((ref, skip) async 
   final repo = ref.watch(postsRepositoryProvider);
   return repo.fetchFeed(skip: skip);
 });
+
+final sharedPostProvider =
+    FutureProvider.family<Map<String, dynamic>, String>((ref, postId) async {
+  final repo = ref.watch(postsRepositoryProvider);
+  return repo.fetchPost(postId);
+});

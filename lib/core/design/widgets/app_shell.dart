@@ -9,12 +9,11 @@ import 'package:go_router/go_router.dart';
 import '../../../features/auth/presentation/auth_notifier.dart';
 import '../../../features/notifications/presentation/notifications_providers.dart';
 import '../../../features/profile/presentation/profile_providers.dart';
-import '../../utils/badge_colors.dart';
 import '../app_colors.dart';
 import '../app_dimens.dart';
 import '../app_images.dart';
 import '../app_text_styles.dart';
-import 'be_ther_network_image.dart';
+import 'author_avatar.dart';
 
 enum ShellTab { home, add, notifications, explore }
 
@@ -124,26 +123,12 @@ class _BottomBar extends ConsumerWidget {
               ),
             )
           else if (user != null)
-            GestureDetector(
+            AuthorAvatar(
+              avatarUrl: user['avatarUrl'] as String? ?? '',
+              username: user['username'] as String? ?? '',
+              badge: badge,
+              size: _leadingHeight,
               onTap: () => context.push(ProfileScreen.path),
-              child: Container(
-                width: _leadingHeight,
-                height: _leadingHeight,
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: badgeBorderColor(badge),
-                    width: AppDimens.borderThick,
-                  ),
-                  color: AppColors.muted,
-                ),
-                clipBehavior: Clip.hardEdge,
-                child: user['avatarUrl'] != null && user['avatarUrl'].isNotEmpty
-                    ? BeTherNetworkImage(
-                        url: user['avatarUrl'],
-                        fit: BoxFit.cover,
-                      )
-                    : Icon(Icons.person, color: AppColors.background),
-              ),
             )
           else
             Text(

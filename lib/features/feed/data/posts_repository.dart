@@ -18,6 +18,20 @@ class PostsRepository {
     }
   }
 
+  Future<Map<String, dynamic>> fetchPost(String postId) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>('/api/v1/posts/$postId');
+      final data = _extractData(res.data, fallbackMessage: 'Failed to load event');
+      final post = data['post'];
+      if (post is! Map<String, dynamic>) {
+        throw Exception('Failed to load event');
+      }
+      return post;
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to load event'));
+    }
+  }
+
   Future<bool> toggleLike(String postId) async {
     final res = await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/like');
     final data = res.data?['data'];

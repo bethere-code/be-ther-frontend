@@ -7,6 +7,7 @@ import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
+import '../../../core/design/widgets/author_avatar.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../feed/presentation/feed_providers.dart';
 import '../../../core/utils/event_date_utils.dart';
@@ -371,17 +372,12 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: widget.badgeColor, width: AppDimens.borderThick),
-                ),
-                clipBehavior: Clip.hardEdge,
-                child: avatar.isNotEmpty
-                    ? BeTherNetworkImage(url: avatar, fit: BoxFit.cover)
-                    : Icon(Icons.person, size: 48, color: AppColors.foreground),
+              AuthorAvatar(
+                avatarUrl: avatar,
+                username: username,
+                badge: badge,
+                size: 96,
+                interactive: false,
               ),
               const SizedBox(width: 16),
               Expanded(

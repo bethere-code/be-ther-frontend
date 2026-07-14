@@ -15,6 +15,7 @@ class AuthorAvatar extends StatelessWidget {
     this.badge,
     this.size = 40,
     this.onTap,
+    this.interactive = true,
   });
 
   final String avatarUrl;
@@ -22,6 +23,8 @@ class AuthorAvatar extends StatelessWidget {
   final String? badge;
   final double size;
   final VoidCallback? onTap;
+  /// When false, renders a non-tappable circle (e.g. profile header).
+  final bool interactive;
 
   @override
   Widget build(BuildContext context) {
@@ -30,26 +33,35 @@ class AuthorAvatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.muted,
         border: Border.all(
           color: borderColor,
           width: AppDimens.borderThick,
         ),
       ),
-      clipBehavior: Clip.hardEdge,
-      child: avatarUrl.isNotEmpty
-          ? BeTherNetworkImage(url: avatarUrl, fit: BoxFit.cover)
-          : Icon(Icons.person, color: AppColors.foreground, size: size * 0.55),
+      child: ClipOval(
+        child: SizedBox.expand(
+          child: avatarUrl.isNotEmpty
+              ? BeTherNetworkImage(url: avatarUrl, fit: BoxFit.cover)
+              : Icon(Icons.person, color: AppColors.foreground, size: size * 0.55),
+        ),
+      ),
     );
 
-    if (onTap == null && username.isEmpty) return child;
+    if (!interactive) return child;
+
+    final handler = onTap ??
+        (username.isEmpty
+            ? null
+            : () => context.push(ProfileScreen.pathForUser(username)));
+    if (handler == null) return child;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap ??
-            (username.isEmpty
-                ? null
-                : () => context.push(ProfileScreen.pathForUser(username))),
+        customBorder: const CircleBorder(),
+        onTap: handler,
         child: child,
       ),
     );

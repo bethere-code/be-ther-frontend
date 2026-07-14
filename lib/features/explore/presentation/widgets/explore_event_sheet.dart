@@ -238,10 +238,30 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
               Row(
                 children: [
                   IconButton(
-                    onPressed: () => sharePostContent(
-                      location: title.isNotEmpty ? title : location,
-                      ticketUrl: ticketUrl,
-                    ),
+                    onPressed: _postId.isEmpty
+                        ? null
+                        : () async {
+                            try {
+                              await sharePostContent(
+                                postId: _postId,
+                                location: title.isNotEmpty ? title : location,
+                                imageUrl: image,
+                                ticketUrl: ticketUrl,
+                                caption: widget.event['caption'] as String?,
+                                venue: venue,
+                                date: date,
+                              );
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    e.toString().replaceFirst('Exception: ', ''),
+                                  ),
+                                ),
+                              );
+                            }
+                          },
                     icon: const Icon(Icons.share_outlined),
                   ),
                   const Spacer(),

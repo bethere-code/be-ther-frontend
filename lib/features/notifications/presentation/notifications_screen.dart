@@ -6,6 +6,7 @@ import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
+import '../../../core/design/widgets/author_avatar.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../core/design/widgets/shell_header_avatar.dart';
 import '../../profile/presentation/profile_screen.dart';
@@ -133,22 +134,10 @@ class NotificationsScreen extends ConsumerWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: username.isEmpty
-                                ? null
-                                : () => context.push(ProfileScreen.pathForUser(username)),
-                            child: Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(border: Border.all(color: AppColors.border, width: AppDimens.border)),
-                              clipBehavior: Clip.hardEdge,
-                              child: avatar.isNotEmpty
-                                  ? BeTherNetworkImage(url: avatar, fit: BoxFit.cover)
-                                  : Icon(Icons.person, color: AppColors.foreground),
-                            ),
-                          ),
+                        AuthorAvatar(
+                          avatarUrl: avatar,
+                          username: username,
+                          size: 48,
                         ),
                         const SizedBox(width: 12),
                         Expanded(

@@ -449,6 +449,7 @@ class _SearchResultCard extends StatelessWidget {
               location: location,
               caption: caption,
               ticketUrl: ticketUrl,
+              imageUrl: imageUrl,
             ),
           ),
         ],

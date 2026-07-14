@@ -33,6 +33,7 @@ class PostSkeleton extends StatelessWidget {
                     height: 40,
                     decoration: BoxDecoration(
                       color: AppColors.muted,
+                      shape: BoxShape.circle,
                       border: Border.all(
                         color: AppColors.border,
                         width: AppDimens.border,

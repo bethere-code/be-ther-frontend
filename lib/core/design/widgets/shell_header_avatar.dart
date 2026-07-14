@@ -2,13 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../features/auth/presentation/auth_notifier.dart';
 import '../../../features/profile/presentation/profile_providers.dart';
 import '../../../features/profile/presentation/profile_screen.dart';
-import '../../utils/badge_colors.dart';
-import '../app_colors.dart';
-import '../app_dimens.dart';
-import '../../../features/auth/presentation/auth_notifier.dart';
-import 'be_ther_network_image.dart';
+import 'author_avatar.dart';
 
 class ShellHeaderAvatar extends ConsumerWidget {
   const ShellHeaderAvatar({super.key, this.size = 48});
@@ -23,24 +20,14 @@ class ShellHeaderAvatar extends ConsumerWidget {
     final avatarUrl =
         profile?['avatarUrl'] as String? ?? authUser?['avatarUrl'] as String? ?? '';
     final badge = profile?['badge'] as String? ?? authUser?['badge'] as String?;
+    final username = profile?['username'] as String? ?? authUser?['username'] as String? ?? '';
 
-    return InkWell(
+    return AuthorAvatar(
+      avatarUrl: avatarUrl,
+      username: username,
+      badge: badge,
+      size: size,
       onTap: () => context.push(ProfileScreen.path),
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: badgeBorderColor(badge),
-            width: AppDimens.borderThick,
-          ),
-          color: AppColors.muted,
-        ),
-        clipBehavior: Clip.hardEdge,
-        child: avatarUrl.isNotEmpty
-            ? BeTherNetworkImage(url: avatarUrl, fit: BoxFit.cover)
-            : Icon(Icons.person, color: AppColors.background, size: size * 0.5),
-      ),
     );
   }
 }

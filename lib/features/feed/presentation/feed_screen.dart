@@ -178,12 +178,12 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Material(
-                  color: Colors.transparent,
+                Padding(
+                  padding: const EdgeInsets.only(left: 12),
                   child: InkWell(
                     onTap: () => context.push(ProfileScreen.path),
                     child: Image.asset(
-                      AppImages.beatherLogo,
+                      AppImages.betherNewLogo,
                       fit: BoxFit.contain,
                     ),
                   ),
@@ -653,6 +653,7 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
               location: location,
               caption: caption,
               ticketUrl: ticketUrl,
+              imageUrl: imageUrl,
             ),
           ),
         ],
@@ -760,45 +761,48 @@ class _EventDetails extends StatelessWidget {
               ),
             ),
           ] else ...[
-          if (ticketUrl != null && ticketUrl!.trim().isNotEmpty) ...[
+            if (ticketUrl != null && ticketUrl!.trim().isNotEmpty) ...[
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => openExternalUrl(context, ticketUrl),
+                  child: Text(
+                    'GET TICKETS',
+                    style: AppTextStyles.display(
+                      14,
+                      color: AppColors.secondary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () => openExternalUrl(context, ticketUrl),
-                child: Text(
-                  'GET TICKETS',
-                  style: AppTextStyles.display(14, color: AppColors.secondary),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: inCalendar
-                    ? AppColors.primary
-                    : AppColors.accent,
-                foregroundColor: inCalendar
-                    ? AppColors.primaryForeground
-                    : AppColors.accentForeground,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.zero,
-                ),
-              ),
-              onPressed: isLoading ? null : onCalendarToggle,
-              child: Text(
-                inCalendar ? 'ADDED TO CALENDAR' : 'ADD TO CALENDAR',
-                style: AppTextStyles.display(
-                  14,
-                  color: inCalendar
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: inCalendar
+                      ? AppColors.primary
+                      : AppColors.accent,
+                  foregroundColor: inCalendar
                       ? AppColors.primaryForeground
                       : AppColors.accentForeground,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                onPressed: isLoading ? null : onCalendarToggle,
+                child: Text(
+                  inCalendar ? 'ADDED TO CALENDAR' : 'ADD TO CALENDAR',
+                  style: AppTextStyles.display(
+                    14,
+                    color: inCalendar
+                        ? AppColors.primaryForeground
+                        : AppColors.accentForeground,
+                  ),
                 ),
               ),
             ),
-          ),
           ],
           if (error != null) ...[
             const SizedBox(height: 8),

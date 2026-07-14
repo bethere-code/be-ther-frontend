@@ -20,6 +20,8 @@ class BeTherNetworkImage extends StatelessWidget {
     final image = CachedNetworkImage(
       imageUrl: url,
       fit: fit,
+      width: double.infinity,
+      height: double.infinity,
       placeholder: (context, url) => ColoredBox(
         color: AppColors.muted,
         child: Center(

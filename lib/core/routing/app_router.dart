@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/auth_notifier.dart';
+import '../../features/event/presentation/shared_event_screen.dart';
 import '../../features/feed/presentation/add_post_screen.dart';
 import '../../features/feed/presentation/feed_screen.dart';
 import '../../features/explore/presentation/explore_screen.dart';
@@ -19,6 +20,7 @@ import '../../features/search/presentation/search_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../network/api_client.dart';
 import 'app_route_observer.dart';
+import 'deep_link_listener.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
@@ -56,10 +58,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           loc == AuthOtpScreen.path;
 
       if (!auth.isAuthenticated && !public) {
+        if (loc.startsWith('/event/')) {
+          ref.read(pendingDeepLinkProvider.notifier).setPending(loc);
+        }
         return LaunchScreen.path;
       }
       if (auth.isAuthenticated &&
           (loc == LaunchScreen.path || loc.startsWith('/auth/') || loc == OnboardingScreen.path)) {
+        final pending = ref.read(pendingDeepLinkProvider);
+        if (pending != null && pending.isNotEmpty) {
+          ref.read(pendingDeepLinkProvider.notifier).clearPending();
+          return pending;
+        }
         return FeedScreen.path;
       }
       return null;
@@ -112,6 +122,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: FeedScreen.path,
         name: FeedScreen.name,
         pageBuilder: (context, state) => _fadePage(state, const FeedScreen()),
+      ),
+      GoRoute(
+        path: SharedEventScreen.path,
+        name: SharedEventScreen.name,
+        pageBuilder: (context, state) => _fadePage(
+          state,
+          SharedEventScreen(postId: state.pathParameters['postId'] ?? ''),
+        ),
       ),
       GoRoute(
         path: ExploreScreen.path,

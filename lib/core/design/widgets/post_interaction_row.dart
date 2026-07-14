@@ -16,6 +16,7 @@ class PostInteractionRow extends ConsumerStatefulWidget {
     required this.location,
     this.caption,
     this.ticketUrl,
+    this.imageUrl,
     this.onInteractionChanged,
   });
 
@@ -26,6 +27,7 @@ class PostInteractionRow extends ConsumerStatefulWidget {
   final String location;
   final String? caption;
   final String? ticketUrl;
+  final String? imageUrl;
   final VoidCallback? onInteractionChanged;
 
   @override
@@ -121,11 +123,28 @@ class _PostInteractionRowState extends ConsumerState<PostInteractionRow> {
           ),
         IconButton(
           icon: const Icon(Icons.share),
-          onPressed: () => sharePostContent(
-            location: widget.location,
-            ticketUrl: widget.ticketUrl,
-            caption: widget.caption,
-          ),
+          onPressed: widget.postId.isEmpty
+              ? null
+              : () async {
+                  try {
+                    await sharePostContent(
+                      postId: widget.postId,
+                      location: widget.location,
+                      imageUrl: widget.imageUrl,
+                      ticketUrl: widget.ticketUrl,
+                      caption: widget.caption,
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          e.toString().replaceFirst('Exception: ', ''),
+                        ),
+                      ),
+                    );
+                  }
+                },
         ),
       ],
     );

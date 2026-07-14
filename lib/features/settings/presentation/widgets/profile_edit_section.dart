@@ -8,8 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
-import '../../../../core/utils/badge_colors.dart';
-import '../../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../../core/design/widgets/author_avatar.dart';
 import '../../../../core/media/photo_picker.dart';
 import '../../../profile/presentation/profile_providers.dart';
 
@@ -313,26 +312,18 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        Container(
-                          width: 88,
-                          height: 88,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: badgeBorderColor(badge),
-                              width: AppDimens.borderThick,
-                            ),
-                          ),
-                          clipBehavior: Clip.hardEdge,
-                          child: avatar.isNotEmpty
-                              ? BeTherNetworkImage(url: avatar, fit: BoxFit.cover)
-                              : Icon(Icons.person, size: 44, color: AppColors.mutedForeground),
+                        AuthorAvatar(
+                          avatarUrl: avatar,
+                          username: username,
+                          badge: badge,
+                          size: 88,
+                          interactive: false,
                         ),
                         if (_saving)
                           Container(
                             width: 88,
                             height: 88,
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               shape: BoxShape.circle,
                               color: Colors.black45,
                             ),
