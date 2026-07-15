@@ -19,4 +19,7 @@ class AppImages {
   // Logo
   static const beatherLogo = '$_assets/be-ther-logo.png';
   static const betherNewLogo = '$_assets/be-ther-new-logo.png';
+
+  // Icons
+  static const globe = '$_assets/globe.svg';
 }

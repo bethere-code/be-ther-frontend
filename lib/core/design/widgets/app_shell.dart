@@ -4,6 +4,7 @@ import 'package:be_ther/features/notifications/presentation/notifications_screen
 import 'package:be_ther/features/profile/presentation/profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../features/auth/presentation/auth_notifier.dart';
@@ -77,7 +78,8 @@ class _BottomBar extends ConsumerWidget {
 
   static bool _isProfileRoute(BuildContext context) {
     final path = GoRouterState.of(context).uri.path;
-    return path == ProfileScreen.path || path.startsWith('${ProfileScreen.path}/');
+    return path == ProfileScreen.path ||
+        path.startsWith('${ProfileScreen.path}/');
   }
 
   @override
@@ -152,12 +154,19 @@ class _GlobeButton extends StatelessWidget {
 
   final bool active;
 
-  static const double _iconPadding = 8;
+  static const double _iconPadding = 0;
+  static const double _iconSize = 35;
 
   @override
   Widget build(BuildContext context) {
+    // Active: coral tile + cream globe. Inactive: cream tile + navy globe.
+    final background = active ? AppColors.primary : AppColors.background;
+    final iconColor = active
+        ? AppColors.primaryForeground
+        : AppColors.secondary;
+
     return Material(
-      color: active ? AppColors.primary : AppColors.background,
+      color: background,
       child: InkWell(
         onTap: () => context.go('/explore'),
         child: Container(
@@ -169,10 +178,11 @@ class _GlobeButton extends StatelessWidget {
             ),
             boxShadow: active ? AppDimens.railActiveShadow : null,
           ),
-          child: Icon(
-            Icons.public,
-            size: 24,
-            color: active ? AppColors.primaryForeground : AppColors.secondary,
+          child: SvgPicture.asset(
+            AppImages.globe,
+            width: _iconSize,
+            height: _iconSize,
+            colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
           ),
         ),
       ),

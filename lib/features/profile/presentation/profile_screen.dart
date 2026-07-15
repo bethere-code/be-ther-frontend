@@ -202,6 +202,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                   : () => showProfileEventSheet(
                                         context: context,
                                         event: event,
+                                        profileUsername: username,
                                         showWishlist: !isOwnProfile,
                                         isOwnProfile: isOwnProfile,
                                         onToggleWishlist: () async {

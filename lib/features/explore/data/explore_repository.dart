@@ -1,11 +1,13 @@
 import 'package:dio/dio.dart';
 
+import '../domain/explore_event.dart';
+
 class ExploreRepository {
   ExploreRepository(this._dio);
 
   final Dio _dio;
 
-  Future<List<Map<String, dynamic>>> fetchEvents({int skip = 0}) async {
+  Future<List<ExploreEvent>> fetchEvents({int skip = 0}) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(
         '/api/v1/explore/events',
@@ -16,8 +18,14 @@ class ExploreRepository {
         throw Exception(body?['error']?.toString() ?? 'Failed to load explore');
       }
       final data = body['data'];
-      if (data is! Map<String, dynamic>) throw Exception('Invalid explore response');
-      return (data['items'] as List<dynamic>? ?? []).whereType<Map<String, dynamic>>().toList();
+      if (data is! Map<String, dynamic>) {
+        throw Exception('Invalid explore response');
+      }
+      final items = data['items'] as List<dynamic>? ?? [];
+      return items
+          .whereType<Map<String, dynamic>>()
+          .map(ExploreEvent.fromJson)
+          .toList(growable: false);
     } on DioException catch (e) {
       final data = e.response?.data;
       if (data is Map<String, dynamic>) {
@@ -35,7 +43,9 @@ class ExploreRepository {
       );
       final body = res.data;
       if (body == null || body['ok'] != true) {
-        throw Exception(body?['error']?.toString() ?? 'Failed to update wishlist');
+        throw Exception(
+          body?['error']?.toString() ?? 'Failed to update wishlist',
+        );
       }
       final data = body['data'];
       if (data is Map<String, dynamic>) {

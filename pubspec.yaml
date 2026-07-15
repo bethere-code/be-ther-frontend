@@ -53,6 +53,7 @@ dependencies:
   path_provider: ^2.1.5
   path: ^1.9.1
   app_links: ^7.0.0
+  flutter_svg: ^2.2.3
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +65,18 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# Generate Android launcher icons from playstore-icon.png:
+#   dart run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: android/app/src/main/res/playstore-icon.png
+  adaptive_icon_background: "#641414"
+  adaptive_icon_foreground: android/app/src/main/res/playstore-icon.png
+  adaptive_icon_foreground_inset: 16
+  min_sdk_android: 21
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

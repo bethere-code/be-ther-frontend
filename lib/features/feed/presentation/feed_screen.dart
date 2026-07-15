@@ -491,6 +491,7 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
                   avatarUrl: avatar,
                   username: username,
                   badge: badge,
+                  size: 44,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -610,21 +611,23 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 8, 4),
-            child: RichText(
-              text: TextSpan(
-                style: AppTextStyles.body(15),
-                children: [
-                  // TextSpan(
-                  //   text: '$name ',
-                  //   style: AppTextStyles.body(15, weight: FontWeight.w800),
-                  // ),
-                  TextSpan(text: caption),
-                ],
-              ),
-            ),
-          ),
+          caption.isNotEmpty
+              ? Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 8, 4),
+                  child: RichText(
+                    text: TextSpan(
+                      style: AppTextStyles.body(15),
+                      children: [
+                        // TextSpan(
+                        //   text: '$name ',
+                        //   style: AppTextStyles.body(15, weight: FontWeight.w800),
+                        // ),
+                        TextSpan(text: caption),
+                      ],
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(),
           if (details != null && details.isNotEmpty)
             _EventDetails(
               details,
