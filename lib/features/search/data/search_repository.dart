@@ -1,27 +1,25 @@
 import 'package:dio/dio.dart';
 
-class SearchResult {
-  final List<Map<String, dynamic>> items;
-  final int? nextSkip;
-
-  SearchResult({required this.items, this.nextSkip});
-}
+import '../domain/search_post.dart';
 
 class SearchRepository {
-  final Dio _dio;
-
   SearchRepository(this._dio);
 
-  Future<SearchResult> search({
+  final Dio _dio;
+
+  Future<SearchPage> search({
     required String query,
     String? country,
     int skip = 0,
   }) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return SearchPage.empty();
+
     try {
       final response = await _dio.get<Map<String, dynamic>>(
         '/api/v1/posts/search',
         queryParameters: {
-          'query': query,
+          'query': trimmed,
           if (country != null && country.isNotEmpty) 'country': country,
           'skip': skip,
         },
@@ -35,13 +33,7 @@ class SearchRepository {
       if (data is! Map<String, dynamic>) {
         throw Exception('Invalid search response');
       }
-      final items = (data['items'] as List<dynamic>? ?? [])
-          .whereType<Map<String, dynamic>>()
-          .toList();
-      final nextSkipRaw = data['nextSkip'];
-      final nextSkip = nextSkipRaw is int ? nextSkipRaw : int.tryParse('$nextSkipRaw');
-
-      return SearchResult(items: items, nextSkip: nextSkip);
+      return SearchPage.fromJson(data);
     } on DioException catch (e) {
       final data = e.response?.data;
       if (data is Map<String, dynamic>) {
@@ -50,6 +42,8 @@ class SearchRepository {
           final message = err['message']?.toString();
           if (message != null && message.isNotEmpty) throw Exception(message);
         }
+        final message = data['error']?.toString();
+        if (message != null && message.isNotEmpty) throw Exception(message);
       }
       throw Exception(e.message ?? 'Search failed');
     }

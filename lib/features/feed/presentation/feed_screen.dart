@@ -208,7 +208,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           child: feed.when(
             data: (page) {
               // Update pagination state based on new data
-              if (_currentSkip == 0 && _allItems.isEmpty) {
+              if (_currentSkip == 0) {
                 _allItems = page.items;
                 _hasMore = page.nextSkip != null;
               } else if (_currentSkip > 0) {

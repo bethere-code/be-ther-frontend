@@ -289,12 +289,12 @@ class _ExploreTileState extends ConsumerState<_ExploreTile> {
                 Expanded(
                   child: InkWell(
                     onTap: _openSheet,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-                          child: Text(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
                             event.title,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -304,33 +304,24 @@ class _ExploreTileState extends ConsumerState<_ExploreTile> {
                               letterSpacing: 0.02,
                             ),
                           ),
-                        ),
-                        if (placeShort.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
-                            child: _MetaRow(
+                          if (placeShort.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            _MetaRow(
                               icon: Icons.place_outlined,
                               label: placeShort,
                             ),
-                          ),
-                        ],
-                        if (dateLabel != null ||
-                            (timeLabel != null && timeLabel.isNotEmpty)) ...[
-                          const SizedBox(height: 4),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 5, 10, 5),
-                            child: _DateTimeRow(
+                          ],
+                          if (dateLabel != null ||
+                              (timeLabel != null && timeLabel.isNotEmpty)) ...[
+                            const SizedBox(height: 4),
+                            _DateTimeRow(
                               date: dateLabel,
                               time: timeLabel,
                             ),
-                          ),
-                        ],
-                        if (event.showAttendees || event.hasTicketUrl) ...[
-                          const SizedBox(height: 8),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
-                            child: DecoratedBox(
+                          ],
+                          if (event.showAttendees || event.hasTicketUrl) ...[
+                            const SizedBox(height: 8),
+                            DecoratedBox(
                               decoration: const BoxDecoration(
                                 border: Border(
                                   top: BorderSide(
@@ -371,24 +362,21 @@ class _ExploreTileState extends ConsumerState<_ExploreTile> {
                                 ),
                               ),
                             ),
-                          ),
+                          ],
                         ],
-                        // Push calendar to card bottom without opening a hole
-                        // between date and attendees.
-                        const Spacer(),
-                        Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: _ExploreCalendarButton(
-                            inCalendar: _inCalendar,
-                            isPast: event.isPast,
-                            loading: _calendarBusy,
-                            onPressed: event.postId.isEmpty || event.isPast
-                                ? null
-                                : _toggleCalendar,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: _ExploreCalendarButton(
+                    inCalendar: _inCalendar,
+                    isPast: event.isPast,
+                    loading: _calendarBusy,
+                    onPressed: event.postId.isEmpty || event.isPast
+                        ? null
+                        : _toggleCalendar,
                   ),
                 ),
               ],

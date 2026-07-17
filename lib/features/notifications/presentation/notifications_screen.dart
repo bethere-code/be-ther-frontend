@@ -11,11 +11,33 @@ import 'notifications_providers.dart';
 import 'widgets/notification_list_tile.dart';
 import 'widgets/notification_post_sheet.dart';
 
-class NotificationsScreen extends ConsumerWidget {
+class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
 
   static const path = '/notifications';
   static const name = 'notifications';
+
+  @override
+  ConsumerState<NotificationsScreen> createState() =>
+      _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _markAllRead());
+  }
+
+  Future<void> _markAllRead() async {
+    try {
+      await ref.read(notificationsRepositoryProvider).markAllRead();
+      ref.invalidate(notificationsProvider);
+      ref.invalidate(unreadNotificationCountProvider);
+    } catch (_) {
+      // Badge clears on next successful refresh; avoid blocking the screen.
+    }
+  }
 
   static void _showMessagesInfo(BuildContext context) {
     showDialog<void>(
@@ -49,11 +71,8 @@ class NotificationsScreen extends ConsumerWidget {
 
   Future<void> _openNotification({
     required BuildContext context,
-    required WidgetRef ref,
     required Map<String, dynamic> n,
   }) async {
-    final read = n['read'] as bool? ?? true;
-    final id = n['_id']?.toString() ?? '';
     final actor = n['actorUserId'] is Map<String, dynamic>
         ? n['actorUserId'] as Map<String, dynamic>
         : <String, dynamic>{};
@@ -63,11 +82,6 @@ class NotificationsScreen extends ConsumerWidget {
         ? n['postId'] as Map<String, dynamic>
         : null;
 
-    if (!read && id.isNotEmpty) {
-      await ref.read(notificationsRepositoryProvider).markRead(id);
-      ref.invalidate(notificationsProvider);
-      ref.invalidate(unreadNotificationCountProvider);
-    }
     if (!context.mounted) return;
 
     if (type == 'star' && username.isNotEmpty) {
@@ -86,7 +100,7 @@ class NotificationsScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final list = ref.watch(notificationsProvider);
 
     return AppShell(
@@ -178,7 +192,6 @@ class NotificationsScreen extends ConsumerWidget {
                     notification: n,
                     onOpen: () => _openNotification(
                       context: context,
-                      ref: ref,
                       n: n,
                     ),
                   );

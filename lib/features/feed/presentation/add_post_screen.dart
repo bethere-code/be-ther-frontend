@@ -66,13 +66,70 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
   void _unfocus() => FocusScope.of(context).unfocus();
 
-  void _close(BuildContext context) {
+  bool _hasUnsavedChanges() {
+    return _imagePath != null ||
+        _eventName.text.trim().isNotEmpty ||
+        _description.text.trim().isNotEmpty ||
+        _location.text.trim().isNotEmpty ||
+        _ticket.text.trim().isNotEmpty ||
+        _taggedUsers.isNotEmpty ||
+        _selectedDate != null ||
+        _selectedTime != null ||
+        _private ||
+        _addToCalendar;
+  }
+
+  Future<void> _close(BuildContext context) async {
     _unfocus();
+    if (_hasUnsavedChanges()) {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.background,
+          title: Text(
+            'DISCARD CHANGES?',
+            style: AppTextStyles.display(20, color: AppColors.secondary),
+          ),
+          content: Text(
+            'You have unsaved changes. Are you sure you want to leave this page?',
+            style: AppTextStyles.body(15, color: AppColors.foreground),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                'STAY',
+                style: AppTextStyles.body(
+                  14,
+                  weight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.destructive,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('DISCARD'),
+            ),
+          ],
+        ),
+      );
+      if (discard != true) return;
+      if (!context.mounted) return;
+    }
     if (context.canPop()) {
       context.pop();
       return;
     }
     context.go('/feed');
+  }
+
+  static int _wordCount(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return 0;
+    return trimmed.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
   }
 
   Future<void> _pick() async {
@@ -116,8 +173,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   }
 
   String? _validateDescription(String value) {
-    if (value.trim().length > 2000) {
-      return 'Description must be less than 2000 characters';
+    if (_wordCount(value) > 2000) {
+      return 'Description must be less than 2000 words';
     }
     return null;
   }
@@ -298,7 +355,9 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       body: PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) _close(context);
+          if (!didPop) {
+            _close(context);
+          }
         },
         child: Align(
           alignment: Alignment.bottomCenter,
@@ -502,7 +561,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                 height: 1.5,
                               ),
                               decoration: _inputDecoration(
-                                hint: 'Share details about this event...',
+                                hint: 'Add how you feel about this event! 🎉',
                                 errorText: _fieldError(
                                   _fieldDescription,
                                   () => _validateDescription(_description.text),

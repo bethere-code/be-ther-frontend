@@ -29,6 +29,10 @@ class NotificationsRepository {
     await _dio.patch<Map<String, dynamic>>('/api/v1/notifications/$id/read');
   }
 
+  Future<void> markAllRead() async {
+    await _dio.patch<Map<String, dynamic>>('/api/v1/notifications/read-all');
+  }
+
   Future<int> unreadCount() async {
     try {
       final res = await _dio.get<Map<String, dynamic>>('/api/v1/notifications/unread-count');
