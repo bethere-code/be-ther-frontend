@@ -153,6 +153,25 @@ class PostsRepository {
     }
   }
 
+  /// Server-side OG preview for external ticket links (BookMyShow, etc.).
+  Future<String?> fetchLinkPreviewImageUrl(String pageUrl) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/v1/link-preview',
+        queryParameters: {'url': pageUrl},
+      );
+      final data = _extractData(
+        res.data,
+        fallbackMessage: 'Could not load link preview',
+      );
+      final imageUrl = data['imageUrl']?.toString().trim();
+      if (imageUrl == null || imageUrl.isEmpty) return null;
+      return imageUrl;
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Could not load link preview'));
+    }
+  }
+
   Map<String, dynamic> _extractData(
     Map<String, dynamic>? body, {
     required String fallbackMessage,

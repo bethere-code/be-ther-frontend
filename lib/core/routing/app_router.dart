@@ -37,6 +37,27 @@ CustomTransitionPage<void> _fadePage(GoRouterState state, Widget child) {
   );
 }
 
+CustomTransitionPage<void> _sheetPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    opaque: false,
+    barrierColor: Colors.transparent,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 280),
+    reverseTransitionDuration: const Duration(milliseconds: 220),
+    transitionsBuilder: (context, animation, secondaryAnimation, pageChild) {
+      final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.08),
+          end: Offset.zero,
+        ).animate(curved),
+        child: FadeTransition(opacity: curved, child: pageChild),
+      );
+    },
+  );
+}
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final refresh = ref.watch(goRouterRefreshProvider);
 
@@ -159,7 +180,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AddPostScreen.path,
         name: AddPostScreen.name,
-        pageBuilder: (context, state) => _fadePage(state, const AddPostScreen()),
+        pageBuilder: (context, state) => _sheetPage(state, const AddPostScreen()),
       ),
       GoRoute(
         path: SearchScreen.path,

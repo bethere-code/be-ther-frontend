@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -15,8 +16,8 @@ import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/be_ther_buttons.dart';
+import '../../../core/media/ticket_link_preview.dart';
 import '../../../core/network/api_client.dart';
-import '../../search/presentation/search_screen.dart';
 import '../data/posts_repository.dart';
 import 'feed_providers.dart';
 
@@ -31,17 +32,34 @@ class AddPostScreen extends ConsumerStatefulWidget {
 }
 
 class _AddPostScreenState extends ConsumerState<AddPostScreen> {
+  static const _fieldBorder = AppDimens.border;
+  static const _hintColor = Color(0xFFB8BCC4);
+
   final _eventName = TextEditingController();
   final _description = TextEditingController();
   final _location = TextEditingController();
   final _ticket = TextEditingController();
   final _tagInput = TextEditingController();
+  final _sheetController = DraggableScrollableController();
 
   bool _private = false;
-  bool _addToCalendar = false;
+
+  /// false = Interested (default); true = Going / attending.
+  bool _isGoing = false;
   String? _imagePath;
+
+  /// True when the current photo came from ticket-link metadata (not gallery).
+  bool _imageFromTicketLink = false;
+  bool _ticketPreviewLoading = false;
+  String? _ticketPreviewMessage;
+  Timer? _ticketPreviewDebounce;
+  int _ticketPreviewRequestId = 0;
+  String? _lastTicketPreviewUrl;
+
   bool _busy = false;
   bool _attemptedSubmit = false;
+  bool _closing = false;
+  bool _dismissQueued = false;
   final _touched = <String, bool>{};
   final _taggedUsers = <String>[];
   DateTime? _selectedDate;
@@ -55,7 +73,16 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   static const _fieldImage = 'image';
 
   @override
+  void initState() {
+    super.initState();
+    _ticket.addListener(_onTicketTextChanged);
+  }
+
+  @override
   void dispose() {
+    _ticketPreviewDebounce?.cancel();
+    _ticket.removeListener(_onTicketTextChanged);
+    _sheetController.dispose();
     _eventName.dispose();
     _description.dispose();
     _location.dispose();
@@ -76,54 +103,104 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         _selectedDate != null ||
         _selectedTime != null ||
         _private ||
-        _addToCalendar;
+        _isGoing;
   }
 
-  Future<void> _close(BuildContext context) async {
-    _unfocus();
-    if (_hasUnsavedChanges()) {
-      final discard = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.background,
-          title: Text(
-            'DISCARD CHANGES?',
-            style: AppTextStyles.display(20, color: AppColors.secondary),
-          ),
-          content: Text(
-            'You have unsaved changes. Are you sure you want to leave this page?',
-            style: AppTextStyles.body(15, color: AppColors.foreground),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(
-                'STAY',
-                style: AppTextStyles.body(
-                  14,
-                  weight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
-              ),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.destructive,
-              ),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('DISCARD'),
-            ),
-          ],
-        ),
+  Future<void> _snapSheetOpen() async {
+    if (!_sheetController.isAttached) return;
+    try {
+      await _sheetController.animateTo(
+        0.92,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
       );
-      if (discard != true) return;
-      if (!context.mounted) return;
-    }
+    } catch (_) {}
+  }
+
+  void _popRoute() {
+    if (!mounted || _closing) return;
+    _closing = true;
+    // Pop immediately — never leave the route parked at min sheet size
+    // (that caused the stuck blank cream panel + dim overlay).
     if (context.canPop()) {
       context.pop();
       return;
     }
     context.go('/feed');
+  }
+
+  Future<bool> _confirmDiscardIfNeeded() async {
+    if (!_hasUnsavedChanges()) return true;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.background,
+        title: Text(
+          'DISCARD CHANGES?',
+          style: AppTextStyles.display(20, color: AppColors.secondary),
+        ),
+        content: Text(
+          'You have unsaved changes. Are you sure you want to leave this page?',
+          style: AppTextStyles.body(15, color: AppColors.foreground),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'STAY',
+              style: AppTextStyles.body(
+                14,
+                weight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.destructive,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('DISCARD'),
+          ),
+        ],
+      ),
+    );
+    return discard == true;
+  }
+
+  /// Close from the X button / backdrop / system back.
+  Future<void> _close(BuildContext context) async {
+    if (_closing || _dismissQueued) return;
+    _dismissQueued = true;
+    _unfocus();
+    try {
+      final ok = await _confirmDiscardIfNeeded();
+      if (!ok) return;
+      if (!mounted) return;
+      _popRoute();
+    } finally {
+      _dismissQueued = false;
+    }
+  }
+
+  /// Dragged below the close threshold — restore UI first if we need a dialog.
+  Future<void> _onSheetCollapsed() async {
+    if (_closing || _dismissQueued) return;
+    _dismissQueued = true;
+    _unfocus();
+    try {
+      if (_hasUnsavedChanges()) {
+        // Bring the sheet back up so we never sit on the blank compact panel.
+        await _snapSheetOpen();
+        if (!mounted) return;
+        final ok = await _confirmDiscardIfNeeded();
+        if (!ok) return;
+      }
+      if (!mounted) return;
+      _popRoute();
+    } finally {
+      _dismissQueued = false;
+    }
   }
 
   static int _wordCount(String value) {
@@ -139,6 +216,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       if (!mounted || path == null) return;
       setState(() {
         _imagePath = path;
+        _imageFromTicketLink = false;
+        _ticketPreviewMessage = null;
         _touched[_fieldImage] = true;
       });
     } catch (_) {
@@ -148,6 +227,106 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
           content: Text('Could not load photo. Please try again.'),
         ),
       );
+    }
+  }
+
+  void _clearEventPhoto() {
+    setState(() {
+      _imagePath = null;
+      _imageFromTicketLink = false;
+      _ticketPreviewMessage = null;
+    });
+  }
+
+  void _onTicketTextChanged() {
+    _ticketPreviewDebounce?.cancel();
+    final url = _normalizeTicketUrl();
+    if (url == null) {
+      _lastTicketPreviewUrl = null;
+      if (_ticketPreviewLoading || _ticketPreviewMessage != null) {
+        setState(() {
+          _ticketPreviewLoading = false;
+          _ticketPreviewMessage = null;
+        });
+      }
+      return;
+    }
+
+    if (url == _lastTicketPreviewUrl &&
+        (_imageFromTicketLink || _ticketPreviewLoading)) {
+      return;
+    }
+
+    _ticketPreviewDebounce = Timer(const Duration(milliseconds: 700), () {
+      unawaited(_fetchTicketLinkPreview(url));
+    });
+  }
+
+  Future<void> _fetchTicketLinkPreview(String url) async {
+    // Never replace a photo the user picked from the gallery.
+    if (_imagePath != null && !_imageFromTicketLink) return;
+
+    final requestId = ++_ticketPreviewRequestId;
+    if (mounted) {
+      setState(() {
+        _ticketPreviewLoading = true;
+        _ticketPreviewMessage = null;
+      });
+    }
+
+    try {
+      // Resolve OG image on our server (WhatsApp-style). Phone scrapes are
+      // often blocked by Cloudflare on BookMyShow / similar ticket sites.
+      final api = ref.read(apiClientProvider);
+      final imageUrl = await PostsRepository(api).fetchLinkPreviewImageUrl(url);
+      if (!mounted || requestId != _ticketPreviewRequestId) return;
+
+      if (_imagePath != null && !_imageFromTicketLink) {
+        setState(() => _ticketPreviewLoading = false);
+        return;
+      }
+
+      if (imageUrl == null) {
+        setState(() {
+          _ticketPreviewLoading = false;
+          _lastTicketPreviewUrl = url;
+          _ticketPreviewMessage = 'No preview image found for this link';
+        });
+        return;
+      }
+
+      final savePath = await downloadPreviewImageToTemp(imageUrl);
+      if (!mounted || requestId != _ticketPreviewRequestId) return;
+
+      if (_imagePath != null && !_imageFromTicketLink) {
+        setState(() => _ticketPreviewLoading = false);
+        return;
+      }
+
+      if (savePath == null) {
+        setState(() {
+          _ticketPreviewLoading = false;
+          _lastTicketPreviewUrl = url;
+          _ticketPreviewMessage = 'Could not load preview image';
+        });
+        return;
+      }
+
+      setState(() {
+        _imagePath = savePath;
+        _imageFromTicketLink = true;
+        _ticketPreviewLoading = false;
+        _ticketPreviewMessage = null;
+        _lastTicketPreviewUrl = url;
+        _touched[_fieldImage] = true;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _ticketPreviewRequestId) return;
+      setState(() {
+        _ticketPreviewLoading = false;
+        _lastTicketPreviewUrl = url;
+        _ticketPreviewMessage = 'Could not load preview from this link';
+      });
     }
   }
 
@@ -311,17 +490,17 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       await posts.createPost({
         'location': _eventName.text.trim(),
         'country': _location.text.trim(),
-        'status': 'going',
+        'status': _isGoing ? 'going' : 'interested',
         'imageUrl': url,
         'caption': _description.text.trim(),
         'isPrivate': _private,
-        'addToCalendar': _addToCalendar,
+        'addToCalendar': _isGoing,
         if (_taggedUsers.isNotEmpty) 'taggedUsernames': _taggedUsers,
         'eventDetails': eventDetails,
       });
       ref.invalidate(feedProvider);
       if (!mounted) return;
-      _close(context);
+      _popRoute();
     } on DioException catch (e) {
       if (!mounted) return;
       final message = PostsRepository(
@@ -350,499 +529,466 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
 
     return Scaffold(
-      backgroundColor: Colors.black.withValues(alpha: 0.8),
+      backgroundColor: Colors.black.withValues(alpha: 0.55),
       resizeToAvoidBottomInset: false,
       body: PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) {
-            _close(context);
-          }
+          if (!didPop) _close(context);
         },
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: MediaQuery.removeViewInsets(
-            context: context,
-            removeBottom: true,
-            child: FractionallySizedBox(
-              heightFactor: 0.9,
-              child: Material(
-                color: AppColors.background,
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 8,
-                      ),
-                      decoration: const BoxDecoration(
-                        color: AppColors.secondary,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: AppColors.border,
-                            width: AppDimens.borderThick,
+        child: Stack(
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _close(context),
+              child: ColoredBox(color: Colors.black.withValues(alpha: 0.55)),
+            ),
+            NotificationListener<DraggableScrollableNotification>(
+              onNotification: (notification) {
+                // Hit the floor of the sheet — close the route (don't park here).
+                if (!_closing &&
+                    !_dismissQueued &&
+                    notification.extent <= notification.minExtent + 0.02) {
+                  _onSheetCollapsed();
+                }
+                return false;
+              },
+              child: DraggableScrollableSheet(
+                controller: _sheetController,
+                initialChildSize: 0.92,
+                minChildSize: 0.35,
+                maxChildSize: 0.96,
+                snap: true,
+                snapSizes: const [0.55, 0.92],
+                builder: (context, scrollController) {
+                  return Material(
+                    color: AppColors.background,
+                    clipBehavior: Clip.hardEdge,
+                    child: Column(
+                      children: [
+                        const _SheetDragHandle(),
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                          decoration: const BoxDecoration(
+                            color: AppColors.secondary,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: AppColors.border,
+                                width: AppDimens.border,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                onPressed: () => _close(context),
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: AppColors.background,
+                                  size: 28,
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  'NEW POST',
+                                  textAlign: TextAlign.center,
+                                  style: AppTextStyles.display(
+                                    28,
+                                    color: AppColors.primary,
+                                    letterSpacing: 0.1,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 48),
+                            ],
                           ),
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            onPressed: () => _close(context),
-                            icon: const Icon(
-                              Icons.close,
-                              color: AppColors.background,
-                              size: 28,
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              'NEW POST',
-                              textAlign: TextAlign.center,
-                              style: AppTextStyles.display(
-                                28,
-                                color: AppColors.primary,
-                                letterSpacing: 0.1,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () {
-                              _unfocus();
-                              context.push(SearchScreen.path);
-                            },
-                            icon: const Icon(
-                              Icons.search,
-                              color: AppColors.background,
-                              size: 24,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: _unfocus,
-                        behavior: HitTestBehavior.translucent,
-                        child: ListView(
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          padding: EdgeInsets.fromLTRB(
-                            16,
-                            16,
-                            16,
-                            120 + keyboard,
-                          ),
-                          children: [
-                            const _SectionLabel('EVENT PHOTO'),
-                            const SizedBox(height: 8),
-                            AspectRatio(
-                              aspectRatio: 16 / 10,
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  InkWell(
-                                    onTap: _pick,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: AppColors.muted,
-                                        border: Border.all(
-                                          color: _showImageError()
-                                              ? AppColors.destructive
-                                              : AppColors.border,
-                                          width: AppDimens.borderThick,
-                                        ),
-                                      ),
-                                      child: _imagePath == null
-                                          ? Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(
-                                                  Icons.image_outlined,
-                                                  size: 48,
-                                                  color:
-                                                      AppColors.mutedForeground,
-                                                ),
-                                                const SizedBox(height: 8),
-                                                Text(
-                                                  'TAP TO UPLOAD',
-                                                  style: AppTextStyles.display(
-                                                    16,
-                                                    color: AppColors
-                                                        .mutedForeground,
-                                                  ),
-                                                ),
-                                              ],
-                                            )
-                                          : Image.file(
-                                              File(_imagePath!),
-                                              fit: BoxFit.contain,
-                                            ),
-                                    ),
-                                  ),
-                                  if (_imagePath != null)
-                                    Positioned(
-                                      top: 8,
-                                      right: 8,
-                                      child: Material(
-                                        color: AppColors.secondary,
-                                        child: InkWell(
-                                          onTap: () =>
-                                              setState(() => _imagePath = null),
-                                          child: Container(
-                                            padding: const EdgeInsets.all(6),
-                                            decoration: BoxDecoration(
-                                              border: Border.all(
-                                                color: AppColors.background,
-                                                width: 2,
-                                              ),
-                                            ),
-                                            child: const Icon(
-                                              Icons.close,
-                                              color: AppColors.background,
-                                              size: 20,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            if (_showImageError()) ...[
-                              const SizedBox(height: 6),
-                              Text(
-                                'Event photo is required',
-                                style: AppTextStyles.body(
-                                  12,
-                                  color: AppColors.destructive,
-                                  weight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 16),
-                            const _SectionLabel('EVENT NAME *'),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _eventName,
-                              textCapitalization: TextCapitalization.sentences,
-                              textInputAction: TextInputAction.next,
-                              onChanged: (_) {
-                                _markTouched(_fieldEventName);
-                                setState(() {});
-                              },
-                              style: AppTextStyles.body(
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _unfocus,
+                            behavior: HitTestBehavior.translucent,
+                            child: ListView(
+                              controller: scrollController,
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              padding: EdgeInsets.fromLTRB(
                                 16,
-                                weight: FontWeight.w600,
-                              ),
-                              decoration: _inputDecoration(
-                                hint: 'Coachella Valley Music Festival',
-                                errorText: _fieldError(
-                                  _fieldEventName,
-                                  () => _validateEventName(_eventName.text),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            const _SectionLabel('DESCRIPTION'),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _description,
-                              maxLines: 3,
-                              textCapitalization: TextCapitalization.sentences,
-                              textInputAction: TextInputAction.next,
-                              onChanged: (_) {
-                                _markTouched(_fieldDescription);
-                                setState(() {});
-                              },
-                              style: AppTextStyles.body(
                                 16,
-                                weight: FontWeight.w600,
-                                height: 1.5,
-                              ),
-                              decoration: _inputDecoration(
-                                hint: 'Add how you feel about this event! 🎉',
-                                errorText: _fieldError(
-                                  _fieldDescription,
-                                  () => _validateDescription(_description.text),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            _PrivacyToggle(
-                              isPrivate: _private,
-                              onChanged: (v) {
-                                _unfocus();
-                                setState(() => _private = v);
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            const _SectionLabel('LOCATION *'),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _location,
-                              textCapitalization: TextCapitalization.sentences,
-                              textInputAction: TextInputAction.next,
-                              onChanged: (_) {
-                                _markTouched(_fieldLocation);
-                                setState(() {});
-                              },
-                              style: AppTextStyles.body(
                                 16,
-                                weight: FontWeight.w600,
+                                24 + keyboard,
                               ),
-                              decoration: _inputDecoration(
-                                hint: 'Indio, California',
-                                prefixIcon: Icon(
-                                  Icons.place,
-                                  color: AppColors.mutedForeground,
-                                  size: 20,
-                                ),
-                                errorText: _fieldError(
-                                  _fieldLocation,
-                                  () => _validateLocation(_location.text),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const _SectionLabel('DATE *'),
-                                      const SizedBox(height: 8),
-                                      InkWell(
-                                        onTap: _pickDate,
-                                        child: InputDecorator(
-                                          decoration:
-                                              _inputDecoration(
-                                                hint: 'Select date',
-                                                errorText: _fieldError(
-                                                  _fieldDate,
-                                                  _validateDate,
-                                                ),
-                                              ).copyWith(
-                                                suffixIcon: Icon(
-                                                  Icons.calendar_today,
-                                                  color:
-                                                      AppColors.mutedForeground,
-                                                  size: 18,
-                                                ),
-                                              ),
-                                          child: Text(
-                                            _selectedDate == null
-                                                ? ''
-                                                : DateFormat.yMMMd().format(
-                                                    _selectedDate!,
+                                const _SectionLabel('EVENT NAME *'),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _eventName,
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                  textInputAction: TextInputAction.next,
+                                  onChanged: (_) {
+                                    _markTouched(_fieldEventName);
+                                    setState(() {});
+                                  },
+                                  style: AppTextStyles.body(
+                                    16,
+                                    weight: FontWeight.w600,
+                                  ),
+                                  decoration: _inputDecoration(
+                                    hint: 'Coachella Valley Music Festival',
+                                    errorText: _fieldError(
+                                      _fieldEventName,
+                                      () => _validateEventName(_eventName.text),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                const _SectionLabel('DESCRIPTION'),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _description,
+                                  maxLines: 3,
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                  textInputAction: TextInputAction.next,
+                                  onChanged: (_) {
+                                    _markTouched(_fieldDescription);
+                                    setState(() {});
+                                  },
+                                  style: AppTextStyles.body(
+                                    16,
+                                    weight: FontWeight.w600,
+                                    height: 1.5,
+                                  ),
+                                  decoration: _inputDecoration(
+                                    hint: 'Add how you feel about this event!',
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 11.5,
+                                    ),
+                                    errorText: _fieldError(
+                                      _fieldDescription,
+                                      () => _validateDescription(
+                                        _description.text,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                const _SectionLabel('LOCATION *'),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _location,
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                  textInputAction: TextInputAction.next,
+                                  onChanged: (_) {
+                                    _markTouched(_fieldLocation);
+                                    setState(() {});
+                                  },
+                                  style: AppTextStyles.body(
+                                    16,
+                                    weight: FontWeight.w600,
+                                  ),
+                                  decoration: _inputDecoration(
+                                    hint: 'Indio, California',
+                                    prefixIcon: const Icon(
+                                      Icons.place,
+                                      color: _hintColor,
+                                      size: 20,
+                                    ),
+                                    errorText: _fieldError(
+                                      _fieldLocation,
+                                      () => _validateLocation(_location.text),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const _SectionLabel('DATE *'),
+                                          const SizedBox(height: 8),
+                                          InkWell(
+                                            onTap: _pickDate,
+                                            child: InputDecorator(
+                                              isEmpty: _selectedDate == null,
+                                              decoration:
+                                                  _inputDecoration(
+                                                    hint: 'Select date',
+                                                    errorText: _fieldError(
+                                                      _fieldDate,
+                                                      _validateDate,
+                                                    ),
+                                                  ).copyWith(
+                                                    suffixIcon: const Icon(
+                                                      Icons.calendar_today,
+                                                      color: _hintColor,
+                                                      size: 18,
+                                                    ),
                                                   ),
-                                            style: AppTextStyles.body(
-                                              16,
-                                              weight: FontWeight.w600,
+                                              child: Text(
+                                                _selectedDate == null
+                                                    ? ''
+                                                    : DateFormat.yMMMd().format(
+                                                        _selectedDate!,
+                                                      ),
+                                                style: AppTextStyles.body(
+                                                  16,
+                                                  weight: FontWeight.w600,
+                                                ),
+                                              ),
                                             ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const _SectionLabel('TIME'),
+                                          const SizedBox(height: 8),
+                                          InkWell(
+                                            onTap: _pickTime,
+                                            child: InputDecorator(
+                                              isEmpty: _selectedTime == null,
+                                              decoration:
+                                                  _inputDecoration(
+                                                    hint: 'Select time',
+                                                  ).copyWith(
+                                                    suffixIcon: const Icon(
+                                                      Icons.access_time,
+                                                      color: _hintColor,
+                                                      size: 18,
+                                                    ),
+                                                  ),
+                                              child: Text(
+                                                _formatTimeDisplay(),
+                                                style: AppTextStyles.body(
+                                                  16,
+                                                  weight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                _PrivacyToggle(
+                                  isPrivate: _private,
+                                  onChanged: (v) {
+                                    _unfocus();
+                                    setState(() => _private = v);
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                                const _SectionLabel('TICKET URL (OPTIONAL)'),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _ticket,
+                                  keyboardType: TextInputType.url,
+                                  textCapitalization: TextCapitalization.none,
+                                  autocorrect: false,
+                                  enableSuggestions: false,
+                                  textInputAction: TextInputAction.done,
+                                  onChanged: (_) {
+                                    _markTouched(_fieldTicket);
+                                    setState(() {});
+                                  },
+                                  onSubmitted: (_) => _unfocus(),
+                                  style: AppTextStyles.body(
+                                    16,
+                                    weight: FontWeight.w600,
+                                  ),
+                                  decoration: _inputDecoration(
+                                    hint: 'https://example.com/tickets',
+                                    prefixIcon: const Icon(
+                                      Icons.open_in_new,
+                                      color: _hintColor,
+                                      size: 18,
+                                    ),
+                                    errorText: _fieldError(
+                                      _fieldTicket,
+                                      () => _validateTicket(_ticket.text),
+                                    ),
+                                  ),
+                                ),
+                                if (_ticketPreviewLoading) ...[
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          'Looking up event photo from this link…',
+                                          style: AppTextStyles.body(
+                                            13,
+                                            color: AppColors.mutedForeground,
+                                            weight: FontWeight.w500,
                                           ),
                                         ),
                                       ),
                                     ],
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                ] else if (_ticketPreviewMessage != null) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _ticketPreviewMessage!,
+                                    style: AppTextStyles.body(
+                                      13,
+                                      color: AppColors.mutedForeground,
+                                      weight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 16),
+                                const _SectionLabel('EVENT PHOTO'),
+                                const SizedBox(height: 8),
+                                AspectRatio(
+                                  aspectRatio: 16 / 7,
+                                  child: Stack(
+                                    fit: StackFit.expand,
                                     children: [
-                                      const _SectionLabel('TIME'),
-                                      const SizedBox(height: 8),
                                       InkWell(
-                                        onTap: _pickTime,
-                                        child: InputDecorator(
-                                          decoration:
-                                              _inputDecoration(
-                                                hint: 'Select time',
-                                              ).copyWith(
-                                                suffixIcon: Icon(
-                                                  Icons.access_time,
-                                                  color:
-                                                      AppColors.mutedForeground,
+                                        onTap: _pick,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: AppColors.muted,
+                                            border: Border.all(
+                                              color: _showImageError()
+                                                  ? AppColors.destructive
+                                                  : AppColors.border,
+                                              width: _fieldBorder,
+                                            ),
+                                          ),
+                                          child: _imagePath == null
+                                              ? Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.image_outlined,
+                                                      size: 36,
+                                                      color: AppColors
+                                                          .mutedForeground,
+                                                    ),
+                                                    const SizedBox(height: 6),
+                                                    Text(
+                                                      'TAP TO UPLOAD',
+                                                      style:
+                                                          AppTextStyles.display(
+                                                            14,
+                                                            color: AppColors
+                                                                .mutedForeground,
+                                                          ),
+                                                    ),
+                                                  ],
+                                                )
+                                              : Image.file(
+                                                  File(_imagePath!),
+                                                  fit: BoxFit.cover,
+                                                ),
+                                        ),
+                                      ),
+                                      if (_imagePath != null)
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: Material(
+                                            color: AppColors.secondary,
+                                            child: InkWell(
+                                              onTap: _clearEventPhoto,
+                                              child: Container(
+                                                padding: const EdgeInsets.all(
+                                                  6,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  border: Border.all(
+                                                    color: AppColors.background,
+                                                    width: 2,
+                                                  ),
+                                                ),
+                                                child: const Icon(
+                                                  Icons.close,
+                                                  color: AppColors.background,
                                                   size: 18,
                                                 ),
                                               ),
-                                          child: Text(
-                                            _formatTimeDisplay(),
-                                            style: AppTextStyles.body(
-                                              16,
-                                              weight: FontWeight.w600,
                                             ),
                                           ),
                                         ),
-                                      ),
                                     ],
                                   ),
                                 ),
+                                if (_showImageError()) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Event photo is required',
+                                    style: AppTextStyles.body(
+                                      12,
+                                      color: AppColors.destructive,
+                                      weight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 16),
+                                _EventStatusToggle(
+                                  isGoing: _isGoing,
+                                  onChanged: (v) {
+                                    _unfocus();
+                                    setState(() => _isGoing = v);
+                                  },
+                                ),
+                                const SizedBox(height: 60),
                               ],
                             ),
-                            const SizedBox(height: 16),
-                            const _SectionLabel('TICKET URL (OPTIONAL)'),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _ticket,
-                              keyboardType: TextInputType.url,
-                              textCapitalization: TextCapitalization.none,
-                              autocorrect: false,
-                              enableSuggestions: false,
-                              textInputAction: TextInputAction.done,
-                              onChanged: (_) {
-                                _markTouched(_fieldTicket);
-                                setState(() {});
-                              },
-                              onSubmitted: (_) => _unfocus(),
-                              style: AppTextStyles.body(
-                                16,
-                                weight: FontWeight.w600,
-                              ),
-                              decoration: _inputDecoration(
-                                hint: 'https://example.com/tickets',
-                                prefixIcon: Icon(
-                                  Icons.open_in_new,
-                                  color: AppColors.mutedForeground,
-                                  size: 18,
-                                ),
-                                errorText: _fieldError(
-                                  _fieldTicket,
-                                  () => _validateTicket(_ticket.text),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            // const _SectionLabel('GOING WITH'),
-                            // const SizedBox(height: 8),
-                            // if (_taggedUsers.isNotEmpty)
-                            //   Padding(
-                            //     padding: const EdgeInsets.only(bottom: 8),
-                            //     child: Wrap(
-                            //       spacing: 8,
-                            //       runSpacing: 8,
-                            //       children: _taggedUsers.map((tag) {
-                            //         return Container(
-                            //           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            //           decoration: BoxDecoration(
-                            //             color: AppColors.primary,
-                            //             border: Border.all(color: AppColors.border, width: AppDimens.border),
-                            //           ),
-                            //           child: Row(
-                            //             mainAxisSize: MainAxisSize.min,
-                            //             children: [
-                            //               Text(
-                            //                 '@$tag',
-                            //                 style: AppTextStyles.display(14, color: AppColors.primaryForeground),
-                            //               ),
-                            //               const SizedBox(width: 6),
-                            //               GestureDetector(
-                            //                 onTap: () => _removeTag(tag),
-                            //                 child: Icon(Icons.close, size: 16, color: AppColors.primaryForeground),
-                            //               ),
-                            //             ],
-                            //           ),
-                            //         );
-                            //       }).toList(),
-                            //     ),
-                            //   ),
-                            // if (_showTagInput)
-                            //   Row(
-                            //     children: [
-                            //       Expanded(
-                            //         child: TextField(
-                            //           controller: _tagInput,
-                            //           autofocus: true,
-                            //           onSubmitted: (_) => _addTag(),
-                            //           style: AppTextStyles.body(16, weight: FontWeight.w600),
-                            //           decoration: _inputDecoration(hint: 'username'),
-                            //         ),
-                            //       ),
-                            //       const SizedBox(width: 8),
-                            //       Material(
-                            //         color: AppColors.accent,
-                            //         child: InkWell(
-                            //           onTap: _addTag,
-                            //           child: Container(
-                            //             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            //             decoration: BoxDecoration(
-                            //               border: Border.all(color: AppColors.border, width: AppDimens.borderThick),
-                            //             ),
-                            //             child: Text(
-                            //               'ADD',
-                            //               style: AppTextStyles.display(14, color: AppColors.accentForeground),
-                            //             ),
-                            //           ),
-                            //         ),
-                            //       ),
-                            //     ],
-                            //   )
-                            // else
-                            //   InkWell(
-                            //     onTap: () => setState(() => _showTagInput = true),
-                            //     child: Container(
-                            //       width: double.infinity,
-                            //       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            //       decoration: BoxDecoration(
-                            //         color: AppColors.muted,
-                            //         border: Border.all(color: AppColors.border, width: AppDimens.borderThick, style: BorderStyle.solid),
-                            //       ),
-                            //       child: Row(
-                            //         mainAxisAlignment: MainAxisAlignment.center,
-                            //         children: [
-                            //           Icon(Icons.people_outline, color: AppColors.mutedForeground, size: 20),
-                            //           const SizedBox(width: 8),
-                            //           Text(
-                            //             'TAG FRIENDS',
-                            //             style: AppTextStyles.display(14, color: AppColors.mutedForeground),
-                            //           ),
-                            //         ],
-                            //       ),
-                            //     ),
-                            //   ),
-                            const SizedBox(height: 16),
-                            _EventStatusToggle(
-                              addToCalendar: _addToCalendar,
-                              onChanged: (v) {
-                                _unfocus();
-                                setState(() => _addToCalendar = v);
-                              },
-                            ),
-                            const SizedBox(height: 8),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                    SafeArea(
-                      top: false,
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                        decoration: const BoxDecoration(
-                          color: AppColors.muted,
-                          border: Border(
-                            top: BorderSide(
-                              color: AppColors.border,
-                              width: AppDimens.border,
+                        SafeArea(
+                          top: false,
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                            decoration: const BoxDecoration(
+                              color: AppColors.muted,
+                              border: Border(
+                                top: BorderSide(
+                                  color: AppColors.border,
+                                  width: AppDimens.border,
+                                ),
+                              ),
+                            ),
+                            child: BeTherPrimaryButton(
+                              label: _busy ? 'POSTING…' : 'POST EVENT',
+                              enabled: !_busy,
+                              onPressed: _post,
                             ),
                           ),
                         ),
-                        child: BeTherPrimaryButton(
-                          label: _busy ? 'POSTING…' : 'POST EVENT',
-                          enabled: !_busy,
-                          onPressed: _post,
-                        ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -852,12 +998,18 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     String? hint,
     String? errorText,
     Widget? prefixIcon,
+    EdgeInsetsGeometry? contentPadding,
   }) {
     final hasError = errorText != null && errorText.isNotEmpty;
     final borderColor = hasError ? AppColors.destructive : AppColors.border;
 
     return InputDecoration(
       hintText: hint,
+      hintStyle: AppTextStyles.body(
+        14,
+        color: _hintColor,
+        weight: FontWeight.w500,
+      ),
       errorText: errorText,
       errorStyle: AppTextStyles.body(
         12,
@@ -868,40 +1020,59 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       prefixIcon: prefixIcon,
       filled: true,
       fillColor: AppColors.inputBackground,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      contentPadding:
+          contentPadding ??
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(
-          color: borderColor,
-          width: AppDimens.borderThick,
-        ),
+        borderSide: BorderSide(color: borderColor, width: _fieldBorder),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(
-          color: borderColor,
-          width: AppDimens.borderThick,
-        ),
+        borderSide: BorderSide(color: borderColor, width: _fieldBorder),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
         borderSide: BorderSide(
           color: hasError ? AppColors.destructive : AppColors.primary,
-          width: AppDimens.borderThick,
+          width: _fieldBorder,
         ),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
         borderSide: BorderSide(
           color: AppColors.destructive,
-          width: AppDimens.borderThick,
+          width: _fieldBorder,
         ),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
         borderSide: BorderSide(
           color: AppColors.destructive,
-          width: AppDimens.borderThick,
+          width: _fieldBorder,
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetDragHandle extends StatelessWidget {
+  const _SheetDragHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: AppColors.secondary,
+      padding: const EdgeInsets.only(top: 10, bottom: 6),
+      child: Center(
+        child: Container(
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: AppColors.background.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(999),
+          ),
         ),
       ),
     );
@@ -926,8 +1097,9 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-class _BrutalistToggle extends StatelessWidget {
-  const _BrutalistToggle({
+/// Bright, soft pill switch — clearer for a broad audience than chunky squares.
+class _BrightSwitch extends StatelessWidget {
+  const _BrightSwitch({
     required this.value,
     required this.onChanged,
     required this.activeColor,
@@ -939,30 +1111,46 @@ class _BrutalistToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 64,
-        height: 36,
-        decoration: BoxDecoration(
-          color: value ? activeColor : AppColors.background,
-          border: Border.all(
-            color: AppColors.border,
-            width: AppDimens.borderThick,
-          ),
-        ),
-        child: AnimatedAlign(
+    return Semantics(
+      toggled: value,
+      child: GestureDetector(
+        onTap: () => onChanged(!value),
+        child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
-          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            width: 28,
-            height: double.infinity,
-            margin: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: AppColors.secondary,
-              border: Border.all(color: AppColors.border, width: 2),
+          width: 56,
+          height: 32,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: value ? activeColor : const Color(0xFFD1D5DB),
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              if (value)
+                BoxShadow(
+                  color: activeColor.withValues(alpha: 0.35),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+            ],
+          ),
+          child: AnimatedAlign(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -980,20 +1168,27 @@ class _PrivacyToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.muted,
-        border: Border.all(
-          color: AppColors.border,
-          width: AppDimens.borderThick,
-        ),
+        color: Colors.white,
+        border: Border.all(color: AppColors.border, width: AppDimens.border),
       ),
       child: Row(
         children: [
-          Icon(
-            isPrivate ? Icons.lock : Icons.public,
-            color: isPrivate ? AppColors.primary : AppColors.mutedForeground,
-            size: 24,
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isPrivate
+                  ? AppColors.primary.withValues(alpha: 0.15)
+                  : const Color(0xFFE8F5E9),
+            ),
+            child: Icon(
+              isPrivate ? Icons.lock_rounded : Icons.public_rounded,
+              color: isPrivate ? AppColors.primary : const Color(0xFF2E7D32),
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1010,14 +1205,14 @@ class _PrivacyToggle extends StatelessWidget {
                       ? 'Only tagged users can see this'
                       : 'Visible to everyone',
                   style: AppTextStyles.body(
-                    14,
+                    13,
                     color: AppColors.mutedForeground,
                   ),
                 ),
               ],
             ),
           ),
-          _BrutalistToggle(
+          _BrightSwitch(
             value: isPrivate,
             onChanged: onChanged,
             activeColor: AppColors.primary,
@@ -1029,53 +1224,61 @@ class _PrivacyToggle extends StatelessWidget {
 }
 
 class _EventStatusToggle extends StatelessWidget {
-  const _EventStatusToggle({
-    required this.addToCalendar,
-    required this.onChanged,
-  });
+  const _EventStatusToggle({required this.isGoing, required this.onChanged});
 
-  final bool addToCalendar;
+  /// Off = Interested (default). On = Going / attending.
+  final bool isGoing;
   final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final going = !addToCalendar;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.muted,
-        border: Border.all(
-          color: AppColors.border,
-          width: AppDimens.borderThick,
-        ),
+        color: Colors.white,
+        border: Border.all(color: AppColors.border, width: AppDimens.border),
       ),
       child: Row(
         children: [
-          Icon(Icons.calendar_today, color: AppColors.primary, size: 24),
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isGoing
+                  ? AppColors.accent.withValues(alpha: 0.2)
+                  : AppColors.primary.withValues(alpha: 0.15),
+            ),
+            child: Icon(
+              isGoing ? Icons.event_available_rounded : Icons.bookmark_rounded,
+              color: isGoing ? AppColors.accent : AppColors.primary,
+              size: 22,
+            ),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  going ? 'Going To' : 'Interested',
+                  isGoing ? 'Going' : 'Interested',
                   style: AppTextStyles.body(16, weight: FontWeight.w700),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  going
-                      ? 'Confirm your attendance'
-                      : 'Show interest without confirming',
+                  isGoing
+                      ? 'You\'re attending this event'
+                      : 'Interested, not confirmed yet',
                   style: AppTextStyles.body(
-                    14,
+                    13,
                     color: AppColors.mutedForeground,
                   ),
                 ),
               ],
             ),
           ),
-          _BrutalistToggle(
-            value: addToCalendar,
+          _BrightSwitch(
+            value: isGoing,
             onChanged: onChanged,
             activeColor: AppColors.accent,
           ),
@@ -1085,14 +1288,21 @@ class _EventStatusToggle extends StatelessWidget {
   }
 }
 
+/// Allowed crop ratios for new-post photos — no freeform / original / square.
+const _eventPhotoAspectPresets = <CropAspectRatioPresetData>[
+  CropAspectRatioPreset.ratio3x2,
+  CropAspectRatioPreset.ratio16x9,
+  CropAspectRatioPreset.ratio4x3,
+];
+
 Future<String?> _pickEventPhoto(BuildContext context) async {
   final picked = await ImagePicker().pickImage(
     source: ImageSource.gallery,
-    imageQuality: 100,
+    imageQuality: 80,
   );
   if (picked == null) return null;
 
-  if (!context.mounted) return picked.path;
+  if (!context.mounted) return null;
   if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
     return picked.path;
   }
@@ -1100,15 +1310,27 @@ Future<String?> _pickEventPhoto(BuildContext context) async {
   try {
     final cropped = await ImageCropper().cropImage(
       sourcePath: picked.path,
-      compressQuality: 100,
+      compressQuality: 80,
       uiSettings: [
-        AndroidUiSettings(toolbarTitle: 'Crop Photo', lockAspectRatio: false),
-        IOSUiSettings(title: 'Crop Photo'),
+        AndroidUiSettings(
+          toolbarTitle: 'Crop Photo',
+          lockAspectRatio: true,
+          initAspectRatio: CropAspectRatioPreset.ratio3x2,
+          aspectRatioPresets: _eventPhotoAspectPresets,
+        ),
+        IOSUiSettings(
+          title: 'Crop Photo',
+          aspectRatioLockEnabled: true,
+          resetAspectRatioEnabled: true,
+          aspectRatioPickerButtonHidden: false,
+          aspectRatioPresets: _eventPhotoAspectPresets,
+        ),
       ],
     );
-    return cropped?.path ?? picked.path;
+    // Cancel / back without tick → do not keep the gallery pick.
+    return cropped?.path;
   } catch (_) {
-    return picked.path;
+    return null;
   }
 }
 

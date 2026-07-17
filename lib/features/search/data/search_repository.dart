@@ -33,7 +33,7 @@ class SearchRepository {
       if (data is! Map<String, dynamic>) {
         throw Exception('Invalid search response');
       }
-      return SearchPage.fromJson(data);
+      return SearchPage.fromJson(data, query: trimmed);
     } on DioException catch (e) {
       final data = e.response?.data;
       if (data is Map<String, dynamic>) {
