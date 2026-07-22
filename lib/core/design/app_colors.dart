@@ -14,6 +14,7 @@ abstract final class AppColors {
   static const mutedForeground = Color(0xFF6B7280);
   static const black = Color(0xFF000000);
   static const accent = Color(0xFFF59E0B);
+  static const accent2 = Color(0xFFf5c50b);
   static const accentForeground = Color(0xFF1A2332);
   static const destructive = Color(0xFFDC2626);
   static const destructiveForeground = Color(0xFFFFFFFF);

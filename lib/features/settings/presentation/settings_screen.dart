@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
+import '../../../core/utils/link_utils.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../launch/presentation/launch_screen.dart';
 import '../../profile/presentation/profile_providers.dart';
@@ -143,6 +146,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     context.go(LaunchScreen.path);
                   }
                 },
+              ),
+              const Divider(height: 1, thickness: AppDimens.borderThick, color: AppColors.border),
+              _sectionTitle('SUPPORT'),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  'For support, email us at',
+                  style: AppTextStyles.body(
+                    14,
+                    color: AppColors.mutedForeground,
+                    weight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.mail_outline, color: AppColors.secondary),
+                title: Text(
+                  'be.there.accnts@gmail.com',
+                  style: AppTextStyles.body(
+                    15,
+                    weight: FontWeight.w700,
+                    color: AppColors.secondary,
+                  ),
+                ),
+                onTap: () => unawaited(
+                  openExternalUrl(context, 'mailto:be.there.accnts@gmail.com'),
+                ),
               ),
               const SizedBox(height: 24),
               Center(child: Text('BE THER v1.0.0', style: AppTextStyles.body(13, color: AppColors.mutedForeground))),

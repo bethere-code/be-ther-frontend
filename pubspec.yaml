@@ -54,6 +54,7 @@ dependencies:
   path: ^1.9.1
   app_links: ^7.0.0
   flutter_svg: ^2.2.3
+  geolocator: ^14.0.2
 
 dev_dependencies:
   flutter_test:

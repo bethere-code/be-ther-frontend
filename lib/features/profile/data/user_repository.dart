@@ -82,18 +82,22 @@ class UserRepository {
     }
   }
 
-  Future<bool> starToggle(String username) async {
+  /// Toggle follow. Returns whether you now follow them + their follower count.
+  Future<({bool following, int followersCount})> toggleFollow(String username) async {
     try {
-      final res = await _dio.post<Map<String, dynamic>>('/api/v1/users/$username/star');
+      final res = await _dio.post<Map<String, dynamic>>('/api/v1/users/$username/follow');
       final body = res.data;
       if (body == null || body['ok'] != true) {
         throw Exception(body?['error']?.toString() ?? 'Failed to update follow');
       }
       final data = body['data'];
       if (data is Map<String, dynamic>) {
-        return data['starred'] as bool? ?? false;
+        return (
+          following: data['following'] as bool? ?? false,
+          followersCount: (data['followersCount'] as num?)?.toInt() ?? 0,
+        );
       }
-      return false;
+      return (following: false, followersCount: 0);
     } on DioException catch (e) {
       throw Exception(_errorFromDio(e, fallback: 'Failed to update follow'));
     }

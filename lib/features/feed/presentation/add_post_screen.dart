@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
@@ -18,8 +19,10 @@ import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/be_ther_buttons.dart';
 import '../../../core/media/ticket_link_preview.dart';
 import '../../../core/network/api_client.dart';
+import '../data/places_repository.dart';
 import '../data/posts_repository.dart';
 import 'feed_providers.dart';
+import 'widgets/event_place_field.dart';
 
 class AddPostScreen extends ConsumerStatefulWidget {
   const AddPostScreen({super.key});
@@ -37,7 +40,6 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
   final _eventName = TextEditingController();
   final _description = TextEditingController();
-  final _location = TextEditingController();
   final _ticket = TextEditingController();
   final _tagInput = TextEditingController();
   final _sheetController = DraggableScrollableController();
@@ -47,6 +49,10 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   /// false = Interested (default); true = Going / attending.
   bool _isGoing = false;
   String? _imagePath;
+
+  /// Selected Google Place / GPS result — required; free text is not allowed.
+  StructuredPlace? _selectedPlace;
+  ({double lat, double lng})? _userLatLng;
 
   /// True when the current photo came from ticket-link metadata (not gallery).
   bool _imageFromTicketLink = false;
@@ -67,7 +73,6 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
   static const _fieldEventName = 'eventName';
   static const _fieldDescription = 'description';
-  static const _fieldLocation = 'location';
   static const _fieldDate = 'date';
   static const _fieldTicket = 'ticket';
   static const _fieldImage = 'image';
@@ -76,6 +81,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   void initState() {
     super.initState();
     _ticket.addListener(_onTicketTextChanged);
+    // If permission was already granted elsewhere in the app, capture poster GPS.
+    unawaited(_tryCaptureUserLatLng());
   }
 
   @override
@@ -85,7 +92,6 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     _sheetController.dispose();
     _eventName.dispose();
     _description.dispose();
-    _location.dispose();
     _ticket.dispose();
     _tagInput.dispose();
     super.dispose();
@@ -97,7 +103,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     return _imagePath != null ||
         _eventName.text.trim().isNotEmpty ||
         _description.text.trim().isNotEmpty ||
-        _location.text.trim().isNotEmpty ||
+        _selectedPlace != null ||
         _ticket.text.trim().isNotEmpty ||
         _taggedUsers.isNotEmpty ||
         _selectedDate != null ||
@@ -338,12 +344,46 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     return null;
   }
 
-  String? _validateLocation(String value) {
-    if (value.trim().isEmpty) return 'Location is required';
-    if (value.trim().length > 200) {
-      return 'Location must be less than 200 characters';
+  String? _validateLocation() {
+    if (_selectedPlace == null) {
+      return 'Select a location from the list or use GPS';
     }
     return null;
+  }
+
+  /// Location error only after submit — not while typing / focusing the field.
+  String? _locationSubmitError() {
+    if (!_attemptedSubmit) return null;
+    return _validateLocation();
+  }
+
+  /// If the app already has location permission, read GPS for userLocation.
+  /// Does not prompt — only uses an existing grant.
+  Future<void> _tryCaptureUserLatLng() async {
+    if (_userLatLng != null) return;
+    try {
+      final serviceOn = await Geolocator.isLocationServiceEnabled();
+      if (!serviceOn) return;
+
+      final permission = await Geolocator.checkPermission();
+      if (permission != LocationPermission.whileInUse &&
+          permission != LocationPermission.always) {
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _userLatLng = (lat: position.latitude, lng: position.longitude);
+      });
+    } catch (_) {
+      // Optional — posting still works without poster coordinates.
+    }
   }
 
   String? _validateDate() {
@@ -384,7 +424,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   bool _hasValidationErrors() {
     return _imagePath == null ||
         _validateEventName(_eventName.text) != null ||
-        _validateLocation(_location.text) != null ||
+        _validateLocation() != null ||
         _validateDate() != null ||
         _validateDescription(_description.text) != null ||
         _validateTicket(_ticket.text) != null;
@@ -420,9 +460,10 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   }
 
   Future<void> _pickDate() async {
-    _unfocus();
+    // Dismiss any open keyboard before the system picker appears.
+    FocusManager.instance.primaryFocus?.unfocus();
     _markTouched(_fieldDate);
-    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
     if (!mounted) return;
 
     final picked = await showDatePicker(
@@ -432,15 +473,18 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       lastDate: DateTime(2100),
     );
     if (!mounted) return;
-    _unfocus();
-    if (picked != null) {
-      setState(() => _selectedDate = picked);
-    }
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    if (picked == null) return;
+
+    setState(() => _selectedDate = picked);
+    // Continuously ask for time — user should not need a second tap.
+    await _pickTime();
   }
 
   Future<void> _pickTime() async {
-    _unfocus();
-    await Future<void>.delayed(Duration.zero);
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
     if (!mounted) return;
 
     final picked = await showTimePicker(
@@ -448,7 +492,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       initialTime: _selectedTime ?? TimeOfDay.now(),
     );
     if (!mounted) return;
-    _unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
     if (picked != null) {
       setState(() => _selectedTime = picked);
     }
@@ -460,6 +504,10 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     setState(() => _attemptedSubmit = true);
 
     if (_hasValidationErrors()) return;
+
+    // Last chance to attach poster coordinates if permission already exists.
+    await _tryCaptureUserLatLng();
+    if (!mounted) return;
 
     if (!await File(_imagePath!).exists()) {
       if (!mounted) return;
@@ -480,16 +528,20 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       final dio = ref.read(apiClientProvider);
       final posts = PostsRepository(dio);
       final url = await posts.uploadImage(compressedFile.path);
+      final place = _selectedPlace!;
       final eventDetails = <String, dynamic>{
         'type': 'event',
         'date': _formatDateForApi(),
-        'venue': _location.text.trim(),
+        'venue': place.name,
         'time': ?_formatTimeForApi(),
         'ticketUrl': ?ticketUrl,
+        'eventLocation': place.toJson(),
+        if (_userLatLng != null)
+          'userLocation': {'lat': _userLatLng!.lat, 'lng': _userLatLng!.lng},
       };
       await posts.createPost({
         'location': _eventName.text.trim(),
-        'country': _location.text.trim(),
+        'country': place.country.isNotEmpty ? place.country : place.city,
         'status': _isGoing ? 'going' : 'interested',
         'imageUrl': url,
         'caption': _description.text.trim(),
@@ -676,31 +728,21 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                 const SizedBox(height: 16),
                                 const _SectionLabel('LOCATION *'),
                                 const SizedBox(height: 8),
-                                TextField(
-                                  controller: _location,
-                                  textCapitalization:
-                                      TextCapitalization.sentences,
-                                  textInputAction: TextInputAction.next,
-                                  onChanged: (_) {
-                                    _markTouched(_fieldLocation);
-                                    setState(() {});
+                                EventPlaceField(
+                                  selected: _selectedPlace,
+                                  userLatLng: _userLatLng,
+                                  errorText: _locationSubmitError(),
+                                  onSelected: (place) {
+                                    setState(() {
+                                      _selectedPlace = place;
+                                    });
                                   },
-                                  style: AppTextStyles.body(
-                                    16,
-                                    weight: FontWeight.w600,
-                                  ),
-                                  decoration: _inputDecoration(
-                                    hint: 'Indio, California',
-                                    prefixIcon: const Icon(
-                                      Icons.place,
-                                      color: _hintColor,
-                                      size: 20,
-                                    ),
-                                    errorText: _fieldError(
-                                      _fieldLocation,
-                                      () => _validateLocation(_location.text),
-                                    ),
-                                  ),
+                                  onCleared: () {
+                                    setState(() => _selectedPlace = null);
+                                  },
+                                  onUserLatLng: (coords) {
+                                    setState(() => _userLatLng = coords);
+                                  },
                                 ),
                                 const SizedBox(height: 16),
                                 Row(

@@ -27,9 +27,10 @@ class NotificationListTile extends StatelessWidget {
         return ' added your event to their wishlist';
       case 'calendar':
         return ' added your event to their calendar';
-      case 'star':
+      case 'follow':
+      case 'star': // legacy
       default:
-        return ' starred your profile';
+        return ' started following you';
     }
   }
 
@@ -60,8 +61,10 @@ class NotificationListTile extends StatelessWidget {
     final username = actor['username'] as String? ?? '';
     final avatar = actor['avatarUrl'] as String? ?? '';
     final badge = actor['badge'] as String?;
-    final type = notification['type'] as String? ?? 'star';
-    final mutual = notification['mutualStar'] as bool? ?? false;
+    final type = notification['type'] as String? ?? 'follow';
+    final mutual = notification['mutualFollow'] as bool? ??
+        notification['mutualStar'] as bool? ??
+        false;
     final post = notification['postId'] is Map<String, dynamic>
         ? notification['postId'] as Map<String, dynamic>
         : null;
@@ -147,14 +150,14 @@ class NotificationListTile extends StatelessWidget {
                         ],
                       ],
                     ),
-                    if (type == 'star') ...[
+                    if (type == 'follow' || type == 'star') ...[
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         children: [
                           const _StarChip(
-                            label: 'NEW STAR',
+                            label: 'NEW FOLLOW',
                             background: AppColors.accent,
                             foreground: AppColors.accentForeground,
                           ),
