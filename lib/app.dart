@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/design/app_colors.dart';
@@ -13,19 +14,22 @@ class BeTherApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
 
-    return MaterialApp.router(
-      title: 'Be Ther',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      routerConfig: router,
-      builder: (context, child) {
-        return DeepLinkListener(
-          child: ColoredBox(
-            color: AppColors.background,
-            child: child ?? const SizedBox.shrink(),
-          ),
-        );
-      },
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: AppTheme.systemOverlayLightIcons,
+      child: MaterialApp.router(
+        title: 'Be Ther',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light(),
+        routerConfig: router,
+        builder: (context, child) {
+          return DeepLinkListener(
+            child: ColoredBox(
+              color: AppColors.background,
+              child: child ?? const SizedBox.shrink(),
+            ),
+          );
+        },
+      ),
     );
   }
 }

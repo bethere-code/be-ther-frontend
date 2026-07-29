@@ -222,7 +222,7 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: controller,
-                        maxLength: 500,
+                        maxLength: 200,
                         maxLines: 4,
                         autofocus: true,
                         decoration: InputDecoration(
@@ -235,7 +235,7 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: Text(
-                          '$len/500',
+                          '$len/200',
                           style: AppTextStyles.body(12, color: AppColors.mutedForeground),
                         ),
                       ),
@@ -254,7 +254,7 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                               onPressed: _saving
                                   ? null
                                   : () {
-                                      if (controller.text.length > 500) {
+                                      if (controller.text.length > 200) {
                                         setSheetState(() => error = 'Bio is too long');
                                         return;
                                       }

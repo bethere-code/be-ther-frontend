@@ -209,12 +209,6 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     }
   }
 
-  static int _wordCount(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return 0;
-    return trimmed.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
-  }
-
   Future<void> _pick() async {
     _unfocus();
     try {
@@ -392,8 +386,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   }
 
   String? _validateDescription(String value) {
-    if (_wordCount(value) > 2000) {
-      return 'Description must be less than 2000 words';
+    if (value.length > 500) {
+      return 'Description must be 500 characters or less';
     }
     return null;
   }
@@ -698,10 +692,13 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                 const SizedBox(height: 8),
                                 TextField(
                                   controller: _description,
-                                  maxLines: 3,
+                                  minLines: 3,
+                                  maxLines: null,
+                                  maxLength: 500,
+                                  keyboardType: TextInputType.multiline,
                                   textCapitalization:
                                       TextCapitalization.sentences,
-                                  textInputAction: TextInputAction.next,
+                                  textInputAction: TextInputAction.newline,
                                   onChanged: (_) {
                                     _markTouched(_fieldDescription);
                                     setState(() {});
@@ -714,8 +711,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                   decoration: _inputDecoration(
                                     hint: 'Add how you feel about this event!',
                                     contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 11.5,
+                                      horizontal: 8,
+                                      vertical: 7,
                                     ),
                                     errorText: _fieldError(
                                       _fieldDescription,
@@ -725,7 +722,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 6),
                                 const _SectionLabel('LOCATION *'),
                                 const SizedBox(height: 8),
                                 EventPlaceField(
@@ -1064,7 +1061,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       fillColor: AppColors.inputBackground,
       contentPadding:
           contentPadding ??
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
         borderSide: BorderSide(color: borderColor, width: _fieldBorder),

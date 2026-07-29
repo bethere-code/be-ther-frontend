@@ -12,6 +12,7 @@ import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/author_avatar.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../core/design/widgets/expandable_caption.dart';
 import '../../../core/design/widgets/post_interaction_row.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
 import 'widgets/feed_permissions_coordinator.dart';
@@ -613,18 +614,11 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
           ),
           caption.isNotEmpty
               ? Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 8, 4),
-                  child: RichText(
-                    text: TextSpan(
-                      style: AppTextStyles.body(15),
-                      children: [
-                        // TextSpan(
-                        //   text: '$name ',
-                        //   style: AppTextStyles.body(15, weight: FontWeight.w800),
-                        // ),
-                        TextSpan(text: caption),
-                      ],
-                    ),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                  child: ExpandableCaption(
+                    key: ValueKey('caption-$id'),
+                    text: caption,
+                    trimLines: 3,
                   ),
                 )
               : const SizedBox.shrink(),

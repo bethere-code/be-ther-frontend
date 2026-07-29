@@ -3,13 +3,14 @@ import 'package:be_ther/features/feed/presentation/feed_screen.dart';
 import 'package:be_ther/features/notifications/presentation/notifications_screen.dart';
 import 'package:be_ther/features/profile/presentation/profile_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../features/auth/presentation/auth_notifier.dart';
 import '../../../features/notifications/presentation/notifications_providers.dart';
 import '../../../features/profile/presentation/profile_providers.dart';
+import '../../theme/app_theme.dart';
 import '../app_colors.dart';
 import '../app_dimens.dart';
 import '../app_images.dart';
@@ -37,30 +38,33 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.secondary,
-      child: SafeArea(
-        bottom: false,
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                ?header,
-                Expanded(child: child),
-                if (showBottomBar) _BottomBar(activeTab: activeTab),
-              ],
-            ),
-            if (showRail)
-              Positioned(
-                right: 8,
-                top: 0,
-                bottom: 0,
-                child: Align(
-                  alignment: Alignment.center,
-                  child: _RightRail(activeTab: activeTab),
-                ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: AppTheme.systemOverlayLightIcons,
+      child: Material(
+        color: AppColors.secondary,
+        child: SafeArea(
+          bottom: false,
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  ?header,
+                  Expanded(child: child),
+                  if (showBottomBar) _BottomBar(activeTab: activeTab),
+                ],
               ),
-          ],
+              if (showRail)
+                Positioned(
+                  right: 8,
+                  top: 0,
+                  bottom: 0,
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: _RightRail(activeTab: activeTab),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -154,8 +158,8 @@ class _GlobeButton extends StatelessWidget {
 
   final bool active;
 
-  static const double _iconPadding = 0;
-  static const double _iconSize = 35;
+  static const double _iconPadding = 5;
+  static const double _iconSize = 45;
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +174,8 @@ class _GlobeButton extends StatelessWidget {
       child: InkWell(
         onTap: () => context.go('/explore'),
         child: Container(
+          height: _iconSize,
+          width: _iconSize,
           padding: const EdgeInsets.all(_iconPadding),
           decoration: BoxDecoration(
             border: Border.all(
@@ -178,11 +184,10 @@ class _GlobeButton extends StatelessWidget {
             ),
             boxShadow: active ? AppDimens.railActiveShadow : null,
           ),
-          child: SvgPicture.asset(
+          child: Image.asset(
             AppImages.globe,
-            width: _iconSize,
-            height: _iconSize,
-            colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+            fit: BoxFit.contain,
+            color: iconColor,
           ),
         ),
       ),

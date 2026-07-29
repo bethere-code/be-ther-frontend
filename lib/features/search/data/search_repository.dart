@@ -11,6 +11,7 @@ class SearchRepository {
     required String query,
     String? country,
     int skip = 0,
+    CancelToken? cancelToken,
   }) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return SearchPage.empty();
@@ -23,6 +24,7 @@ class SearchRepository {
           if (country != null && country.isNotEmpty) 'country': country,
           'skip': skip,
         },
+        cancelToken: cancelToken,
       );
 
       final body = response.data;
@@ -33,8 +35,9 @@ class SearchRepository {
       if (data is! Map<String, dynamic>) {
         throw Exception('Invalid search response');
       }
-      return SearchPage.fromJson(data, query: trimmed);
+      return SearchPage.fromJson(data);
     } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) rethrow;
       final data = e.response?.data;
       if (data is Map<String, dynamic>) {
         final err = data['error'];

@@ -132,26 +132,47 @@ class ExploreEvent {
   factory ExploreEvent.fromJson(Map<String, dynamic> json) {
     final id =
         json['postId']?.toString() ?? json['_id']?.toString() ?? '';
-    final dateRaw = json['date'] as String?;
-    final timeRaw = json['time']?.toString();
+    final details = json['eventDetails'] is Map<String, dynamic>
+        ? json['eventDetails'] as Map<String, dynamic>
+        : null;
+
+    // Explore API uses `title`/`date`/`venue`; post/search fallbacks use
+    // `location` and nested `eventDetails`.
+    final title = _nullableTrim(json['title'] as String?) ??
+        _nullableTrim(json['location'] as String?) ??
+        '';
+    final dateRaw = (json['date'] as String?) ??
+        (details?['date'] as String?);
+    final timeRaw =
+        json['time']?.toString() ?? details?['time']?.toString();
+    final venue = _nullableTrim(json['venue'] as String?) ??
+        _nullableTrim(details?['venue'] as String?);
+    final ticketUrl = _nullableTrim(json['ticketUrl'] as String?) ??
+        _nullableTrim(details?['ticketUrl'] as String?);
+
     final apiPast = json['isPast'] ?? json['isEventPast'];
     final isPast = apiPast is bool
         ? apiPast
         : EventDateUtils.isEventPast(dateRaw: dateRaw, timeRaw: timeRaw);
 
+    final likesFallback = (json['likesCount'] as num?)?.toInt();
+    final attendees = (json['attendees'] as num?)?.toInt() ??
+        likesFallback ??
+        0;
+
     return ExploreEvent(
       id: id,
-      title: json['title'] as String? ?? '',
+      title: title,
       imageUrl: json['image'] as String? ?? json['imageUrl'] as String? ?? '',
       place: _nullableTrim(json['place'] as String?),
       country: _nullableTrim(json['country'] as String?),
-      venue: _nullableTrim(json['venue'] as String?),
+      venue: venue,
       dateRaw: dateRaw,
       time: _nullableTrim(timeRaw),
-      ticketUrl: _nullableTrim(json['ticketUrl'] as String?),
+      ticketUrl: ticketUrl,
       caption: json['caption'] as String?,
-      attendees: (json['attendees'] as num?)?.toInt() ?? 0,
-      trending: json['trending'] as bool? ?? false,
+      attendees: attendees,
+      trending: json['trending'] as bool? ?? attendees >= 5,
       status: json['status'] as String? ?? '',
       author: ExploreAuthor.tryParse(json['authorId'] ?? json['author']),
       liked: json['liked'] as bool? ?? false,
