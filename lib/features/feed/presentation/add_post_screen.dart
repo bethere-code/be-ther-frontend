@@ -823,14 +823,14 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 16),
-                                _PrivacyToggle(
-                                  isPrivate: _private,
-                                  onChanged: (v) {
-                                    _unfocus();
-                                    setState(() => _private = v);
-                                  },
-                                ),
-                                const SizedBox(height: 16),
+                                // _PrivacyToggle(
+                                //   isPrivate: _private,
+                                //   onChanged: (v) {
+                                //     _unfocus();
+                                //     setState(() => _private = v);
+                                //   },
+                                // ),
+                                // const SizedBox(height: 16),
                                 const _SectionLabel('TICKET URL (OPTIONAL)'),
                                 const SizedBox(height: 8),
                                 TextField(
@@ -1198,6 +1198,7 @@ class _BrightSwitch extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _PrivacyToggle extends StatelessWidget {
   const _PrivacyToggle({required this.isPrivate, required this.onChanged});
 

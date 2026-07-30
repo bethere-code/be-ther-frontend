@@ -15,12 +15,15 @@ import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../core/design/widgets/expandable_caption.dart';
 import '../../../core/design/widgets/post_interaction_row.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
+import 'widgets/feed_attendees_sheet.dart';
 import 'widgets/feed_permissions_coordinator.dart';
 import 'widgets/feed_post_report_flow.dart';
 import '../../../core/routing/app_route_observer.dart';
 import '../../../core/utils/event_date_utils.dart';
 import '../../../core/utils/link_utils.dart';
+import '../../../core/utils/popup_menu_utils.dart';
 import '../../../core/utils/post_author.dart';
+import '../../auth/presentation/auth_notifier.dart';
 import '../../profile/presentation/profile_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
 import 'add_post_screen.dart';
@@ -120,6 +123,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   }
 
   void _onScroll() {
+    dismissOpenPopupMenus(context);
+    if (!_scrollController.hasClients) return;
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 500) {
       _loadMore();
@@ -394,30 +399,54 @@ class _FeedCard extends ConsumerStatefulWidget {
 
 class _FeedCardState extends ConsumerState<_FeedCard> {
   late bool _inCalendar;
+  late int _attendeesCount;
   bool _isCalendarLoading = false;
   String? _calendarError;
 
   @override
   void initState() {
     super.initState();
-    _syncCalendarFromItem();
+    _syncFromItem();
   }
 
   @override
   void didUpdateWidget(covariant _FeedCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.item['inCalendar'] != widget.item['inCalendar']) {
-      _syncCalendarFromItem();
+    if (oldWidget.item['inCalendar'] != widget.item['inCalendar'] ||
+        oldWidget.item['calendarCount'] != widget.item['calendarCount']) {
+      _syncFromItem();
     }
   }
 
-  void _syncCalendarFromItem() {
+  void _syncFromItem() {
     _inCalendar = widget.item['inCalendar'] as bool? ?? false;
+    _attendeesCount = (widget.item['calendarCount'] as num?)?.toInt() ?? 0;
+  }
+
+  bool get _isOwnPost {
+    final me = ref.read(authNotifierProvider).user;
+    if (me == null) return false;
+    final myId = me['_id']?.toString() ?? me['id']?.toString() ?? '';
+    final myUsername = (me['username'] as String?)?.trim() ?? '';
+    final author = readPostAuthor(widget.item);
+    final authorId =
+        author['_id']?.toString() ?? author['id']?.toString() ?? '';
+    final authorUsername = (author['username'] as String?)?.trim() ?? '';
+    if (myId.isNotEmpty && authorId.isNotEmpty && myId == authorId) {
+      return true;
+    }
+    if (myUsername.isNotEmpty &&
+        authorUsername.isNotEmpty &&
+        myUsername == authorUsername) {
+      return true;
+    }
+    return false;
   }
 
   Future<void> _handleCalendarToggle(String postId) async {
-    if (postId.isEmpty || _isCalendarLoading) return;
+    if (postId.isEmpty || _isCalendarLoading || _isOwnPost) return;
 
+    final wasIn = _inCalendar;
     setState(() {
       _isCalendarLoading = true;
       _calendarError = null;
@@ -428,7 +457,14 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
           .read(postsRepositoryProvider)
           .toggleCalendar(postId);
       if (mounted) {
-        setState(() => _inCalendar = inCalendar);
+        setState(() {
+          _inCalendar = inCalendar;
+          if (wasIn && !inCalendar) {
+            _attendeesCount = (_attendeesCount - 1).clamp(0, 1 << 30);
+          } else if (!wasIn && inCalendar) {
+            _attendeesCount += 1;
+          }
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -441,6 +477,15 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
         setState(() => _isCalendarLoading = false);
       }
     }
+  }
+
+  void _openAttendees(String postId) {
+    if (postId.isEmpty) return;
+    showFeedAttendeesSheet(
+      context: context,
+      postId: postId,
+      initialCount: _attendeesCount,
+    );
   }
 
   @override
@@ -485,7 +530,7 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(8),
             child: Row(
               children: [
                 AuthorAvatar(
@@ -627,10 +672,15 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
               details,
               isPast: isPast,
               ticketUrl: ticketUrl,
-              inCalendar: _inCalendar,
+              inCalendar: _isOwnPost ? true : _inCalendar,
+              isOwnPost: _isOwnPost,
+              attendeesCount: _attendeesCount,
               isLoading: _isCalendarLoading,
               error: _calendarError,
-              onCalendarToggle: () => _handleCalendarToggle(id),
+              onCalendarToggle: _isOwnPost
+                  ? null
+                  : () => _handleCalendarToggle(id),
+              onAttendeesTap: () => _openAttendees(id),
             ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -665,18 +715,24 @@ class _EventDetails extends StatelessWidget {
     this.isPast = false,
     this.ticketUrl,
     this.inCalendar = false,
+    this.isOwnPost = false,
+    this.attendeesCount = 0,
     this.isLoading = false,
     this.error,
     this.onCalendarToggle,
+    this.onAttendeesTap,
   });
 
   final Map<String, dynamic> details;
   final bool isPast;
   final String? ticketUrl;
   final bool inCalendar;
+  final bool isOwnPost;
+  final int attendeesCount;
   final bool isLoading;
   final String? error;
   final VoidCallback? onCalendarToggle;
+  final VoidCallback? onAttendeesTap;
 
   static String? _formatDisplayDate(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
@@ -690,18 +746,51 @@ class _EventDetails extends StatelessWidget {
     return trimmed;
   }
 
+  /// Accepts `HH:mm` / `H:mm` (and already-localized strings) → `h:mm AM/PM`.
+  static String? _formatDisplayTime(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final trimmed = raw.trim();
+
+    final twelve = RegExp(
+      r'^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$',
+    ).firstMatch(trimmed);
+    if (twelve != null) {
+      var hour = int.parse(twelve.group(1)!);
+      final minute = twelve.group(2)!;
+      final period = twelve.group(3)!.toUpperCase();
+      hour = hour % 12;
+      if (hour == 0) hour = 12;
+      return '$hour:$minute $period';
+    }
+
+    final twentyFour = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(trimmed);
+    if (twentyFour != null) {
+      var hour = int.parse(twentyFour.group(1)!);
+      final minute = twentyFour.group(2)!;
+      if (hour < 0 || hour > 23) return trimmed;
+      final period = hour >= 12 ? 'PM' : 'AM';
+      hour = hour % 12;
+      if (hour == 0) hour = 12;
+      return '$hour:$minute $period';
+    }
+
+    return trimmed;
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateRaw = details['date'] as String?;
     final time = details['time'] as String?;
     final venue = details['venue'] as String?;
     final displayDate = _formatDisplayDate(dateRaw);
-    final displayTime = time?.trim();
+    final displayTime = _formatDisplayTime(time);
     final displayVenue = venue?.trim();
-    final hasMeta =
-        displayDate != null ||
-        (displayTime != null && displayTime.isNotEmpty) ||
-        (displayVenue != null && displayVenue.isNotEmpty);
+    final hasDateTime =
+        displayDate != null || (displayTime != null && displayTime.isNotEmpty);
+    final hasVenue = displayVenue != null && displayVenue.isNotEmpty;
+    final showAttendees = attendeesCount > 0;
+    final hasMeta = hasDateTime || hasVenue || showAttendees;
+    final showCalendarButton = !isPast && !isOwnPost;
 
     return Container(
       width: double.infinity,
@@ -719,10 +808,10 @@ class _EventDetails extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (hasMeta)
+          if (hasDateTime)
             Wrap(
               spacing: 20,
-              runSpacing: 10,
+              runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 if (displayDate != null)
@@ -735,13 +824,37 @@ class _EventDetails extends StatelessWidget {
                     icon: Icons.schedule_outlined,
                     label: displayTime,
                   ),
-                if (displayVenue != null && displayVenue.isNotEmpty)
-                  _EventDetailMeta(
-                    icon: Icons.place_outlined,
-                    label: displayVenue,
-                  ),
               ],
             ),
+          if (hasVenue) ...[
+            if (hasDateTime) const SizedBox(height: 10),
+            _EventDetailMeta(
+              icon: Icons.place_outlined,
+              label: displayVenue,
+              expanded: true,
+            ),
+          ],
+          if (showAttendees) ...[
+            if (hasDateTime || hasVenue) const SizedBox(height: 10),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onAttendeesTap,
+                child: _EventDetailMeta(
+                  icon: Icons.people_outline,
+                  label: attendeesCount == 1
+                      ? '1 going'
+                      : '$attendeesCount going',
+                  expanded: true,
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: AppColors.secondary,
+                  ),
+                ),
+              ),
+            ),
+          ],
           if (hasMeta) const SizedBox(height: 12),
           if (isPast) ...[
             Container(
@@ -772,34 +885,35 @@ class _EventDetails extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              if (showCalendarButton) const SizedBox(height: 8),
             ],
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: inCalendar
-                      ? AppColors.primary
-                      : AppColors.accent,
-                  foregroundColor: inCalendar
-                      ? AppColors.primaryForeground
-                      : AppColors.accentForeground,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
-                onPressed: isLoading ? null : onCalendarToggle,
-                child: Text(
-                  inCalendar ? 'ADDED TO CALENDAR' : 'ADD TO CALENDAR',
-                  style: AppTextStyles.display(
-                    14,
-                    color: inCalendar
+            if (showCalendarButton)
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: inCalendar
+                        ? AppColors.primary
+                        : AppColors.accent,
+                    foregroundColor: inCalendar
                         ? AppColors.primaryForeground
                         : AppColors.accentForeground,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  onPressed: isLoading ? null : onCalendarToggle,
+                  child: Text(
+                    inCalendar ? 'ADDED TO CALENDAR' : 'ADD TO CALENDAR',
+                    style: AppTextStyles.display(
+                      14,
+                      color: inCalendar
+                          ? AppColors.primaryForeground
+                          : AppColors.accentForeground,
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
           if (error != null) ...[
             const SizedBox(height: 8),
@@ -815,31 +929,51 @@ class _EventDetails extends StatelessWidget {
 }
 
 class _EventDetailMeta extends StatelessWidget {
-  const _EventDetailMeta({required this.icon, required this.label});
+  const _EventDetailMeta({
+    required this.icon,
+    required this.label,
+    this.expanded = false,
+    this.trailing,
+  });
 
   final IconData icon;
   final String label;
+  final bool expanded;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
+    final labelText = Text(
+      label,
+      style: AppTextStyles.body(
+        13,
+        color: AppColors.secondary,
+        weight: FontWeight.w700,
+      ),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
+
+    if (!expanded) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: AppColors.secondary),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: labelText,
+          ),
+        ],
+      );
+    }
+
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 16, color: AppColors.secondary),
         const SizedBox(width: 6),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 200),
-          child: Text(
-            label,
-            style: AppTextStyles.body(
-              13,
-              color: AppColors.secondary,
-              weight: FontWeight.w700,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
+        Expanded(child: labelText),
+        if (trailing != null) ...[const SizedBox(width: 4), trailing!],
       ],
     );
   }

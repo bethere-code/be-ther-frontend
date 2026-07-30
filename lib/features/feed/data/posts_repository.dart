@@ -109,6 +109,33 @@ class PostsRepository {
     }
   }
 
+  Future<AttendeesPage> fetchAttendees({
+    required String postId,
+    int skip = 0,
+  }) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/v1/posts/$postId/attendees',
+        queryParameters: {'skip': skip},
+      );
+      final data = _extractData(
+        res.data,
+        fallbackMessage: 'Failed to load attendees',
+      );
+      final items = (data['items'] as List<dynamic>? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .toList(growable: false);
+      final total = (data['total'] as num?)?.toInt() ?? items.length;
+      final nextSkipRaw = data['nextSkip'];
+      final nextSkip = nextSkipRaw is int
+          ? nextSkipRaw
+          : int.tryParse('$nextSkipRaw');
+      return AttendeesPage(items: items, total: total, nextSkip: nextSkip);
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to load attendees'));
+    }
+  }
+
   Future<String> createPost(Map<String, dynamic> payload) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>('/api/v1/posts', data: payload);
@@ -203,6 +230,11 @@ class PostsRepository {
         final message = error['message']?.toString();
         if (message != null && message.isNotEmpty) return message;
       }
+      // Fastify default 404: { error: "Not Found", message: "Route GET:..." }
+      final message = data['message']?.toString();
+      if (message != null && message.isNotEmpty && message.startsWith('Route ')) {
+        return 'Not Found';
+      }
       final flat = error?.toString();
       if (flat != null && flat.isNotEmpty && flat != 'null') return flat;
     }
@@ -222,5 +254,17 @@ class FeedPage {
   FeedPage({required this.items, required this.nextSkip});
 
   final List<Map<String, dynamic>> items;
+  final int? nextSkip;
+}
+
+class AttendeesPage {
+  AttendeesPage({
+    required this.items,
+    required this.total,
+    this.nextSkip,
+  });
+
+  final List<Map<String, dynamic>> items;
+  final int total;
   final int? nextSkip;
 }
