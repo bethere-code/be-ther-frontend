@@ -30,6 +30,7 @@ class ExploreScreen extends ConsumerWidget {
       },
       child: AppShell(
         activeTab: ShellTab.explore,
+        showRail: true,
         header: PreferredSize(
           preferredSize: const Size.fromHeight(56),
           child: Container(

@@ -85,29 +85,54 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const Divider(height: 1, thickness: AppDimens.borderThick, color: AppColors.border),
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text(
+                  'CALENDAR VIEW',
+                  style: AppTextStyles.display(
+                    13,
+                    color: AppColors.mutedForeground,
+                    letterSpacing: 0.08,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 child: Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton(
-                        onPressed: () async {
+                      child: _CalendarViewButton(
+                        label: 'FULL CALENDAR',
+                        selected: _calendarView == 'full',
+                        onTap: () async {
+                          if (_calendarView == 'full') return;
                           setState(() => _calendarView = 'full');
                           await _save();
                         },
-                        child: const Text('FULL CALENDAR'),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: OutlinedButton(
-                        onPressed: () async {
+                      child: _CalendarViewButton(
+                        label: 'EVENTS ONLY',
+                        selected: _calendarView == 'events-only',
+                        onTap: () async {
+                          if (_calendarView == 'events-only') return;
                           setState(() => _calendarView = 'events-only');
                           await _save();
                         },
-                        child: const Text('EVENTS ONLY'),
                       ),
                     ),
                   ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Text(
+                  'Events only lists every event on your profile — past and upcoming.',
+                  style: AppTextStyles.body(
+                    12,
+                    color: AppColors.mutedForeground,
+                  ),
                 ),
               ),
               _sectionTitle('NOTIFICATIONS'),
@@ -196,18 +221,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _save() async {
     try {
-      await ref.read(userRepositoryProvider).patchMe({
+      final updated = await ref.read(userRepositoryProvider).patchMe({
         'settings': {
           'isPrivateProfile': _private,
           'pushEnabled': _push,
           'calendarView': _calendarView,
         },
       });
+      ref.read(authNotifierProvider.notifier).updateUser(updated);
       ref.invalidate(profileMeProvider);
+      ref.invalidate(profileViewProvider(null));
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not save settings')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save settings')),
+        );
       }
     }
+  }
+}
+
+class _CalendarViewButton extends StatelessWidget {
+  const _CalendarViewButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = selected ? AppColors.accent : AppColors.card;
+    final fg = selected ? AppColors.accentForeground : AppColors.primary;
+    return SizedBox(
+      height: 48,
+      child: Material(
+        color: bg,
+        child: InkWell(
+          onTap: onTap,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: AppColors.border,
+                width: selected ? AppDimens.borderThick : AppDimens.border,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.display(
+                  13,
+                  color: fg,
+                  letterSpacing: 0.04,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

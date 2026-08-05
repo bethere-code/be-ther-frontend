@@ -17,6 +17,7 @@ import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/be_ther_buttons.dart';
+import '../../../core/media/default_event_image.dart';
 import '../../../core/media/ticket_link_preview.dart';
 import '../../../core/network/api_client.dart';
 import '../data/places_repository.dart';
@@ -413,11 +414,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     return validate();
   }
 
-  bool _showImageError() => _attemptedSubmit && _imagePath == null;
-
   bool _hasValidationErrors() {
-    return _imagePath == null ||
-        _validateEventName(_eventName.text) != null ||
+    return _validateEventName(_eventName.text) != null ||
         _validateLocation() != null ||
         _validateDate() != null ||
         _validateDescription(_description.text) != null ||
@@ -503,22 +501,21 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     await _tryCaptureUserLatLng();
     if (!mounted) return;
 
-    if (!await File(_imagePath!).exists()) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Photo file is missing. Please select it again.'),
-        ),
-      );
-      return;
-    }
-
     final ticketUrl = _normalizeTicketUrl();
     setState(() => _busy = true);
 
     File? compressedFile;
+    File? defaultCoverFile;
     try {
-      compressedFile = await _compressPhoto(_imagePath!);
+      final String imagePath;
+      if (_imagePath != null && await File(_imagePath!).exists()) {
+        imagePath = _imagePath!;
+      } else {
+        defaultCoverFile = await buildDefaultEventCoverFile();
+        imagePath = defaultCoverFile.path;
+      }
+
+      compressedFile = await _compressPhoto(imagePath);
       final dio = ref.read(apiClientProvider);
       final posts = PostsRepository(dio);
       final url = await posts.uploadImage(compressedFile.path);
@@ -540,7 +537,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         'imageUrl': url,
         'caption': _description.text.trim(),
         'isPrivate': _private,
-        'addToCalendar': _isGoing,
+        'addToCalendar': true,
         if (_taggedUsers.isNotEmpty) 'taggedUsernames': _taggedUsers,
         'eventDetails': eventDetails,
       });
@@ -561,9 +558,10 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     } finally {
-      if (compressedFile != null) {
+      for (final file in [compressedFile, defaultCoverFile]) {
+        if (file == null) continue;
         try {
-          if (await compressedFile.exists()) await compressedFile.delete();
+          if (await file.exists()) await file.delete();
         } catch (_) {}
       }
       if (mounted) setState(() => _busy = false);
@@ -899,7 +897,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                   ),
                                 ],
                                 const SizedBox(height: 16),
-                                const _SectionLabel('EVENT PHOTO'),
+                                const _SectionLabel('EVENT PHOTO (OPTIONAL)'),
                                 const SizedBox(height: 8),
                                 AspectRatio(
                                   aspectRatio: 16 / 7,
@@ -912,12 +910,11 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                           decoration: BoxDecoration(
                                             color: AppColors.muted,
                                             border: Border.all(
-                                              color: _showImageError()
-                                                  ? AppColors.destructive
-                                                  : AppColors.border,
+                                              color: AppColors.border,
                                               width: _fieldBorder,
                                             ),
                                           ),
+                                          clipBehavior: Clip.hardEdge,
                                           child: _imagePath == null
                                               ? Column(
                                                   mainAxisAlignment:
@@ -977,17 +974,15 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                     ],
                                   ),
                                 ),
-                                if (_showImageError()) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Event photo is required',
-                                    style: AppTextStyles.body(
-                                      12,
-                                      color: AppColors.destructive,
-                                      weight: FontWeight.w600,
-                                    ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Optional — if you skip this, we’ll use the BeTher logo as the post image.',
+                                  style: AppTextStyles.body(
+                                    12,
+                                    color: AppColors.mutedForeground,
+                                    weight: FontWeight.w500,
                                   ),
-                                ],
+                                ),
                                 const SizedBox(height: 16),
                                 _EventStatusToggle(
                                   isGoing: _isGoing,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/background_tasks/event_view_recorder.dart';
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
@@ -9,7 +10,10 @@ import '../../../../core/design/widgets/author_avatar.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../../core/utils/link_utils.dart';
 import '../../../auth/presentation/auth_notifier.dart';
+import '../../../feed/presentation/calendar_status_store.dart';
 import '../../../feed/presentation/feed_providers.dart';
+import '../../../feed/presentation/widgets/calendar_rsvp_sheet.dart';
+import '../../../profile/presentation/profile_providers.dart';
 import '../../../profile/presentation/profile_screen.dart';
 import '../../domain/explore_event.dart';
 
@@ -42,6 +46,7 @@ class _ExploreEventSheet extends ConsumerStatefulWidget {
 
 class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
   late bool _inCalendar;
+  String? _calendarStatus;
   bool _calendarBusy = false;
 
   ExploreEvent get event => widget.event;
@@ -49,7 +54,26 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
   @override
   void initState() {
     super.initState();
-    _inCalendar = event.inCalendar;
+    final api = event.calendarStatus ?? (event.inCalendar ? 'going' : null);
+    _calendarStatus = api;
+    _inCalendar = api != null;
+    // Explore + search: count only when this details sheet opens.
+    // If the same post was already seen in the feed this session, enqueue is a no-op.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || event.postId.isEmpty) return;
+      final me = ref.read(authNotifierProvider).user;
+      if (_isMine(me)) return;
+      final fromStore = ref
+          .read(calendarStatusStoreProvider.notifier)
+          .statusFor(event.postId, fallback: _calendarStatus);
+      if (fromStore != _calendarStatus) {
+        setState(() {
+          _calendarStatus = fromStore;
+          _inCalendar = fromStore != null;
+        });
+      }
+      ref.read(eventViewRecorderProvider).enqueue(event.postId);
+    });
   }
 
   bool _isMine(Map<String, dynamic>? me) {
@@ -66,14 +90,46 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
     return myUsername.isNotEmpty && myUsername == author.username;
   }
 
-  Future<void> _toggleCalendar() async {
-    if (event.postId.isEmpty || _calendarBusy) return;
+  Future<void> _handleCalendarTap() async {
+    if (event.postId.isEmpty || _calendarBusy || event.isPast) return;
+    final choice = await showCalendarRsvpSheet(
+      context: context,
+      alreadyOnCalendar: _inCalendar,
+      currentStatus: _calendarStatus,
+    );
+    if (choice == null || !mounted) return;
+
+    final status = switch (choice) {
+      CalendarRsvpChoice.interested => 'interested',
+      CalendarRsvpChoice.going => 'going',
+      CalendarRsvpChoice.none => 'none',
+    };
+
     setState(() => _calendarBusy = true);
     try {
-      final next = await ref
+      final data = await ref
           .read(postsRepositoryProvider)
-          .toggleCalendar(event.postId);
-      if (mounted) setState(() => _inCalendar = next);
+          .setCalendarStatus(postId: event.postId, status: status);
+      final cleared = status == 'none';
+      final nextStatus = cleared ? null : data['calendarStatus'] as String?;
+      final inCalendar = cleared
+          ? false
+          : (data['inCalendar'] as bool? ?? (nextStatus != null));
+      final resolved = inCalendar ? (nextStatus ?? status) : null;
+      ref
+          .read(calendarStatusStoreProvider.notifier)
+          .setStatus(event.postId, resolved);
+      final meUsername =
+          ref.read(authNotifierProvider).user?['username'] as String?;
+      if (meUsername != null && meUsername.isNotEmpty) {
+        ref.invalidate(profileCalendarProvider(meUsername));
+      }
+      if (mounted) {
+        setState(() {
+          _calendarStatus = resolved;
+          _inCalendar = resolved != null;
+        });
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -318,41 +374,41 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                               ),
                             ),
                           )
-                        else
+                        else if (!isMine)
                           SizedBox(
                             width: double.infinity,
                             height: 44,
                             child: FilledButton(
                               style: FilledButton.styleFrom(
-                                backgroundColor: _inCalendar
-                                    ? AppColors.primary
-                                    : AppColors.accent,
-                                foregroundColor: _inCalendar
-                                    ? AppColors.primaryForeground
-                                    : AppColors.accentForeground,
+                                backgroundColor:
+                                    calendarButtonBackground(_calendarStatus),
+                                foregroundColor:
+                                    calendarButtonForeground(_calendarStatus),
                                 shape: const RoundedRectangleBorder(
                                   borderRadius: BorderRadius.zero,
                                 ),
                               ),
-                              onPressed: _calendarBusy ? null : _toggleCalendar,
+                              onPressed: _calendarBusy
+                                  ? null
+                                  : _handleCalendarTap,
                               child: _calendarBusy
-                                  ? const SizedBox(
+                                  ? SizedBox(
                                       width: 20,
                                       height: 20,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        color: AppColors.accentForeground,
+                                        color: calendarButtonForeground(
+                                          _calendarStatus,
+                                        ),
                                       ),
                                     )
                                   : Text(
-                                      _inCalendar
-                                          ? 'ADDED TO CALENDAR'
-                                          : 'ADD TO CALENDAR',
+                                      calendarButtonLabel(_calendarStatus),
                                       style: AppTextStyles.display(
                                         14,
-                                        color: _inCalendar
-                                            ? AppColors.primaryForeground
-                                            : AppColors.accentForeground,
+                                        color: calendarButtonForeground(
+                                          _calendarStatus,
+                                        ),
                                       ),
                                     ),
                             ),

@@ -119,169 +119,27 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
   }
 
   Future<void> _editName(String current) async {
-    final controller = TextEditingController(text: current);
-    String? error;
-
-    try {
-      final saved = await showModalBottomSheet<bool>(
+    final saved = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
-          child: StatefulBuilder(
-            builder: (ctx, setSheetState) {
-              return SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('NAME', style: AppTextStyles.display(20, color: AppColors.secondary)),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: controller,
-                        maxLength: 80,
-                        autofocus: true,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: InputDecoration(
-                          hintText: 'Your name',
-                          errorText: error,
-                          counterText: '',
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text('CANCEL'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: FilledButton(
-                              onPressed: _saving
-                                  ? null
-                                  : () {
-                                      final name = controller.text.trim();
-                                      if (name.isEmpty) {
-                                        setSheetState(() => error = 'Name is required');
-                                        return;
-                                      }
-                                      Navigator.pop(ctx, true);
-                                    },
-                              child: const Text('SAVE'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
+      builder: (ctx) => _NameEditSheet(initial: current, saving: _saving),
     );
-
-      if (saved != true || !mounted) return;
-      final name = controller.text.trim();
-      if (name == current) return;
-      await _save({'displayName': name});
-    } finally {
-      controller.dispose();
-    }
+    if (saved == null || !mounted) return;
+    final name = saved.trim();
+    if (name.isEmpty || name == current) return;
+    await _save({'displayName': name});
   }
 
   Future<void> _editBio(String current) async {
-    final controller = TextEditingController(text: current);
-    String? error;
-
-    try {
-      final saved = await showModalBottomSheet<bool>(
+    final saved = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
-          child: StatefulBuilder(
-            builder: (ctx, setSheetState) {
-              final len = controller.text.length;
-              return SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('BIO', style: AppTextStyles.display(20, color: AppColors.secondary)),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: controller,
-                        maxLength: 200,
-                        maxLines: 4,
-                        autofocus: true,
-                        decoration: InputDecoration(
-                          hintText: 'Write a short bio…',
-                          errorText: error,
-                          alignLabelWithHint: true,
-                        ),
-                        onChanged: (_) => setSheetState(() {}),
-                      ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          '$len/200',
-                          style: AppTextStyles.body(12, color: AppColors.mutedForeground),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text('CANCEL'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: FilledButton(
-                              onPressed: _saving
-                                  ? null
-                                  : () {
-                                      if (controller.text.length > 200) {
-                                        setSheetState(() => error = 'Bio is too long');
-                                        return;
-                                      }
-                                      Navigator.pop(ctx, true);
-                                    },
-                              child: const Text('SAVE'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
+      builder: (ctx) => _BioEditSheet(initial: current, saving: _saving),
     );
-
-      if (saved != true || !mounted) return;
-      final bio = controller.text.trim();
-      if (bio == current) return;
-      await _save({'bio': bio});
-    } finally {
-      controller.dispose();
-    }
+    if (saved == null || !mounted) return;
+    final bio = saved.trim();
+    if (bio == current) return;
+    await _save({'bio': bio});
   }
 
   @override
@@ -405,6 +263,195 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
       error: (e, _) => Padding(
         padding: const EdgeInsets.all(16),
         child: Text('Could not load profile: $e', style: AppTextStyles.body(14, color: AppColors.destructive)),
+      ),
+    );
+  }
+}
+
+class _NameEditSheet extends StatefulWidget {
+  const _NameEditSheet({required this.initial, required this.saving});
+
+  final String initial;
+  final bool saving;
+
+  @override
+  State<_NameEditSheet> createState() => _NameEditSheetState();
+}
+
+class _NameEditSheetState extends State<_NameEditSheet> {
+  late final TextEditingController _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initial);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'NAME',
+                style: AppTextStyles.display(20, color: AppColors.secondary),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _controller,
+                maxLength: 80,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  hintText: 'Your name',
+                  errorText: _error,
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('CANCEL'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: widget.saving
+                          ? null
+                          : () {
+                              final name = _controller.text.trim();
+                              if (name.isEmpty) {
+                                setState(() => _error = 'Name is required');
+                                return;
+                              }
+                              Navigator.pop(context, name);
+                            },
+                      child: const Text('SAVE'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BioEditSheet extends StatefulWidget {
+  const _BioEditSheet({required this.initial, required this.saving});
+
+  final String initial;
+  final bool saving;
+
+  @override
+  State<_BioEditSheet> createState() => _BioEditSheetState();
+}
+
+class _BioEditSheetState extends State<_BioEditSheet> {
+  late final TextEditingController _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initial);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final len = _controller.text.length;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'BIO',
+                style: AppTextStyles.display(20, color: AppColors.secondary),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _controller,
+                maxLength: 200,
+                maxLines: 4,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Write a short bio…',
+                  errorText: _error,
+                  alignLabelWithHint: true,
+                  // Hide Flutter’s built-in counter — we render one below.
+                  counterText: '',
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '$len/200',
+                  style: AppTextStyles.body(
+                    12,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('CANCEL'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: widget.saving
+                          ? null
+                          : () {
+                              if (_controller.text.length > 200) {
+                                setState(() => _error = 'Bio is too long');
+                                return;
+                              }
+                              Navigator.pop(context, _controller.text);
+                            },
+                      child: const Text('SAVE'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

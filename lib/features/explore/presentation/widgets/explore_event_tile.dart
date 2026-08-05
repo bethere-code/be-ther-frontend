@@ -6,7 +6,11 @@ import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../../core/utils/link_utils.dart';
+import '../../../auth/presentation/auth_notifier.dart';
+import '../../../feed/presentation/calendar_status_store.dart';
 import '../../../feed/presentation/feed_providers.dart';
+import '../../../feed/presentation/widgets/calendar_rsvp_sheet.dart';
+import '../../../profile/presentation/profile_providers.dart';
 import '../../domain/explore_event.dart';
 import 'explore_event_sheet.dart';
 
@@ -16,11 +20,13 @@ abstract final class ExploreEventTileLayout {
   static const double ticketButtonSize = 30;
   static const int crossAxisCount = 2;
   static const double gridSpacing = 14;
-  static const double imageMaxHeight = 160;
+  static const double imageMaxHeight = 220;
 
-  /// Width-driven image height, capped so masonry tiles stay compact.
-  static double imageHeight(double tileWidth) =>
-      tileWidth > imageMaxHeight ? imageMaxHeight : tileWidth;
+  /// Slightly taller than square so default covers + event posters fill masonry.
+  static double imageHeight(double tileWidth) {
+    final target = tileWidth * 1.2;
+    return target > imageMaxHeight ? imageMaxHeight : target;
+  }
 }
 
 /// Event card used on Explore and Search masonry grids.
@@ -36,31 +42,75 @@ class ExploreEventTile extends ConsumerStatefulWidget {
 
 class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
   late bool _inCalendar;
+  String? _calendarStatus;
   bool _calendarBusy = false;
 
   @override
   void initState() {
     super.initState();
-    _inCalendar = widget.event.inCalendar;
+    _syncFromEvent();
   }
 
   @override
   void didUpdateWidget(covariant ExploreEventTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.event.inCalendar != widget.event.inCalendar) {
-      _inCalendar = widget.event.inCalendar;
+    if (oldWidget.event.inCalendar != widget.event.inCalendar ||
+        oldWidget.event.calendarStatus != widget.event.calendarStatus ||
+        oldWidget.event.postId != widget.event.postId) {
+      _syncFromEvent();
     }
   }
 
-  Future<void> _toggleCalendar() async {
+  void _syncFromEvent() {
     final postId = widget.event.postId;
-    if (postId.isEmpty || _calendarBusy) return;
+    final api = widget.event.calendarStatus ??
+        (widget.event.inCalendar ? 'going' : null);
+    _calendarStatus = ref
+        .read(calendarStatusStoreProvider.notifier)
+        .statusFor(postId, fallback: api);
+    _inCalendar = _calendarStatus != null;
+  }
+
+  Future<void> _handleCalendarTap() async {
+    final postId = widget.event.postId;
+    if (postId.isEmpty || _calendarBusy || widget.event.isPast) return;
+
+    final choice = await showCalendarRsvpSheet(
+      context: context,
+      alreadyOnCalendar: _inCalendar,
+      currentStatus: _calendarStatus,
+    );
+    if (choice == null || !mounted) return;
+
+    final status = switch (choice) {
+      CalendarRsvpChoice.interested => 'interested',
+      CalendarRsvpChoice.going => 'going',
+      CalendarRsvpChoice.none => 'none',
+    };
+
     setState(() => _calendarBusy = true);
     try {
-      final next = await ref
+      final data = await ref
           .read(postsRepositoryProvider)
-          .toggleCalendar(postId);
-      if (mounted) setState(() => _inCalendar = next);
+          .setCalendarStatus(postId: postId, status: status);
+      final cleared = status == 'none';
+      final nextStatus = cleared ? null : data['calendarStatus'] as String?;
+      final inCalendar = cleared
+          ? false
+          : (data['inCalendar'] as bool? ?? (nextStatus != null));
+      final resolved = inCalendar ? (nextStatus ?? status) : null;
+      ref.read(calendarStatusStoreProvider.notifier).setStatus(postId, resolved);
+      final meUsername =
+          ref.read(authNotifierProvider).user?['username'] as String?;
+      if (meUsername != null && meUsername.isNotEmpty) {
+        ref.invalidate(profileCalendarProvider(meUsername));
+      }
+      if (mounted) {
+        setState(() {
+          _calendarStatus = resolved;
+          _inCalendar = resolved != null;
+        });
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -80,15 +130,22 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
   @override
   Widget build(BuildContext context) {
     final event = widget.event;
+    final store = ref.watch(calendarStatusStoreProvider);
+    final id = event.postId;
+    final apiFallback =
+        event.calendarStatus ?? (event.inCalendar ? 'going' : null);
+    final effectiveStatus = store.containsKey(id)
+        ? store[id]
+        : (_calendarStatus ?? apiFallback);
     final placeShort = event.placeShort;
     final dateLabel = event.formattedDateOnly;
     final timeLabel = event.time?.trim();
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // final imageHeight = ExploreEventTileLayout.imageHeight(
-        //   constraints.maxWidth,
-        // );
+        final imageHeight = ExploreEventTileLayout.imageHeight(
+          constraints.maxWidth,
+        );
         return Material(
           color: AppColors.card,
           clipBehavior: Clip.antiAlias,
@@ -105,7 +162,7 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SizedBox(
-                  height: 124.275,
+                  height: imageHeight,
                   width: double.infinity,
                   child: InkWell(
                     onTap: _openSheet,
@@ -121,7 +178,7 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
                                 type: MaterialType.transparency,
                                 child: BeTherNetworkImage(
                                   url: event.imageUrl,
-                                  fit: BoxFit.contain,
+                                  fit: BoxFit.cover,
                                 ),
                               ),
                             ),
@@ -216,12 +273,12 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
                   child: _ExploreCalendarButton(
-                    inCalendar: _inCalendar,
+                    calendarStatus: effectiveStatus,
                     isPast: event.isPast,
                     loading: _calendarBusy,
                     onPressed: event.postId.isEmpty || event.isPast
                         ? null
-                        : _toggleCalendar,
+                        : _handleCalendarTap,
                   ),
                 ),
               ],
@@ -388,13 +445,13 @@ class _MetaRow extends StatelessWidget {
 
 class _ExploreCalendarButton extends StatelessWidget {
   const _ExploreCalendarButton({
-    required this.inCalendar,
+    required this.calendarStatus,
     required this.isPast,
     required this.loading,
     required this.onPressed,
   });
 
-  final bool inCalendar;
+  final String? calendarStatus;
   final bool isPast;
   final bool loading;
   final VoidCallback? onPressed;
@@ -403,15 +460,11 @@ class _ExploreCalendarButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = isPast
         ? AppColors.muted
-        : (inCalendar ? AppColors.primary : AppColors.accent);
+        : calendarButtonBackground(calendarStatus);
     final fg = isPast
         ? AppColors.mutedForeground
-        : (inCalendar
-              ? AppColors.primaryForeground
-              : AppColors.accentForeground);
-    final label = isPast
-        ? 'PAST EVENT'
-        : (inCalendar ? 'ADDED' : 'ADD TO CALENDAR');
+        : calendarButtonForeground(calendarStatus);
+    final label = isPast ? 'PAST EVENT' : calendarTileLabel(calendarStatus);
 
     return SizedBox(
       height: ExploreEventTileLayout.calendarHeight,

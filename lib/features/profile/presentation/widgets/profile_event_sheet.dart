@@ -8,11 +8,15 @@ import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/author_avatar.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../../core/design/widgets/expandable_caption.dart';
 import '../../../../core/design/widgets/post_more_menu_button.dart';
 import '../../../../core/utils/event_date_utils.dart';
 import '../../../../core/utils/link_utils.dart';
 import '../../../explore/domain/explore_event.dart';
+import '../../../feed/presentation/calendar_status_store.dart';
 import '../../../feed/presentation/feed_providers.dart';
+import '../../../feed/presentation/widgets/calendar_rsvp_sheet.dart';
+import '../../../feed/presentation/widgets/feed_attendees_sheet.dart';
 import '../../../profile/presentation/profile_screen.dart';
 
 class ProfileCalendarEvent {
@@ -27,12 +31,17 @@ class ProfileCalendarEvent {
     this.time,
     this.country,
     this.place,
+    this.address,
+    this.calendarCount = 0,
+    this.viewCount = 0,
     this.author,
     this.bookmarked = false,
     this.source = 'authored',
     this.isAuthoredByMe = false,
     this.inCalendar = false,
+    this.calendarStatus,
     this.hiddenOnProfile = false,
+    this.caption,
   });
 
   final String postId;
@@ -45,12 +54,18 @@ class ProfileCalendarEvent {
   final String? time;
   final String? country;
   final String? place;
+  /// Full venue / Places address when available.
+  final String? address;
+  final int calendarCount;
+  final int viewCount;
   final ExploreAuthor? author;
   final bool bookmarked;
   final String source;
   final bool isAuthoredByMe;
   final bool inCalendar;
+  final String? calendarStatus;
   final bool hiddenOnProfile;
+  final String? caption;
 
   String get title => location;
 
@@ -72,7 +87,50 @@ class ProfileCalendarEvent {
     return '';
   }
 
+  /// Prefer full address for detail sheets; fall back to place chip label.
+  String get fullLocationLabel {
+    final full = address?.trim() ?? '';
+    if (full.isNotEmpty) return full;
+    final venueLabel = venue.trim();
+    if (venueLabel.isNotEmpty &&
+        venueLabel.toLowerCase() != title.toLowerCase()) {
+      return venueLabel;
+    }
+    return placeLabel;
+  }
+
   String get formattedDate => DateFormat('MMM d, y').format(date);
+
+  /// `HH:mm` / already-localized → `h:mm AM/PM`.
+  String? get formattedTime {
+    final raw = time?.trim();
+    if (raw == null || raw.isEmpty) return null;
+
+    final twelve = RegExp(
+      r'^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$',
+    ).firstMatch(raw);
+    if (twelve != null) {
+      var hour = int.parse(twelve.group(1)!);
+      final minute = twelve.group(2)!;
+      final period = twelve.group(3)!.toUpperCase();
+      hour = hour % 12;
+      if (hour == 0) hour = 12;
+      return '$hour:$minute $period';
+    }
+
+    final twentyFour = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(raw);
+    if (twentyFour != null) {
+      var hour = int.parse(twentyFour.group(1)!);
+      final minute = twentyFour.group(2)!;
+      if (hour < 0 || hour > 23) return raw;
+      final period = hour >= 12 ? 'PM' : 'AM';
+      hour = hour % 12;
+      if (hour == 0) hour = 12;
+      return '$hour:$minute $period';
+    }
+
+    return raw;
+  }
 
   bool get hasTicketUrl =>
       !isPast && ticketUrl != null && ticketUrl!.trim().isNotEmpty;
@@ -90,16 +148,28 @@ class ProfileCalendarEvent {
       time: json['time'] as String?,
       country: json['country'] as String?,
       place: json['place'] as String?,
+      address: json['address'] as String?,
+      calendarCount: (json['calendarCount'] as num?)?.toInt() ?? 0,
+      viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
       author: ExploreAuthor.tryParse(json['authorId'] ?? json['author']),
       bookmarked: json['bookmarked'] as bool? ?? false,
       source: json['source'] as String? ?? 'authored',
       isAuthoredByMe: json['isAuthoredByMe'] as bool? ?? false,
       inCalendar: json['inCalendar'] as bool? ?? false,
+      calendarStatus: json['calendarStatus'] as String? ??
+          ((json['inCalendar'] as bool? ?? false) ? 'going' : null),
       hiddenOnProfile: json['hiddenOnProfile'] as bool? ?? false,
+      caption: (json['caption'] as String?)?.trim().isNotEmpty == true
+          ? (json['caption'] as String).trim()
+          : null,
     );
   }
 
-  ProfileCalendarEvent copyWith({bool? bookmarked, bool? inCalendar}) {
+  ProfileCalendarEvent copyWith({
+    bool? bookmarked,
+    bool? inCalendar,
+    String? calendarStatus,
+  }) {
     return ProfileCalendarEvent(
       postId: postId,
       date: date,
@@ -111,12 +181,17 @@ class ProfileCalendarEvent {
       time: time,
       country: country,
       place: place,
+      address: address,
+      calendarCount: calendarCount,
+      viewCount: viewCount,
       author: author,
       bookmarked: bookmarked ?? this.bookmarked,
       source: source,
       isAuthoredByMe: isAuthoredByMe,
       inCalendar: inCalendar ?? this.inCalendar,
+      calendarStatus: calendarStatus ?? this.calendarStatus,
       hiddenOnProfile: hiddenOnProfile,
+      caption: caption,
     );
   }
 
@@ -124,7 +199,7 @@ class ProfileCalendarEvent {
       EventDateUtils.isEventPastFromDateTime(date, timeRaw: time);
 
   bool get canMarkNotGoing =>
-      !isPast && (inCalendar || (isAuthoredByMe && status == 'going'));
+      !isPast && inCalendar && !isAuthoredByMe;
 }
 
 Future<void> showProfileEventSheet({
@@ -179,7 +254,14 @@ class _ProfileEventSheet extends ConsumerStatefulWidget {
 class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   late bool _bookmarked;
   late bool _inCalendar;
+  String? _calendarStatus;
   bool _busy = false;
+
+  /// One-shot attendees load for own events (no polling / no repeat calls).
+  List<Map<String, dynamic>> _goingPeople = const [];
+  int _goingCount = 0;
+  bool _goingLoading = false;
+  bool _goingLoaded = false;
 
   ProfileCalendarEvent get event => widget.event;
 
@@ -187,7 +269,67 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   void initState() {
     super.initState();
     _bookmarked = event.bookmarked;
-    _inCalendar = event.inCalendar;
+    final fromStore = ref
+        .read(calendarStatusStoreProvider.notifier)
+        .statusFor(
+          event.postId,
+          fallback: event.calendarStatus ??
+              (event.isAuthoredByMe
+                  ? (event.status == 'interested' ? 'interested' : 'going')
+                  : (event.inCalendar ? 'going' : null)),
+        );
+    _calendarStatus = fromStore;
+    _inCalendar = event.isAuthoredByMe || _calendarStatus != null;
+    _goingCount = event.calendarCount;
+    if (event.isAuthoredByMe && event.postId.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _loadGoingOnce();
+      });
+    }
+  }
+
+  Future<void> _loadGoingOnce() async {
+    if (_goingLoaded || _goingLoading || event.postId.isEmpty) return;
+    setState(() => _goingLoading = true);
+    try {
+      final page = await ref
+          .read(postsRepositoryProvider)
+          .fetchAttendees(postId: event.postId, skip: 0);
+      if (!mounted) return;
+      setState(() {
+        _goingPeople = page.items;
+        _goingCount = page.total;
+        _goingLoading = false;
+        _goingLoaded = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _goingLoading = false;
+        _goingLoaded = true;
+        // Keep calendarCount from the event if the list call fails.
+        _goingCount = event.calendarCount;
+        _goingPeople = const [];
+      });
+    }
+  }
+
+  void _openGoingPerson(Map<String, dynamic> user) {
+    final username = (user['username'] as String?)?.trim() ?? '';
+    if (username.isEmpty) return;
+    final router = GoRouter.of(context);
+    Navigator.of(context).pop();
+    router.push(ProfileScreen.pathForUser(username));
+  }
+
+  void _openGoingList() {
+    if (event.postId.isEmpty || _goingCount < 1) return;
+    showFeedAttendeesSheet(
+      context: context,
+      postId: event.postId,
+      initialCount: _goingCount,
+    );
   }
 
   /// Owner differs from the profile calendar we're browsing.
@@ -216,12 +358,85 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
 
   Future<void> _toggleCalendar() async {
     if (event.postId.isEmpty || _busy) return;
+    // Authors cannot remove their own event — only switch Interested ↔ Going.
+    if (event.isAuthoredByMe) {
+      await _setOwnerStatus();
+      return;
+    }
+    final choice = await showCalendarRsvpSheet(
+      context: context,
+      alreadyOnCalendar: _inCalendar,
+      currentStatus: _calendarStatus,
+    );
+    if (choice == null || !mounted) return;
+
+    final status = switch (choice) {
+      CalendarRsvpChoice.interested => 'interested',
+      CalendarRsvpChoice.going => 'going',
+      CalendarRsvpChoice.none => 'none',
+    };
+
     setState(() => _busy = true);
     try {
-      final next =
-          await ref.read(postsRepositoryProvider).toggleCalendar(event.postId);
+      final data = await ref
+          .read(postsRepositoryProvider)
+          .setCalendarStatus(postId: event.postId, status: status);
+      final cleared = status == 'none';
+      final nextStatus = cleared ? null : data['calendarStatus'] as String?;
+      final inCalendar = cleared
+          ? false
+          : (data['inCalendar'] as bool? ?? (nextStatus != null));
+      final resolved = inCalendar ? (nextStatus ?? status) : null;
+      ref
+          .read(calendarStatusStoreProvider.notifier)
+          .setStatus(event.postId, resolved);
       if (!mounted) return;
-      setState(() => _inCalendar = next);
+      setState(() {
+        _calendarStatus = resolved;
+        _inCalendar = resolved != null;
+      });
+      widget.onCalendarChanged();
+      // Removed from calendar — leave the sheet so the day cell refreshes.
+      if (cleared && mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _setOwnerStatus() async {
+    final choice = await showCalendarRsvpSheet(
+      context: context,
+      alreadyOnCalendar: true,
+      currentStatus: _calendarStatus ?? 'going',
+      allowRemove: false,
+    );
+    if (choice == null || !mounted) return;
+    if (choice == CalendarRsvpChoice.none) return;
+
+    final status = choice == CalendarRsvpChoice.interested
+        ? 'interested'
+        : 'going';
+    if (status == _calendarStatus) return;
+
+    setState(() => _busy = true);
+    try {
+      final data = await ref
+          .read(postsRepositoryProvider)
+          .setCalendarStatus(postId: event.postId, status: status);
+      final nextStatus = data['calendarStatus'] as String? ?? status;
+      ref
+          .read(calendarStatusStoreProvider.notifier)
+          .setStatus(event.postId, nextStatus);
+      if (!mounted) return;
+      setState(() {
+        _calendarStatus = nextStatus;
+        _inCalendar = true;
+      });
       widget.onCalendarChanged();
     } catch (e) {
       if (!mounted) return;
@@ -305,10 +520,27 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   }
 
   Future<void> _notGoing() async {
-    await _runAction(
-      () => ref.read(postsRepositoryProvider).markNotGoing(event.postId),
-      success: 'Removed from your calendar',
-    );
+    if (event.postId.isEmpty || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(postsRepositoryProvider)
+          .setCalendarStatus(postId: event.postId, status: 'none');
+      ref.read(calendarStatusStoreProvider.notifier).setStatus(event.postId, null);
+      if (!mounted) return;
+      widget.onCalendarChanged();
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Removed from your calendar')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   void _openOwnerProfile() {
@@ -322,8 +554,21 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   @override
   Widget build(BuildContext context) {
     final place = event.placeLabel;
-    final timeLabel = event.time?.trim();
+    final fullLocation = event.fullLocationLabel;
+    final timeLabel = event.formattedTime;
     final author = event.author;
+    final showOwnInsights = event.isAuthoredByMe;
+    final showGoingRow = showOwnInsights && _goingCount >= 1;
+    final showViewsRow = showOwnInsights && event.viewCount > 0;
+    final showOwnerStatusToggle =
+        widget.isOwnProfile && event.isAuthoredByMe && !event.isPast;
+    final showStatusButton = !event.isAuthoredByMe &&
+        !event.isPast &&
+        _inCalendar &&
+        (widget.isOwnProfile || !widget.showWishlist);
+    final caption = event.caption?.trim() ?? '';
+    final locationForShare =
+        fullLocation.isNotEmpty ? fullLocation : (place.isEmpty ? null : place);
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -540,6 +785,14 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                   event.title,
                   style: AppTextStyles.display(24, color: AppColors.secondary),
                 ),
+                if (caption.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ExpandableCaption(
+                    key: ValueKey('profile-caption-${event.postId}'),
+                    text: caption,
+                    trimLines: 2,
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
@@ -570,16 +823,86 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                             ),
                         ],
                       ),
-                      if (place.isNotEmpty) ...[
+                      if (fullLocation.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         _MetaChip(
                           icon: Icons.place_outlined,
-                          label: place,
+                          label: fullLocation,
                           expanded: true,
+                          maxLines: 3,
                         ),
                       ],
-                      const SizedBox(height: 12),
-                      if (event.isPast)
+                      if (showViewsRow) ...[
+                        const SizedBox(height: 12),
+                        _MetaChip(
+                          icon: Icons.visibility_outlined,
+                          label: event.viewCount == 1
+                              ? '1 view'
+                              : '${event.viewCount} views',
+                          expanded: true,
+                          maxLines: 1,
+                        ),
+                      ],
+                      if (showGoingRow) ...[
+                        const SizedBox(height: 14),
+                        _GoingInsightRow(
+                          count: _goingCount,
+                          people: _goingPeople,
+                          loading: _goingLoading,
+                          onOpenList: _openGoingList,
+                          onOpenPerson: _openGoingPerson,
+                        ),
+                      ],
+                      if (showOwnerStatusToggle) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 44,
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor:
+                                  calendarButtonBackground(_calendarStatus),
+                              foregroundColor:
+                                  calendarButtonForeground(_calendarStatus),
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                            ),
+                            onPressed: _busy ? null : _setOwnerStatus,
+                            child: _busy
+                                ? SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: calendarButtonForeground(
+                                        _calendarStatus,
+                                      ),
+                                    ),
+                                  )
+                                : Text(
+                                    calendarButtonLabel(_calendarStatus),
+                                    style: AppTextStyles.display(
+                                      14,
+                                      color: calendarButtonForeground(
+                                        _calendarStatus,
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tap to switch Interested or Going. Delete the event to remove it.',
+                          style: AppTextStyles.body(
+                            12,
+                            color: AppColors.mutedForeground,
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                      if (event.isPast) ...[
+                        const SizedBox(height: 12),
                         Container(
                           width: double.infinity,
                           height: 44,
@@ -592,8 +915,9 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                               color: AppColors.mutedForeground,
                             ),
                           ),
-                        )
-                      else if (widget.showWishlist)
+                        ),
+                      ] else if (widget.showWishlist) ...[
+                        const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
                           height: 44,
@@ -635,46 +959,58 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                               ],
                             ),
                           ),
-                        )
-                      else
+                        ),
+                      ] else if (showStatusButton ||
+                          (!showOwnInsights && !_inCalendar)) ...[
+                        const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
                           height: 44,
                           child: FilledButton(
                             style: FilledButton.styleFrom(
-                              backgroundColor: _inCalendar
-                                  ? AppColors.primary
-                                  : AppColors.accent,
-                              foregroundColor: _inCalendar
-                                  ? AppColors.primaryForeground
-                                  : AppColors.accentForeground,
+                              backgroundColor:
+                                  calendarButtonBackground(_calendarStatus),
+                              foregroundColor:
+                                  calendarButtonForeground(_calendarStatus),
                               shape: const RoundedRectangleBorder(
                                 borderRadius: BorderRadius.zero,
                               ),
                             ),
                             onPressed: _busy ? null : _toggleCalendar,
                             child: _busy
-                                ? const SizedBox(
+                                ? SizedBox(
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: AppColors.accentForeground,
+                                      color: calendarButtonForeground(
+                                        _calendarStatus,
+                                      ),
                                     ),
                                   )
                                 : Text(
-                                    _inCalendar
-                                        ? 'ADDED TO CALENDAR'
-                                        : 'ADD TO CALENDAR',
+                                    calendarButtonLabel(_calendarStatus),
                                     style: AppTextStyles.display(
                                       14,
-                                      color: _inCalendar
-                                          ? AppColors.primaryForeground
-                                          : AppColors.accentForeground,
+                                      color: calendarButtonForeground(
+                                        _calendarStatus,
+                                      ),
                                     ),
                                   ),
                           ),
                         ),
+                        if (showStatusButton) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Tap to change status or remove from your calendar.',
+                            style: AppTextStyles.body(
+                              12,
+                              color: AppColors.mutedForeground,
+                              height: 1.3,
+                            ),
+                          ),
+                        ],
+                      ],
                     ],
                   ),
                 ),
@@ -767,7 +1103,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                                   location: event.title,
                                   imageUrl: event.imageUrl,
                                   ticketUrl: event.ticketUrl,
-                                  venue: place.isEmpty ? null : place,
+                                  venue: locationForShare,
                                   date: event.formattedDate,
                                 );
                               } catch (e) {
@@ -803,23 +1139,29 @@ class _MetaChip extends StatelessWidget {
     required this.icon,
     required this.label,
     this.expanded = false,
+    this.maxLines = 2,
   });
 
   final IconData icon;
   final String label;
   final bool expanded;
+  final int maxLines;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: AppColors.secondary),
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 16, color: AppColors.secondary),
+        ),
         const SizedBox(width: 6),
         Flexible(
           child: Text(
             label,
-            maxLines: expanded ? 2 : 1,
+            maxLines: expanded ? maxLines : 1,
             overflow: TextOverflow.ellipsis,
             style: AppTextStyles.body(
               13.5,
@@ -829,6 +1171,138 @@ class _MetaChip extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _GoingInsightRow extends StatelessWidget {
+  const _GoingInsightRow({
+    required this.count,
+    required this.people,
+    required this.loading,
+    required this.onOpenList,
+    required this.onOpenPerson,
+  });
+
+  final int count;
+  final List<Map<String, dynamic>> people;
+  final bool loading;
+  final VoidCallback onOpenList;
+  final void Function(Map<String, dynamic> user) onOpenPerson;
+
+  static const _maxFaces = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = count == 1 ? '1 going' : '$count going';
+    final faces = people.take(_maxFaces).toList(growable: false);
+    final overflow = count > faces.length ? count - faces.length : 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onOpenList,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.people_outline,
+                    size: 16,
+                    color: AppColors.secondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: AppTextStyles.body(
+                        13.5,
+                        weight: FontWeight.w700,
+                        color: AppColors.foreground,
+                      ),
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: AppColors.mutedForeground,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (loading && faces.isEmpty) ...[
+          const SizedBox(height: 10),
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.primary,
+            ),
+          ),
+        ] else if (faces.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 36,
+            child: Row(
+              children: [
+                for (var i = 0; i < faces.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 6),
+                  _GoingFace(
+                    user: faces[i],
+                    onTap: () => onOpenPerson(faces[i]),
+                  ),
+                ],
+                if (overflow > 0) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: onOpenList,
+                    child: Text(
+                      '+$overflow',
+                      style: AppTextStyles.body(
+                        13,
+                        weight: FontWeight.w700,
+                        color: AppColors.mutedForeground,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _GoingFace extends StatelessWidget {
+  const _GoingFace({required this.user, required this.onTap});
+
+  final Map<String, dynamic> user;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final username = (user['username'] as String?)?.trim() ?? '';
+    final avatar = (user['avatarUrl'] as String?) ?? '';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: username.isEmpty ? null : onTap,
+        customBorder: const CircleBorder(),
+        child: AuthorAvatar(
+          avatarUrl: avatar,
+          username: username,
+          size: 36,
+          interactive: false,
+        ),
+      ),
     );
   }
 }

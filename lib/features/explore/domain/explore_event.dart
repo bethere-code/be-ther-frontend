@@ -48,6 +48,7 @@ class ExploreEvent {
     required this.trending,
     required this.status,
     required this.inCalendar,
+    this.calendarStatus,
     required this.isPast,
     this.place,
     this.country,
@@ -78,6 +79,7 @@ class ExploreEvent {
   final bool liked;
   final bool bookmarked;
   final bool inCalendar;
+  final String? calendarStatus;
   final bool isPast;
 
   String get postId => id;
@@ -178,11 +180,13 @@ class ExploreEvent {
       liked: json['liked'] as bool? ?? false,
       bookmarked: json['bookmarked'] as bool? ?? false,
       inCalendar: json['inCalendar'] as bool? ?? false,
+      calendarStatus: json['calendarStatus'] as String? ??
+          ((json['inCalendar'] as bool? ?? false) ? 'going' : null),
       isPast: isPast,
     );
   }
 
-  ExploreEvent copyWith({bool? inCalendar}) {
+  ExploreEvent copyWith({bool? inCalendar, String? calendarStatus}) {
     return ExploreEvent(
       id: id,
       title: title,
@@ -201,6 +205,7 @@ class ExploreEvent {
       liked: liked,
       bookmarked: bookmarked,
       inCalendar: inCalendar ?? this.inCalendar,
+      calendarStatus: calendarStatus ?? this.calendarStatus,
       isPast: isPast,
     );
   }

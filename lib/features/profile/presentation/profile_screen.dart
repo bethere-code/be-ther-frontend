@@ -9,8 +9,8 @@ import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/author_avatar.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
+import '../../auth/presentation/auth_notifier.dart';
 import '../../feed/presentation/feed_providers.dart';
-import '../../../core/utils/event_date_utils.dart';
 import '../../settings/presentation/settings_screen.dart';
 import 'profile_providers.dart';
 import 'widgets/profile_event_sheet.dart';
@@ -196,6 +196,43 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return map;
   }
 
+  List<ProfileCalendarEvent> _eventsChronological(
+    List<Map<String, dynamic>> items,
+  ) {
+    final events = items.map(ProfileCalendarEvent.fromJson).toList()
+      ..sort((a, b) {
+        final byDate = a.date.compareTo(b.date);
+        if (byDate != 0) return byDate;
+        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      });
+    return events;
+  }
+
+  String _calendarViewMode(Map<String, dynamic> user, {required bool isOwn}) {
+    if (!isOwn) return 'full';
+    final settings = user['settings'];
+    if (settings is Map) {
+      return settings['calendarView'] as String? ?? 'full';
+    }
+    return 'full';
+  }
+
+  Future<void> _setOwnCalendarView(String mode) async {
+    try {
+      final updated = await ref.read(userRepositoryProvider).patchMe({
+        'settings': {'calendarView': mode},
+      });
+      ref.read(authNotifierProvider.notifier).updateUser(updated);
+      ref.invalidate(profileMeProvider);
+      ref.invalidate(profileViewProvider(widget.username));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
   Future<void> _refresh(String calendarUsername) async {
     ref.invalidate(profileViewProvider(widget.username));
     ref.invalidate(profileCalendarProvider(calendarUsername));
@@ -244,30 +281,42 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             dayNames: _dayNames,
             onTap: event == null
                 ? null
-                : () => showProfileEventSheet(
-                    context: context,
-                    event: event,
-                    profileUsername: username,
-                    showWishlist: !isOwnProfile,
-                    isOwnProfile: isOwnProfile,
-                    onToggleWishlist: () async {
-                      final saved = await ref
-                          .read(postsRepositoryProvider)
-                          .toggleBookmark(event.postId);
-                      ref.invalidate(profileCalendarProvider(username));
-                      return saved;
-                    },
-                    onCalendarChanged: () {
-                      ref.invalidate(profileCalendarProvider(username));
-                      ref.invalidate(feedProvider);
-                      if (isOwnProfile) {
-                        ref.invalidate(profileViewProvider(widget.username));
-                      }
-                    },
-                  ),
+                : () => _openEvent(
+                      event: event,
+                      username: username,
+                      isOwnProfile: isOwnProfile,
+                    ),
           );
         },
       ),
+    );
+  }
+
+  void _openEvent({
+    required ProfileCalendarEvent event,
+    required String username,
+    required bool isOwnProfile,
+  }) {
+    showProfileEventSheet(
+      context: context,
+      event: event,
+      profileUsername: username,
+      showWishlist: !isOwnProfile,
+      isOwnProfile: isOwnProfile,
+      onToggleWishlist: () async {
+        final saved = await ref
+            .read(postsRepositoryProvider)
+            .toggleBookmark(event.postId);
+        ref.invalidate(profileCalendarProvider(username));
+        return saved;
+      },
+      onCalendarChanged: () {
+        ref.invalidate(profileCalendarProvider(username));
+        ref.invalidate(feedProvider);
+        if (isOwnProfile) {
+          ref.invalidate(profileViewProvider(widget.username));
+        }
+      },
     );
   }
 
@@ -305,7 +354,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             data: (items) {
               final eventsByDate = _eventsByDate(items);
               final todayDate = _todayDate();
-              _jumpCalendarToTodayIfNeeded();
+              final calendarView =
+                  _calendarViewMode(user, isOwn: isOwnProfile);
+              final eventsOnly = calendarView == 'events-only';
+              if (!eventsOnly) {
+                _jumpCalendarToTodayIfNeeded();
+              }
 
               // Profile (natural height, capped) → fixed nav → scrolling calendar.
               return ColoredBox(
@@ -335,19 +389,38 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ),
                       ),
                     ),
-                    _CalendarNavBar(
-                      onPrevious: () => _shiftWeek(-1),
-                      onToday: _goToToday,
-                      onNext: () => _shiftWeek(1),
-                    ),
-                    Expanded(
-                      child: _buildCalendarGrid(
-                        eventsByDate: eventsByDate,
-                        todayDate: todayDate,
-                        username: username,
-                        isOwnProfile: isOwnProfile,
+                    if (eventsOnly)
+                      Expanded(
+                        child: _EventsOnlyGrid(
+                          events: _eventsChronological(items),
+                          todayDate: todayDate,
+                          monthNames: _monthNames,
+                          dayNames: _dayNames,
+                          onShowFullCalendar: isOwnProfile
+                              ? () => _setOwnCalendarView('full')
+                              : null,
+                          onOpenEvent: (event) => _openEvent(
+                            event: event,
+                            username: username,
+                            isOwnProfile: isOwnProfile,
+                          ),
+                        ),
+                      )
+                    else ...[
+                      _CalendarNavBar(
+                        onPrevious: () => _shiftWeek(-1),
+                        onToday: _goToToday,
+                        onNext: () => _shiftWeek(1),
                       ),
-                    ),
+                      Expanded(
+                        child: _buildCalendarGrid(
+                          eventsByDate: eventsByDate,
+                          todayDate: todayDate,
+                          username: username,
+                          isOwnProfile: isOwnProfile,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               );
@@ -398,6 +471,117 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+}
+
+class _EventsOnlyGrid extends StatelessWidget {
+  const _EventsOnlyGrid({
+    required this.events,
+    required this.todayDate,
+    required this.monthNames,
+    required this.dayNames,
+    required this.onOpenEvent,
+    this.onShowFullCalendar,
+  });
+
+  final List<ProfileCalendarEvent> events;
+  final DateTime todayDate;
+  final List<String> monthNames;
+  final List<String> dayNames;
+  final void Function(ProfileCalendarEvent event) onOpenEvent;
+  final VoidCallback? onShowFullCalendar;
+
+  @override
+  Widget build(BuildContext context) {
+    if (events.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'There are no events to show.',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.display(
+                  22,
+                  color: AppColors.secondary,
+                  letterSpacing: 0.04,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Add events from the feed or switch back to the full calendar.',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body(
+                  14,
+                  color: AppColors.mutedForeground,
+                  height: 1.35,
+                ),
+              ),
+              if (onShowFullCalendar != null) ...[
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: AppColors.accentForeground,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                    ),
+                    onPressed: onShowFullCalendar,
+                    child: Text(
+                      'SHOW FULL CALENDAR',
+                      style: AppTextStyles.display(
+                        14,
+                        color: AppColors.accentForeground,
+                        letterSpacing: 0.05,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Same square cells as the full calendar — only days that have events.
+    return GridView.builder(
+      padding: EdgeInsets.zero,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        childAspectRatio: 1,
+      ),
+      itemCount: events.length,
+      itemBuilder: (context, index) {
+        final event = events[index];
+        final date = DateTime(event.date.year, event.date.month, event.date.day);
+        final isToday = date.year == todayDate.year &&
+            date.month == todayDate.month &&
+            date.day == todayDate.day;
+        // Month banner when this event starts a new month vs the previous box.
+        final prev = index > 0 ? events[index - 1].date : null;
+        final isMonthStart = prev == null ||
+            prev.year != date.year ||
+            prev.month != date.month;
+
+        return _CalendarDayCell(
+          date: date,
+          event: event,
+          isToday: isToday,
+          isMonthStart: isMonthStart,
+          faded: false,
+          monthNames: monthNames,
+          dayNames: dayNames,
+          onTap: () => onOpenEvent(event),
         );
       },
     );
@@ -927,30 +1111,6 @@ class _CalendarDayCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
-    final eventIsPast =
-        event != null &&
-        DateTime(
-          event!.date.year,
-          event!.date.month,
-          event!.date.day,
-        ).isBefore(todayDate);
-    final statusColor = eventIsPast
-        ? AppColors.muted
-        : (event?.status == 'going' ? AppColors.primary : AppColors.accent);
-    final statusFg = eventIsPast
-        ? AppColors.mutedForeground
-        : (event?.status == 'going'
-              ? AppColors.primaryForeground
-              : AppColors.accentForeground);
-    final statusLabel = event == null
-        ? ''
-        : EventDateUtils.statusLabel(
-            status: event!.status,
-            isPast: eventIsPast,
-          );
-
     final monthLabel = '${monthNames[date.month - 1]} ${date.year}';
 
     return Opacity(
@@ -1048,38 +1208,15 @@ class _CalendarDayCell extends StatelessWidget {
                     left: 4,
                     right: 4,
                     bottom: 4,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: statusColor,
-                            border: Border.all(
-                              color: AppColors.background,
-                              width: 2,
-                            ),
-                          ),
-                          child: Text(
-                            statusLabel,
-                            style: AppTextStyles.display(8, color: statusFg),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          event!.location,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.body(
-                            10,
-                            color: Colors.white,
-                            weight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      event!.location,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.body(
+                        10,
+                        color: Colors.white,
+                        weight: FontWeight.w800,
+                      ),
                     ),
                   ),
               ],

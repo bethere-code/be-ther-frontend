@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/background_tasks/event_view_recorder.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_images.dart';
 import '../../../core/utils/time_utils.dart';
@@ -15,9 +16,6 @@ import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../core/design/widgets/expandable_caption.dart';
 import '../../../core/design/widgets/post_interaction_row.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
-import 'widgets/feed_attendees_sheet.dart';
-import 'widgets/feed_permissions_coordinator.dart';
-import 'widgets/feed_post_report_flow.dart';
 import '../../../core/routing/app_route_observer.dart';
 import '../../../core/utils/event_date_utils.dart';
 import '../../../core/utils/link_utils.dart';
@@ -27,7 +25,12 @@ import '../../auth/presentation/auth_notifier.dart';
 import '../../profile/presentation/profile_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
 import 'add_post_screen.dart';
+import 'calendar_status_store.dart';
 import 'feed_providers.dart';
+import 'widgets/calendar_rsvp_sheet.dart';
+import 'widgets/feed_attendees_sheet.dart';
+import 'widgets/feed_permissions_coordinator.dart';
+import 'widgets/feed_post_report_flow.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
   const FeedScreen({super.key});
@@ -399,28 +402,76 @@ class _FeedCard extends ConsumerStatefulWidget {
 
 class _FeedCardState extends ConsumerState<_FeedCard> {
   late bool _inCalendar;
+  String? _calendarStatus;
   late int _attendeesCount;
   bool _isCalendarLoading = false;
   String? _calendarError;
+  bool _feedViewScheduled = false;
 
   @override
   void initState() {
     super.initState();
     _syncFromItem();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scheduleFeedImpression();
+    });
   }
 
   @override
   void didUpdateWidget(covariant _FeedCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.item['inCalendar'] != widget.item['inCalendar'] ||
-        oldWidget.item['calendarCount'] != widget.item['calendarCount']) {
+        oldWidget.item['calendarCount'] != widget.item['calendarCount'] ||
+        oldWidget.item['calendarStatus'] != widget.item['calendarStatus']) {
       _syncFromItem();
+    }
+    final oldId = oldWidget.item['_id']?.toString() ?? '';
+    final newId = widget.item['_id']?.toString() ?? '';
+    if (oldId != newId) {
+      _feedViewScheduled = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _scheduleFeedImpression();
+      });
     }
   }
 
   void _syncFromItem() {
-    _inCalendar = widget.item['inCalendar'] as bool? ?? false;
+    final postId = widget.item['_id']?.toString() ?? '';
+    final apiStatus = widget.item['calendarStatus'] as String?;
+    final postStatus = widget.item['status'] as String?;
+    final ownFallback =
+        postStatus == 'interested' ? 'interested' : 'going';
+    final fromStore = ref
+        .read(calendarStatusStoreProvider.notifier)
+        .statusFor(
+          postId,
+          fallback: apiStatus ??
+              (_isOwnPost
+                  ? ownFallback
+                  : ((widget.item['inCalendar'] as bool? ?? false)
+                      ? 'going'
+                      : null)),
+        );
+    _calendarStatus = fromStore;
+    _inCalendar = _isOwnPost || _calendarStatus != null;
     _attendeesCount = (widget.item['calendarCount'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Feed counts an impression without opening a details sheet.
+  /// Explore/search only count on sheet open; [EventViewRecorder] dedupes both.
+  void _scheduleFeedImpression() {
+    if (_feedViewScheduled || _isOwnPost) return;
+    final postId = widget.item['_id']?.toString() ?? '';
+    if (postId.isEmpty) return;
+    _feedViewScheduled = true;
+
+    // Slight delay so feed pagination / scroll requests stay ahead of views.
+    Future<void>.delayed(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      ref.read(eventViewRecorderProvider).enqueue(postId);
+    });
   }
 
   bool get _isOwnPost {
@@ -443,8 +494,23 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
     return false;
   }
 
-  Future<void> _handleCalendarToggle(String postId) async {
-    if (postId.isEmpty || _isCalendarLoading || _isOwnPost) return;
+  Future<void> _handleCalendarTap(String postId) async {
+    if (postId.isEmpty || _isCalendarLoading) return;
+
+    final choice = await showCalendarRsvpSheet(
+      context: context,
+      alreadyOnCalendar: _isOwnPost ? true : _inCalendar,
+      currentStatus: _calendarStatus,
+      allowRemove: !_isOwnPost,
+    );
+    if (choice == null || !mounted) return;
+    if (_isOwnPost && choice == CalendarRsvpChoice.none) return;
+
+    final status = switch (choice) {
+      CalendarRsvpChoice.interested => 'interested',
+      CalendarRsvpChoice.going => 'going',
+      CalendarRsvpChoice.none => 'none',
+    };
 
     final wasIn = _inCalendar;
     setState(() {
@@ -453,16 +519,35 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
     });
 
     try {
-      final inCalendar = await ref
+      final data = await ref
           .read(postsRepositoryProvider)
-          .toggleCalendar(postId);
+          .setCalendarStatus(postId: postId, status: status);
+      final cleared = status == 'none';
+      final nextStatus = cleared ? null : data['calendarStatus'] as String?;
+      final inCalendar = cleared
+          ? false
+          : (data['inCalendar'] as bool? ?? (nextStatus != null));
+      final resolved =
+          inCalendar ? (nextStatus ?? (status == 'none' ? null : status)) : null;
+
+      ref.read(calendarStatusStoreProvider.notifier).setStatus(postId, resolved);
+
+      final meUsername =
+          ref.read(authNotifierProvider).user?['username'] as String?;
+      if (meUsername != null && meUsername.isNotEmpty) {
+        ref.invalidate(profileCalendarProvider(meUsername));
+      }
+
       if (mounted) {
         setState(() {
-          _inCalendar = inCalendar;
-          if (wasIn && !inCalendar) {
-            _attendeesCount = (_attendeesCount - 1).clamp(0, 1 << 30);
-          } else if (!wasIn && inCalendar) {
-            _attendeesCount += 1;
+          _calendarStatus = resolved ?? (_isOwnPost ? status : null);
+          _inCalendar = _isOwnPost ? true : resolved != null;
+          if (!_isOwnPost) {
+            if (wasIn && !inCalendar) {
+              _attendeesCount = (_attendeesCount - 1).clamp(0, 1 << 30);
+            } else if (!wasIn && inCalendar) {
+              _attendeesCount += 1;
+            }
           }
         });
       }
@@ -491,6 +576,20 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final id = item['_id']?.toString() ?? '';
+    final store = ref.watch(calendarStatusStoreProvider);
+    final apiFallback = (item['calendarStatus'] as String?) ??
+        (_isOwnPost
+            ? ((item['status'] as String?) == 'interested'
+                ? 'interested'
+                : 'going')
+            : ((item['inCalendar'] as bool? ?? false) ? 'going' : null));
+    final effectiveStatus = store.containsKey(id)
+        ? store[id]
+        : (_calendarStatus ?? apiFallback);
+    final effectiveInCalendar =
+        _isOwnPost ? true : effectiveStatus != null;
+
     final author = readPostAuthor(item);
     final name =
         author['displayName'] as String? ??
@@ -505,7 +604,6 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
     final caption = item['caption'] as String? ?? '';
     final likes = item['likesCount'] as int? ?? 0;
     final comments = item['commentsCount'] as int? ?? 0;
-    final id = item['_id']?.toString() ?? '';
     final details = item['eventDetails'] as Map<String, dynamic>?;
     final ticketUrl = details?['ticketUrl'] as String?;
     final isPast = EventDateUtils.isPostPast(item);
@@ -671,15 +769,13 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
             _EventDetails(
               details,
               isPast: isPast,
-              ticketUrl: ticketUrl,
-              inCalendar: _isOwnPost ? true : _inCalendar,
+              calendarStatus: effectiveStatus,
+              inCalendar: effectiveInCalendar,
               isOwnPost: _isOwnPost,
               attendeesCount: _attendeesCount,
               isLoading: _isCalendarLoading,
               error: _calendarError,
-              onCalendarToggle: _isOwnPost
-                  ? null
-                  : () => _handleCalendarToggle(id),
+              onCalendarToggle: () => _handleCalendarTap(id),
               onAttendeesTap: () => _openAttendees(id),
             ),
           Container(
@@ -713,7 +809,7 @@ class _EventDetails extends StatelessWidget {
   const _EventDetails(
     this.details, {
     this.isPast = false,
-    this.ticketUrl,
+    this.calendarStatus,
     this.inCalendar = false,
     this.isOwnPost = false,
     this.attendeesCount = 0,
@@ -725,7 +821,7 @@ class _EventDetails extends StatelessWidget {
 
   final Map<String, dynamic> details;
   final bool isPast;
-  final String? ticketUrl;
+  final String? calendarStatus;
   final bool inCalendar;
   final bool isOwnPost;
   final int attendeesCount;
@@ -790,7 +886,7 @@ class _EventDetails extends StatelessWidget {
     final hasVenue = displayVenue != null && displayVenue.isNotEmpty;
     final showAttendees = attendeesCount > 0;
     final hasMeta = hasDateTime || hasVenue || showAttendees;
-    final showCalendarButton = !isPast && !isOwnPost;
+    final showCalendarButton = !isPast;
 
     return Container(
       width: double.infinity,
@@ -832,6 +928,7 @@ class _EventDetails extends StatelessWidget {
               icon: Icons.place_outlined,
               label: displayVenue,
               expanded: true,
+              maxLines: 2,
             ),
           ],
           if (showAttendees) ...[
@@ -839,7 +936,7 @@ class _EventDetails extends StatelessWidget {
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: onAttendeesTap,
+                onTap: isOwnPost ? onAttendeesTap : null,
                 child: _EventDetailMeta(
                   icon: Icons.people_outline,
                   label: attendeesCount == 1
@@ -855,8 +952,8 @@ class _EventDetails extends StatelessWidget {
               ),
             ),
           ],
-          if (hasMeta) const SizedBox(height: 12),
           if (isPast) ...[
+            if (hasMeta) const SizedBox(height: 12),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 10),
@@ -871,40 +968,23 @@ class _EventDetails extends StatelessWidget {
               ),
             ),
           ] else ...[
-            if (ticketUrl != null && ticketUrl!.trim().isNotEmpty) ...[
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => openExternalUrl(context, ticketUrl),
-                  child: Text(
-                    'GET TICKETS',
-                    style: AppTextStyles.display(
-                      14,
-                      color: AppColors.secondary,
-                    ),
-                  ),
-                ),
-              ),
-              if (showCalendarButton) const SizedBox(height: 8),
-            ],
-            if (showCalendarButton)
+            if (showCalendarButton) ...[
+              if (hasMeta) const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor: inCalendar
-                        ? AppColors.primary
-                        : AppColors.accent,
-                    foregroundColor: inCalendar
-                        ? AppColors.primaryForeground
-                        : AppColors.accentForeground,
+                    backgroundColor:
+                        calendarButtonBackground(calendarStatus),
+                    foregroundColor:
+                        calendarButtonForeground(calendarStatus),
                     shape: const RoundedRectangleBorder(
                       borderRadius: BorderRadius.zero,
                     ),
                   ),
                   onPressed: isLoading ? null : onCalendarToggle,
                   child: Text(
-                    inCalendar ? 'ADDED TO CALENDAR' : 'ADD TO CALENDAR',
+                    calendarButtonLabel(calendarStatus),
                     style: AppTextStyles.display(
                       14,
                       color: inCalendar
@@ -914,6 +994,7 @@ class _EventDetails extends StatelessWidget {
                   ),
                 ),
               ),
+            ],
           ],
           if (error != null) ...[
             const SizedBox(height: 8),
@@ -933,16 +1014,19 @@ class _EventDetailMeta extends StatelessWidget {
     required this.icon,
     required this.label,
     this.expanded = false,
+    this.maxLines = 1,
     this.trailing,
   });
 
   final IconData icon;
   final String label;
   final bool expanded;
+  final int maxLines;
   final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
+    final lines = maxLines.clamp(1, 3);
     final labelText = Text(
       label,
       style: AppTextStyles.body(
@@ -950,15 +1034,20 @@ class _EventDetailMeta extends StatelessWidget {
         color: AppColors.secondary,
         weight: FontWeight.w700,
       ),
-      maxLines: 2,
+      maxLines: lines,
+      softWrap: true,
       overflow: TextOverflow.ellipsis,
     );
 
     if (!expanded) {
       return Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: AppColors.secondary),
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(icon, size: 16, color: AppColors.secondary),
+          ),
           const SizedBox(width: 6),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 220),
@@ -969,8 +1058,12 @@ class _EventDetailMeta extends StatelessWidget {
     }
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: AppColors.secondary),
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, size: 16, color: AppColors.secondary),
+        ),
         const SizedBox(width: 6),
         Expanded(child: labelText),
         if (trailing != null) ...[const SizedBox(width: 4), trailing!],

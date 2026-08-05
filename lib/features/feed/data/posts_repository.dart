@@ -96,6 +96,27 @@ class PostsRepository {
     }
   }
 
+  Future<Map<String, dynamic>> setCalendarStatus({
+    required String postId,
+    required String status,
+  }) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/posts/$postId/calendar',
+        data: {'status': status},
+      );
+      final data = res.data?['data'];
+      if (data is Map<String, dynamic>) return data;
+      return {
+        'inCalendar': status != 'none',
+        'calendarStatus': status == 'none' ? null : status,
+      };
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to update calendar'));
+    }
+  }
+
+  /// Legacy toggle — prefer [setCalendarStatus] with an explicit RSVP.
   Future<bool> toggleCalendar(String postId) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/calendar');
@@ -107,6 +128,12 @@ class PostsRepository {
     } on DioException catch (e) {
       throw Exception(_apiMessage(e, fallback: 'Failed to update calendar'));
     }
+  }
+
+  /// Best-effort unique view. Prefer [EventViewRecorder] so this stays off the hot path.
+  Future<void> recordView(String postId) async {
+    if (postId.isEmpty) return;
+    await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/view');
   }
 
   Future<AttendeesPage> fetchAttendees({
