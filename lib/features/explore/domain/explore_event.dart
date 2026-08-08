@@ -60,6 +60,8 @@ class ExploreEvent {
     this.author,
     this.liked = false,
     this.bookmarked = false,
+    this.likesCount = 0,
+    this.commentsCount = 0,
   });
 
   final String id;
@@ -81,6 +83,8 @@ class ExploreEvent {
   final bool inCalendar;
   final String? calendarStatus;
   final bool isPast;
+  final int likesCount;
+  final int commentsCount;
 
   String get postId => id;
 
@@ -157,9 +161,10 @@ class ExploreEvent {
         ? apiPast
         : EventDateUtils.isEventPast(dateRaw: dateRaw, timeRaw: timeRaw);
 
-    final likesFallback = (json['likesCount'] as num?)?.toInt();
+    final likesCount = (json['likesCount'] as num?)?.toInt() ?? 0;
+    final commentsCount = (json['commentsCount'] as num?)?.toInt() ?? 0;
     final attendees = (json['attendees'] as num?)?.toInt() ??
-        likesFallback ??
+        (json['calendarCount'] as num?)?.toInt() ??
         0;
 
     return ExploreEvent(
@@ -174,7 +179,7 @@ class ExploreEvent {
       ticketUrl: ticketUrl,
       caption: json['caption'] as String?,
       attendees: attendees,
-      trending: json['trending'] as bool? ?? attendees >= 5,
+      trending: json['trending'] as bool? ?? likesCount >= 5,
       status: json['status'] as String? ?? '',
       author: ExploreAuthor.tryParse(json['authorId'] ?? json['author']),
       liked: json['liked'] as bool? ?? false,
@@ -183,10 +188,18 @@ class ExploreEvent {
       calendarStatus: json['calendarStatus'] as String? ??
           ((json['inCalendar'] as bool? ?? false) ? 'going' : null),
       isPast: isPast,
+      likesCount: likesCount,
+      commentsCount: commentsCount,
     );
   }
 
-  ExploreEvent copyWith({bool? inCalendar, String? calendarStatus}) {
+  ExploreEvent copyWith({
+    bool? inCalendar,
+    String? calendarStatus,
+    int? likesCount,
+    int? commentsCount,
+    bool? liked,
+  }) {
     return ExploreEvent(
       id: id,
       title: title,
@@ -202,11 +215,13 @@ class ExploreEvent {
       trending: trending,
       status: status,
       author: author,
-      liked: liked,
+      liked: liked ?? this.liked,
       bookmarked: bookmarked,
       inCalendar: inCalendar ?? this.inCalendar,
       calendarStatus: calendarStatus ?? this.calendarStatus,
       isPast: isPast,
+      likesCount: likesCount ?? this.likesCount,
+      commentsCount: commentsCount ?? this.commentsCount,
     );
   }
 

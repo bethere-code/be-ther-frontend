@@ -13,6 +13,8 @@ import '../../../auth/presentation/auth_notifier.dart';
 import '../../../feed/presentation/calendar_status_store.dart';
 import '../../../feed/presentation/feed_providers.dart';
 import '../../../feed/presentation/widgets/calendar_rsvp_sheet.dart';
+import '../../../feed/presentation/widgets/feed_comments_sheet.dart';
+import '../../../feed/presentation/widgets/feed_likes_sheet.dart';
 import '../../../profile/presentation/profile_providers.dart';
 import '../../../profile/presentation/profile_screen.dart';
 import '../../domain/explore_event.dart';
@@ -48,12 +50,16 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
   late bool _inCalendar;
   String? _calendarStatus;
   bool _calendarBusy = false;
+  late int _likesCount;
+  late int _commentsCount;
 
   ExploreEvent get event => widget.event;
 
   @override
   void initState() {
     super.initState();
+    _likesCount = event.likesCount;
+    _commentsCount = event.commentsCount;
     final api = event.calendarStatus ?? (event.inCalendar ? 'going' : null);
     _calendarStatus = api;
     _inCalendar = api != null;
@@ -88,6 +94,28 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
     }
     final myUsername = me['username'] as String? ?? '';
     return myUsername.isNotEmpty && myUsername == author.username;
+  }
+
+  void _openLikes() {
+    if (event.postId.isEmpty || _likesCount <= 0) return;
+    showFeedLikesSheet(
+      context: context,
+      postId: event.postId,
+      initialCount: _likesCount,
+    );
+  }
+
+  void _openComments() {
+    if (event.postId.isEmpty) return;
+    showFeedCommentsSheet(
+      context: context,
+      postId: event.postId,
+      initialCount: _commentsCount,
+      onCountChanged: (count) {
+        if (!mounted) return;
+        setState(() => _commentsCount = count);
+      },
+    );
   }
 
   Future<void> _handleCalendarTap() async {
@@ -495,6 +523,58 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                       else
                         const SizedBox(width: 48),
                       const Spacer(),
+                      InkWell(
+                        onTap: _likesCount > 0 ? _openLikes : null,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.favorite_border,
+                                size: 20,
+                                color: AppColors.foreground,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$_likesCount',
+                                style: AppTextStyles.body(
+                                  14,
+                                  weight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: event.postId.isEmpty ? null : _openComments,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.chat_bubble_outline,
+                                size: 20,
+                                color: AppColors.foreground,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$_commentsCount',
+                                style: AppTextStyles.body(
+                                  14,
+                                  weight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                       IconButton(
                         onPressed: event.postId.isEmpty
                             ? null

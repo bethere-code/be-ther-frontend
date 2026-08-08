@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 
+import '../domain/comment.dart';
+
 class PostsRepository {
   PostsRepository(this._dio);
 
@@ -160,6 +162,111 @@ class PostsRepository {
       return AttendeesPage(items: items, total: total, nextSkip: nextSkip);
     } on DioException catch (e) {
       throw Exception(_apiMessage(e, fallback: 'Failed to load attendees'));
+    }
+  }
+
+  Future<LikesPage> fetchLikes({
+    required String postId,
+    int skip = 0,
+  }) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/v1/posts/$postId/likes',
+        queryParameters: {'skip': skip},
+      );
+      final data = _extractData(
+        res.data,
+        fallbackMessage: 'Failed to load likes',
+      );
+      final items = (data['items'] as List<dynamic>? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .toList(growable: false);
+      final total = (data['total'] as num?)?.toInt() ?? items.length;
+      final nextSkipRaw = data['nextSkip'];
+      final nextSkip = nextSkipRaw is int
+          ? nextSkipRaw
+          : int.tryParse('$nextSkipRaw');
+      return LikesPage(items: items, total: total, nextSkip: nextSkip);
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to load likes'));
+    }
+  }
+
+  Future<CommentsPage> fetchComments({
+    required String postId,
+    int skip = 0,
+  }) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/v1/posts/$postId/comments',
+        queryParameters: {'skip': skip},
+      );
+      final data = _extractData(
+        res.data,
+        fallbackMessage: 'Failed to load comments',
+      );
+      final items = (data['items'] as List<dynamic>? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(Comment.fromJson)
+          .toList(growable: false);
+      final total = (data['total'] as num?)?.toInt() ?? items.length;
+      final nextSkipRaw = data['nextSkip'];
+      final nextSkip = nextSkipRaw is int
+          ? nextSkipRaw
+          : int.tryParse('$nextSkipRaw');
+      return CommentsPage(items: items, total: total, nextSkip: nextSkip);
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to load comments'));
+    }
+  }
+
+  Future<Comment> createComment({
+    required String postId,
+    required String text,
+  }) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/posts/$postId/comments',
+        data: {'text': text},
+      );
+      final data = _extractData(
+        res.data,
+        fallbackMessage: 'Failed to post comment',
+      );
+      return Comment.fromJson(data);
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to post comment'));
+    }
+  }
+
+  Future<void> deleteComment(String commentId) async {
+    try {
+      final res = await _dio.delete<Map<String, dynamic>>(
+        '/api/v1/comments/$commentId',
+      );
+      _extractData(res.data, fallbackMessage: 'Failed to delete comment');
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to delete comment'));
+    }
+  }
+
+  Future<({bool liked, int likesCount})> toggleCommentLike(
+    String commentId,
+  ) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/comments/$commentId/like',
+      );
+      final data = _extractData(
+        res.data,
+        fallbackMessage: 'Failed to update like',
+      );
+      return (
+        liked: data['liked'] as bool? ?? false,
+        likesCount: (data['likesCount'] as num?)?.toInt() ?? 0,
+      );
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to update like'));
     }
   }
 

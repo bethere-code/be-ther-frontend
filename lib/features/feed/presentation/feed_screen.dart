@@ -18,7 +18,6 @@ import '../../../core/design/widgets/post_interaction_row.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
 import '../../../core/routing/app_route_observer.dart';
 import '../../../core/utils/event_date_utils.dart';
-import '../../../core/utils/link_utils.dart';
 import '../../../core/utils/popup_menu_utils.dart';
 import '../../../core/utils/post_author.dart';
 import '../../auth/presentation/auth_notifier.dart';
@@ -441,18 +440,18 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
     final postId = widget.item['_id']?.toString() ?? '';
     final apiStatus = widget.item['calendarStatus'] as String?;
     final postStatus = widget.item['status'] as String?;
-    final ownFallback =
-        postStatus == 'interested' ? 'interested' : 'going';
+    final ownFallback = postStatus == 'interested' ? 'interested' : 'going';
     final fromStore = ref
         .read(calendarStatusStoreProvider.notifier)
         .statusFor(
           postId,
-          fallback: apiStatus ??
+          fallback:
+              apiStatus ??
               (_isOwnPost
                   ? ownFallback
                   : ((widget.item['inCalendar'] as bool? ?? false)
-                      ? 'going'
-                      : null)),
+                        ? 'going'
+                        : null)),
         );
     _calendarStatus = fromStore;
     _inCalendar = _isOwnPost || _calendarStatus != null;
@@ -527,10 +526,13 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
       final inCalendar = cleared
           ? false
           : (data['inCalendar'] as bool? ?? (nextStatus != null));
-      final resolved =
-          inCalendar ? (nextStatus ?? (status == 'none' ? null : status)) : null;
+      final resolved = inCalendar
+          ? (nextStatus ?? (status == 'none' ? null : status))
+          : null;
 
-      ref.read(calendarStatusStoreProvider.notifier).setStatus(postId, resolved);
+      ref
+          .read(calendarStatusStoreProvider.notifier)
+          .setStatus(postId, resolved);
 
       final meUsername =
           ref.read(authNotifierProvider).user?['username'] as String?;
@@ -578,17 +580,17 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
     final item = widget.item;
     final id = item['_id']?.toString() ?? '';
     final store = ref.watch(calendarStatusStoreProvider);
-    final apiFallback = (item['calendarStatus'] as String?) ??
+    final apiFallback =
+        (item['calendarStatus'] as String?) ??
         (_isOwnPost
             ? ((item['status'] as String?) == 'interested'
-                ? 'interested'
-                : 'going')
+                  ? 'interested'
+                  : 'going')
             : ((item['inCalendar'] as bool? ?? false) ? 'going' : null));
     final effectiveStatus = store.containsKey(id)
         ? store[id]
         : (_calendarStatus ?? apiFallback);
-    final effectiveInCalendar =
-        _isOwnPost ? true : effectiveStatus != null;
+    final effectiveInCalendar = _isOwnPost ? true : effectiveStatus != null;
 
     final author = readPostAuthor(item);
     final name =
@@ -974,10 +976,8 @@ class _EventDetails extends StatelessWidget {
                 width: double.infinity,
                 child: FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor:
-                        calendarButtonBackground(calendarStatus),
-                    foregroundColor:
-                        calendarButtonForeground(calendarStatus),
+                    backgroundColor: calendarButtonBackground(calendarStatus),
+                    foregroundColor: calendarButtonForeground(calendarStatus),
                     shape: const RoundedRectangleBorder(
                       borderRadius: BorderRadius.zero,
                     ),

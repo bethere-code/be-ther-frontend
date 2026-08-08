@@ -63,7 +63,8 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
 
   void _syncFromEvent() {
     final postId = widget.event.postId;
-    final api = widget.event.calendarStatus ??
+    final api =
+        widget.event.calendarStatus ??
         (widget.event.inCalendar ? 'going' : null);
     _calendarStatus = ref
         .read(calendarStatusStoreProvider.notifier)
@@ -99,7 +100,9 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
           ? false
           : (data['inCalendar'] as bool? ?? (nextStatus != null));
       final resolved = inCalendar ? (nextStatus ?? status) : null;
-      ref.read(calendarStatusStoreProvider.notifier).setStatus(postId, resolved);
+      ref
+          .read(calendarStatusStoreProvider.notifier)
+          .setStatus(postId, resolved);
       final meUsername =
           ref.read(authNotifierProvider).user?['username'] as String?;
       if (meUsername != null && meUsername.isNotEmpty) {
@@ -206,7 +209,7 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
                             style: AppTextStyles.display(
                               16,
                               color: AppColors.secondary,
-                              letterSpacing: 0.02,
+                              letterSpacing: 0.08,
                             ),
                           ),
                         if (placeShort.isNotEmpty) ...[
@@ -219,7 +222,7 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
                         ],
                         if (dateLabel != null ||
                             (timeLabel != null && timeLabel.isNotEmpty)) ...[
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 8),
                           _DateTimeRow(date: dateLabel, time: timeLabel),
                         ],
                         const SizedBox(height: 8),

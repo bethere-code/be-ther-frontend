@@ -17,6 +17,8 @@ import '../../../feed/presentation/calendar_status_store.dart';
 import '../../../feed/presentation/feed_providers.dart';
 import '../../../feed/presentation/widgets/calendar_rsvp_sheet.dart';
 import '../../../feed/presentation/widgets/feed_attendees_sheet.dart';
+import '../../../feed/presentation/widgets/feed_comments_sheet.dart';
+import '../../../feed/presentation/widgets/feed_likes_sheet.dart';
 import '../../../profile/presentation/profile_screen.dart';
 
 class ProfileCalendarEvent {
@@ -34,6 +36,8 @@ class ProfileCalendarEvent {
     this.address,
     this.calendarCount = 0,
     this.viewCount = 0,
+    this.likesCount = 0,
+    this.commentsCount = 0,
     this.author,
     this.bookmarked = false,
     this.source = 'authored',
@@ -58,6 +62,8 @@ class ProfileCalendarEvent {
   final String? address;
   final int calendarCount;
   final int viewCount;
+  final int likesCount;
+  final int commentsCount;
   final ExploreAuthor? author;
   final bool bookmarked;
   final String source;
@@ -151,6 +157,8 @@ class ProfileCalendarEvent {
       address: json['address'] as String?,
       calendarCount: (json['calendarCount'] as num?)?.toInt() ?? 0,
       viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
+      likesCount: (json['likesCount'] as num?)?.toInt() ?? 0,
+      commentsCount: (json['commentsCount'] as num?)?.toInt() ?? 0,
       author: ExploreAuthor.tryParse(json['authorId'] ?? json['author']),
       bookmarked: json['bookmarked'] as bool? ?? false,
       source: json['source'] as String? ?? 'authored',
@@ -169,6 +177,8 @@ class ProfileCalendarEvent {
     bool? bookmarked,
     bool? inCalendar,
     String? calendarStatus,
+    int? likesCount,
+    int? commentsCount,
   }) {
     return ProfileCalendarEvent(
       postId: postId,
@@ -184,6 +194,8 @@ class ProfileCalendarEvent {
       address: address,
       calendarCount: calendarCount,
       viewCount: viewCount,
+      likesCount: likesCount ?? this.likesCount,
+      commentsCount: commentsCount ?? this.commentsCount,
       author: author,
       bookmarked: bookmarked ?? this.bookmarked,
       source: source,
@@ -256,6 +268,8 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   late bool _inCalendar;
   String? _calendarStatus;
   bool _busy = false;
+  late int _likesCount;
+  late int _commentsCount;
 
   /// One-shot attendees load for own events (no polling / no repeat calls).
   List<Map<String, dynamic>> _goingPeople = const [];
@@ -269,6 +283,8 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   void initState() {
     super.initState();
     _bookmarked = event.bookmarked;
+    _likesCount = event.likesCount;
+    _commentsCount = event.commentsCount;
     final fromStore = ref
         .read(calendarStatusStoreProvider.notifier)
         .statusFor(
@@ -329,6 +345,28 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
       context: context,
       postId: event.postId,
       initialCount: _goingCount,
+    );
+  }
+
+  void _openLikes() {
+    if (event.postId.isEmpty || _likesCount <= 0) return;
+    showFeedLikesSheet(
+      context: context,
+      postId: event.postId,
+      initialCount: _likesCount,
+    );
+  }
+
+  void _openComments() {
+    if (event.postId.isEmpty) return;
+    showFeedCommentsSheet(
+      context: context,
+      postId: event.postId,
+      initialCount: _commentsCount,
+      onCountChanged: (count) {
+        if (!mounted) return;
+        setState(() => _commentsCount = count);
+      },
     );
   }
 
@@ -1092,6 +1130,58 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                     else
                       const SizedBox(width: 48),
                     const Spacer(),
+                    InkWell(
+                      onTap: _likesCount > 0 ? _openLikes : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.favorite_border,
+                              size: 20,
+                              color: AppColors.foreground,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$_likesCount',
+                              style: AppTextStyles.body(
+                                14,
+                                weight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: event.postId.isEmpty ? null : _openComments,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.chat_bubble_outline,
+                              size: 20,
+                              color: AppColors.foreground,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$_commentsCount',
+                              style: AppTextStyles.body(
+                                14,
+                                weight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                     IconButton(
                       tooltip: 'Share',
                       onPressed: event.postId.isEmpty

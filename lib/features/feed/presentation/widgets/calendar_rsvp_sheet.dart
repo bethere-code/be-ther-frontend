@@ -78,7 +78,7 @@ class _CalendarRsvpSheet extends StatelessWidget {
               Text(
                 alreadyOnCalendar || ownerMode
                     ? 'UPDATE STATUS'
-                    : 'WILL YOU BE THERE?',
+                    : 'WILL YOU BE THER?',
                 textAlign: TextAlign.center,
                 style: AppTextStyles.display(
                   26,
@@ -91,13 +91,10 @@ class _CalendarRsvpSheet extends StatelessWidget {
                 ownerMode
                     ? 'Your event stays on your calendar — pick Interested or Going'
                     : alreadyOnCalendar
-                        ? 'Change how this event shows on your calendar'
-                        : 'Pick how you want this event on your calendar',
+                    ? 'Change how this event shows on your calendar'
+                    : 'Pick how you want this event on your calendar',
                 textAlign: TextAlign.center,
-                style: AppTextStyles.body(
-                  14,
-                  color: AppColors.mutedForeground,
-                ),
+                style: AppTextStyles.body(14, color: AppColors.mutedForeground),
               ),
               const SizedBox(height: 22),
               if (ownerMode)
@@ -130,10 +127,8 @@ class _CalendarRsvpSheet extends StatelessWidget {
                         filled: currentStatus != 'interested',
                         accent: AppColors.secondary,
                         filledForeground: AppColors.secondaryForeground,
-                        onTap: () => Navigator.pop(
-                          context,
-                          CalendarRsvpChoice.going,
-                        ),
+                        onTap: () =>
+                            Navigator.pop(context, CalendarRsvpChoice.going),
                       ),
                     ),
                   ],
