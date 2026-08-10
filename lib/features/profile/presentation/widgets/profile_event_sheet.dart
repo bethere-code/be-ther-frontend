@@ -108,35 +108,7 @@ class ProfileCalendarEvent {
   String get formattedDate => DateFormat('MMM d, y').format(date);
 
   /// `HH:mm` / already-localized → `h:mm AM/PM`.
-  String? get formattedTime {
-    final raw = time?.trim();
-    if (raw == null || raw.isEmpty) return null;
-
-    final twelve = RegExp(
-      r'^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$',
-    ).firstMatch(raw);
-    if (twelve != null) {
-      var hour = int.parse(twelve.group(1)!);
-      final minute = twelve.group(2)!;
-      final period = twelve.group(3)!.toUpperCase();
-      hour = hour % 12;
-      if (hour == 0) hour = 12;
-      return '$hour:$minute $period';
-    }
-
-    final twentyFour = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(raw);
-    if (twentyFour != null) {
-      var hour = int.parse(twentyFour.group(1)!);
-      final minute = twentyFour.group(2)!;
-      if (hour < 0 || hour > 23) return raw;
-      final period = hour >= 12 ? 'PM' : 'AM';
-      hour = hour % 12;
-      if (hour == 0) hour = 12;
-      return '$hour:$minute $period';
-    }
-
-    return raw;
-  }
+  String? get formattedTime => EventDateUtils.formatTime12h(time);
 
   bool get hasTicketUrl =>
       !isPast && ticketUrl != null && ticketUrl!.trim().isNotEmpty;
@@ -264,12 +236,15 @@ class _ProfileEventSheet extends ConsumerStatefulWidget {
 }
 
 class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
+  final _sheetMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
   late bool _bookmarked;
   late bool _inCalendar;
   String? _calendarStatus;
   bool _busy = false;
   late int _likesCount;
   late int _commentsCount;
+  late bool _hiddenOnProfile;
 
   /// One-shot attendees load for own events (no polling / no repeat calls).
   List<Map<String, dynamic>> _goingPeople = const [];
@@ -285,6 +260,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
     _bookmarked = event.bookmarked;
     _likesCount = event.likesCount;
     _commentsCount = event.commentsCount;
+    _hiddenOnProfile = event.hiddenOnProfile;
     final fromStore = ref
         .read(calendarStatusStoreProvider.notifier)
         .statusFor(
@@ -331,14 +307,6 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
     }
   }
 
-  void _openGoingPerson(Map<String, dynamic> user) {
-    final username = (user['username'] as String?)?.trim() ?? '';
-    if (username.isEmpty) return;
-    final router = GoRouter.of(context);
-    Navigator.of(context).pop();
-    router.push(ProfileScreen.pathForUser(username));
-  }
-
   void _openGoingList() {
     if (event.postId.isEmpty || _goingCount < 1) return;
     showFeedAttendeesSheet(
@@ -346,6 +314,45 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
       postId: event.postId,
       initialCount: _goingCount,
     );
+  }
+
+  Future<void> _setHiddenOnProfile(bool hide) async {
+    if (_busy || event.postId.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final repo = ref.read(postsRepositoryProvider);
+      if (hide) {
+        await repo.hideOnProfile(event.postId);
+      } else {
+        await repo.unhideOnProfile(event.postId);
+      }
+      if (!mounted) return;
+      setState(() => _hiddenOnProfile = hide);
+      // Toast before calendar refresh — invalidate can briefly drop the parent
+      // Scaffold and crash ScaffoldMessenger if we snackbar afterward.
+      _toast(
+        hide
+            ? 'Hidden from your public profile'
+            : 'Visible on your public profile again',
+      );
+      widget.onCalendarChanged();
+    } catch (e) {
+      if (!mounted) return;
+      _toast(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    // Use the sheet-local ScaffoldMessenger (see build) so we never depend on
+    // the profile Scaffold, which can briefly unmount during calendar refresh.
+    final messenger = _sheetMessengerKey.currentState;
+    if (messenger == null) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _openLikes() {
@@ -550,13 +557,6 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
     );
   }
 
-  Future<void> _hideEvent() async {
-    await _runAction(
-      () => ref.read(postsRepositoryProvider).hideOnProfile(event.postId),
-      success: 'Hidden from your public profile',
-    );
-  }
-
   Future<void> _notGoing() async {
     if (event.postId.isEmpty || _busy) return;
     setState(() => _busy = true);
@@ -608,11 +608,15 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
     final locationForShare =
         fullLocation.isNotEmpty ? fullLocation : (place.isEmpty ? null : place);
 
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: Material(
-        color: AppColors.background,
-        child: ConstrainedBox(
+    return ScaffoldMessenger(
+      key: _sheetMessengerKey,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Align(
+          alignment: Alignment.bottomCenter,
+          child: Material(
+            color: AppColors.background,
+            child: ConstrainedBox(
           constraints: BoxConstraints(
             maxHeight: MediaQuery.sizeOf(context).height * 0.9,
           ),
@@ -681,7 +685,9 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                         onSelected: (value) {
                           switch (value) {
                             case 'hide':
-                              _hideEvent();
+                              _setHiddenOnProfile(true);
+                            case 'unhide':
+                              _setHiddenOnProfile(false);
                             case 'delete':
                               _confirmDelete();
                             case 'not_going':
@@ -690,11 +696,10 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                         },
                         itemBuilder: (context) => [
                           PopupMenuItem(
-                            value: 'hide',
-                            enabled: !event.hiddenOnProfile,
+                            value: _hiddenOnProfile ? 'unhide' : 'hide',
                             child: Text(
-                              event.hiddenOnProfile
-                                  ? 'Already hidden'
+                              _hiddenOnProfile
+                                  ? 'Show on profile'
                                   : 'Hide event',
                               style: AppTextStyles.body(
                                 14,
@@ -792,7 +797,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                                 ),
                               ),
                             ),
-                          if (event.hiddenOnProfile)
+                          if (_hiddenOnProfile)
                             Positioned(
                               bottom: 12,
                               left: 12,
@@ -888,7 +893,6 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                           people: _goingPeople,
                           loading: _goingLoading,
                           onOpenList: _openGoingList,
-                          onOpenPerson: _openGoingPerson,
                         ),
                       ],
                       if (showOwnerStatusToggle) ...[
@@ -1220,6 +1224,8 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
           ),
         ),
       ),
+      ),
+      ),
     );
   }
 }
@@ -1271,14 +1277,12 @@ class _GoingInsightRow extends StatelessWidget {
     required this.people,
     required this.loading,
     required this.onOpenList,
-    required this.onOpenPerson,
   });
 
   final int count;
   final List<Map<String, dynamic>> people;
   final bool loading;
   final VoidCallback onOpenList;
-  final void Function(Map<String, dynamic> user) onOpenPerson;
 
   static const _maxFaces = 5;
 
@@ -1337,32 +1341,32 @@ class _GoingInsightRow extends StatelessWidget {
           ),
         ] else if (faces.isNotEmpty) ...[
           const SizedBox(height: 10),
-          SizedBox(
-            height: 36,
-            child: Row(
-              children: [
-                for (var i = 0; i < faces.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 6),
-                  _GoingFace(
-                    user: faces[i],
-                    onTap: () => onOpenPerson(faces[i]),
-                  ),
-                ],
-                if (overflow > 0) ...[
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: onOpenList,
-                    child: Text(
-                      '+$overflow',
-                      style: AppTextStyles.body(
-                        13,
-                        weight: FontWeight.w700,
-                        color: AppColors.mutedForeground,
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onOpenList,
+              child: SizedBox(
+                height: 36,
+                child: Row(
+                  children: [
+                    for (var i = 0; i < faces.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 6),
+                      _GoingFace(user: faces[i]),
+                    ],
+                    if (overflow > 0) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '+$overflow',
+                        style: AppTextStyles.body(
+                          13,
+                          weight: FontWeight.w700,
+                          color: AppColors.mutedForeground,
+                        ),
                       ),
-                    ),
-                  ),
-                ],
-              ],
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -1372,27 +1376,19 @@ class _GoingInsightRow extends StatelessWidget {
 }
 
 class _GoingFace extends StatelessWidget {
-  const _GoingFace({required this.user, required this.onTap});
+  const _GoingFace({required this.user});
 
   final Map<String, dynamic> user;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final username = (user['username'] as String?)?.trim() ?? '';
-    final avatar = (user['avatarUrl'] as String?) ?? '';
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: username.isEmpty ? null : onTap,
-        customBorder: const CircleBorder(),
-        child: AuthorAvatar(
-          avatarUrl: avatar,
-          username: username,
-          size: 36,
-          interactive: false,
-        ),
-      ),
+    final avatarUrl = (user['avatarUrl'] as String?)?.trim() ?? '';
+    return AuthorAvatar(
+      avatarUrl: avatarUrl,
+      username: username,
+      size: 36,
+      interactive: false,
     );
   }
 }

@@ -671,7 +671,7 @@ class _FeedCardState extends ConsumerState<_FeedCard> {
                     ),
                   ),
                 ),
-                _FeedCardMoreMenu(postId: id),
+                _FeedCardMoreMenu(postId: id, isPast: isPast),
                 // Container(
                 //   padding: const EdgeInsets.symmetric(
                 //     horizontal: 12,
@@ -1073,9 +1073,10 @@ class _EventDetailMeta extends StatelessWidget {
 }
 
 class _FeedCardMoreMenu extends ConsumerWidget {
-  const _FeedCardMoreMenu({required this.postId});
+  const _FeedCardMoreMenu({required this.postId, this.isPast = false});
 
   final String postId;
+  final bool isPast;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1110,13 +1111,14 @@ class _FeedCardMoreMenu extends ConsumerWidget {
         }
       },
       itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'event_cancelled',
-          child: Text(
-            'Event is cancelled',
-            style: AppTextStyles.body(14, weight: FontWeight.w700),
+        if (!isPast)
+          PopupMenuItem(
+            value: 'event_cancelled',
+            child: Text(
+              'Event is cancelled',
+              style: AppTextStyles.body(14, weight: FontWeight.w700),
+            ),
           ),
-        ),
         PopupMenuItem(
           value: 'spam',
           child: Text(

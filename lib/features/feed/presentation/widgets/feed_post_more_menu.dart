@@ -8,9 +8,14 @@ import '../../../../core/design/widgets/post_more_menu_button.dart';
 import 'feed_post_report_flow.dart';
 
 class FeedPostMoreMenu extends ConsumerWidget {
-  const FeedPostMoreMenu({super.key, required this.postId});
+  const FeedPostMoreMenu({
+    super.key,
+    required this.postId,
+    this.isPast = false,
+  });
 
   final String postId;
+  final bool isPast;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,13 +41,14 @@ class FeedPostMoreMenu extends ConsumerWidget {
         }
       },
       itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'event_cancelled',
-          child: Text(
-            'Event is cancelled',
-            style: AppTextStyles.body(14, weight: FontWeight.w700),
+        if (!isPast)
+          PopupMenuItem(
+            value: 'event_cancelled',
+            child: Text(
+              'Event is cancelled',
+              style: AppTextStyles.body(14, weight: FontWeight.w700),
+            ),
           ),
-        ),
         PopupMenuItem(
           value: 'spam',
           child: Text(

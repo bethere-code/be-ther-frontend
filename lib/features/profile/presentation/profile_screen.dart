@@ -211,8 +211,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   String _calendarViewMode(Map<String, dynamic> user, {required bool isOwn}) {
     if (!isOwn) return 'full';
     final settings = user['settings'];
-    if (settings is Map) {
-      return settings['calendarView'] as String? ?? 'full';
+    if (settings is Map && settings['calendarView'] == 'events-only') {
+      return 'events-only';
     }
     return 'full';
   }
@@ -265,7 +265,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           final date = _gridStart.add(Duration(days: index));
           final dateKey = DateFormat('yyyy-MM-dd').format(date);
           final event = eventsByDate[dateKey];
-          final isToday = date.year == todayDate.year &&
+          final isToday =
+              date.year == todayDate.year &&
               date.month == todayDate.month &&
               date.day == todayDate.day;
           final isPast = date.isBefore(todayDate);
@@ -282,10 +283,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             onTap: event == null
                 ? null
                 : () => _openEvent(
-                      event: event,
-                      username: username,
-                      isOwnProfile: isOwnProfile,
-                    ),
+                    event: event,
+                    username: username,
+                    isOwnProfile: isOwnProfile,
+                  ),
           );
         },
       ),
@@ -325,6 +326,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final profileAsync = ref.watch(profileViewProvider(widget.username));
 
     return profileAsync.when(
+      skipLoadingOnReload: true,
+      skipLoadingOnRefresh: true,
       loading: () => AppShell(
         activeTab: ShellTab.home,
         child: const Center(child: CircularProgressIndicator()),
@@ -354,8 +357,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             data: (items) {
               final eventsByDate = _eventsByDate(items);
               final todayDate = _todayDate();
-              final calendarView =
-                  _calendarViewMode(user, isOwn: isOwnProfile);
+              final calendarView = _calendarViewMode(user, isOwn: isOwnProfile);
               final eventsOnly = calendarView == 'events-only';
               if (!eventsOnly) {
                 _jumpCalendarToTodayIfNeeded();
@@ -380,10 +382,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           child: _ProfileInfoSection(
                             user: user,
                             isOwnProfile: isOwnProfile,
-                            onToggleFollow: () {
-                              return ref
+                            onToggleFollow: () async {
+                              final result = await ref
                                   .read(userRepositoryProvider)
                                   .toggleFollow(username);
+                              // Force a fresh profile payload (isFollowing) on next visit.
+                              ref.invalidate(
+                                profileViewProvider(widget.username),
+                              );
+                              ref.invalidate(profileViewProvider(username));
+                              return result;
                             },
                           ),
                         ),
@@ -563,15 +571,19 @@ class _EventsOnlyGrid extends StatelessWidget {
       itemCount: events.length,
       itemBuilder: (context, index) {
         final event = events[index];
-        final date = DateTime(event.date.year, event.date.month, event.date.day);
-        final isToday = date.year == todayDate.year &&
+        final date = DateTime(
+          event.date.year,
+          event.date.month,
+          event.date.day,
+        );
+        final isToday =
+            date.year == todayDate.year &&
             date.month == todayDate.month &&
             date.day == todayDate.day;
         // Month banner when this event starts a new month vs the previous box.
         final prev = index > 0 ? events[index - 1].date : null;
-        final isMonthStart = prev == null ||
-            prev.year != date.year ||
-            prev.month != date.month;
+        final isMonthStart =
+            prev == null || prev.year != date.year || prev.month != date.month;
 
         return _CalendarDayCell(
           date: date,
@@ -704,7 +716,7 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
   }
 
   void _readFollowState(Map<String, dynamic> user) {
-    _isFollowing = user['isFollowing'] as bool? ?? false;
+    _isFollowing = user['isFollowing'] == true;
     _followersCount = (user['followersCount'] as num?)?.toInt() ?? 0;
   }
 
@@ -713,6 +725,35 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
     if (toggle == null || _followBusy) return;
 
     final wasFollowing = _isFollowing;
+    if (wasFollowing) {
+      final username = (widget.user['username'] as String?)?.trim() ?? '';
+      final label = username.isNotEmpty ? '@$username' : 'this user';
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(
+            'UNFOLLOW?',
+            style: AppTextStyles.display(22, color: AppColors.secondary),
+          ),
+          content: Text('Stop following $label?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('CANCEL'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.destructive,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('UNFOLLOW'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+
     final previousCount = _followersCount;
 
     // Optimistic UI — count moves immediately with the button.
@@ -1236,27 +1277,44 @@ class _Stat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Narrow phones (and large system text scale) shrink each Expanded column
+    // until long labels like FOLLOWERS wrap mid-word. Scale down to keep one line.
     return Expanded(
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: AppTextStyles.display(
-              22,
-              color: AppColors.secondary,
-              letterSpacing: 0.02,
+      child: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.15,
+        child: Column(
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.display(
+                  22,
+                  color: AppColors.secondary,
+                  letterSpacing: 0.02,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: AppTextStyles.body(
-              11,
-              color: AppColors.mutedForeground,
-              weight: FontWeight.w800,
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body(
+                  11,
+                  color: AppColors.mutedForeground,
+                  weight: FontWeight.w800,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

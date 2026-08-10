@@ -5,7 +5,11 @@ import 'app_colors.dart';
 
 /// Typography: Bebas Neue (display) + Red Hat Display (body), per Figma Make.
 abstract final class AppTextStyles {
-  static TextStyle display(double fontSize, {Color? color, double letterSpacing = 0.1}) {
+  static TextStyle display(
+    double fontSize, {
+    Color? color,
+    double letterSpacing = 0.05,
+  }) {
     return GoogleFonts.bebasNeue(
       fontSize: fontSize,
       color: color ?? AppColors.foreground,

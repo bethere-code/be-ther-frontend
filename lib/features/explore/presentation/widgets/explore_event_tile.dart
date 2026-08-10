@@ -142,7 +142,7 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
         : (_calendarStatus ?? apiFallback);
     final placeShort = event.placeShort;
     final dateLabel = event.formattedDateOnly;
-    final timeLabel = event.time?.trim();
+    final timeLabel = event.formattedTime;
 
     return LayoutBuilder(
       builder: (context, constraints) {

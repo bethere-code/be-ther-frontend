@@ -184,7 +184,7 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
     final author = event.author;
     final place = event.placeLabel;
     final dateLabel = event.formattedDateOnly;
-    final timeLabel = event.time;
+    final timeLabel = event.formattedTime;
     final headerLabel = !isMine && (author?.username.isNotEmpty ?? false)
         ? '@${author!.username}'
         : 'EVENT DETAILS';
@@ -367,7 +367,7 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                                 icon: Icons.calendar_today_outlined,
                                 label: dateLabel,
                               ),
-                            if (timeLabel != null)
+                            if (timeLabel != null && timeLabel.isNotEmpty)
                               _MetaChip(
                                 icon: Icons.access_time,
                                 label: timeLabel,
@@ -408,10 +408,12 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                             height: 44,
                             child: FilledButton(
                               style: FilledButton.styleFrom(
-                                backgroundColor:
-                                    calendarButtonBackground(_calendarStatus),
-                                foregroundColor:
-                                    calendarButtonForeground(_calendarStatus),
+                                backgroundColor: calendarButtonBackground(
+                                  _calendarStatus,
+                                ),
+                                foregroundColor: calendarButtonForeground(
+                                  _calendarStatus,
+                                ),
                                 shape: const RoundedRectangleBorder(
                                   borderRadius: BorderRadius.zero,
                                 ),

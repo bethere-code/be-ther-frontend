@@ -55,13 +55,6 @@ Future<File> buildDefaultEventCoverFile() async {
     );
   canvas.drawRect(rect, glow);
 
-  // Thin cream frame so the cover feels intentional.
-  final framePaint = Paint()
-    ..color = AppColors.background.withValues(alpha: 0.22)
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = 12;
-  canvas.drawRect(rect.deflate(22), framePaint);
-
   final maxLogoW = size.width * 0.62;
   final scale = maxLogoW / logo.width;
   final logoW = logo.width * scale;

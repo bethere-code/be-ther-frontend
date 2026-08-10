@@ -26,29 +26,39 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _private = false;
   bool _push = true;
+  /// Default for every account until the user explicitly changes it.
   String _calendarView = 'full';
-  var _hydrated = false;
+  var _hydrateStarted = false;
+  /// True after server settings are applied (or failed → local defaults).
+  var _settingsReady = false;
+
+  static String _normalizeCalendarView(Object? raw) {
+    return raw == 'events-only' ? 'events-only' : 'full';
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_hydrated) return;
-    _hydrated = true;
+    if (_hydrateStarted) return;
+    _hydrateStarted = true;
     Future.microtask(() async {
       try {
         final user = await ref.read(profileMeProvider.future);
         if (!mounted) return;
         final settings = user['settings'];
-        if (settings is Map<String, dynamic>) {
+        if (settings is Map) {
           setState(() {
             _private = settings['isPrivateProfile'] as bool? ?? false;
             _push = settings['pushEnabled'] as bool? ?? true;
-            _calendarView = settings['calendarView'] as String? ?? 'full';
+            _calendarView = _normalizeCalendarView(settings['calendarView']);
+            _settingsReady = true;
           });
+          return;
         }
       } catch (_) {
-        // ignore
+        // Keep local defaults (full calendar).
       }
+      if (mounted) setState(() => _settingsReady = true);
     });
   }
 
@@ -105,7 +115,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         selected: _calendarView == 'full',
                         onTap: () async {
                           if (_calendarView == 'full') return;
-                          setState(() => _calendarView = 'full');
+                          setState(() {
+                            _calendarView = 'full';
+                            _settingsReady = true;
+                          });
                           await _save();
                         },
                       ),
@@ -117,7 +130,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         selected: _calendarView == 'events-only',
                         onTap: () async {
                           if (_calendarView == 'events-only') return;
-                          setState(() => _calendarView = 'events-only');
+                          setState(() {
+                            _calendarView = 'events-only';
+                            _settingsReady = true;
+                          });
                           await _save();
                         },
                       ),
@@ -221,12 +237,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _save() async {
     try {
+      final settings = <String, dynamic>{
+        'isPrivateProfile': _private,
+        'pushEnabled': _push,
+      };
+      // Avoid writing a stale calendarView before hydrate finishes.
+      if (_settingsReady) {
+        settings['calendarView'] = _calendarView;
+      }
       final updated = await ref.read(userRepositoryProvider).patchMe({
-        'settings': {
-          'isPrivateProfile': _private,
-          'pushEnabled': _push,
-          'calendarView': _calendarView,
-        },
+        'settings': settings,
       });
       ref.read(authNotifierProvider.notifier).updateUser(updated);
       ref.invalidate(profileMeProvider);

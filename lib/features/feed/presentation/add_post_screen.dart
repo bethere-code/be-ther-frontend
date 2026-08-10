@@ -75,6 +75,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   static const _fieldEventName = 'eventName';
   static const _fieldDescription = 'description';
   static const _fieldDate = 'date';
+  static const _fieldTime = 'time';
   static const _fieldTicket = 'ticket';
   static const _fieldImage = 'image';
 
@@ -381,8 +382,43 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     }
   }
 
+  DateTime get _today {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  bool get _isSelectedDateToday {
+    final d = _selectedDate;
+    if (d == null) return false;
+    final today = _today;
+    return d.year == today.year && d.month == today.month && d.day == today.day;
+  }
+
+  bool _isDateTimeInPast(DateTime date, TimeOfDay time) {
+    final when = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    return when.isBefore(DateTime.now());
+  }
+
   String? _validateDate() {
     if (_selectedDate == null) return 'Date is required';
+    final day = DateTime(
+      _selectedDate!.year,
+      _selectedDate!.month,
+      _selectedDate!.day,
+    );
+    if (day.isBefore(_today)) return 'Date cannot be in the past';
+    return null;
+  }
+
+  String? _validateTime() {
+    if (_selectedDate == null) return null;
+    if (_selectedTime == null) {
+      if (_isSelectedDateToday) return 'Time is required for today';
+      return null;
+    }
+    if (_isDateTimeInPast(_selectedDate!, _selectedTime!)) {
+      return 'Time must be from now onwards';
+    }
     return null;
   }
 
@@ -418,6 +454,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     return _validateEventName(_eventName.text) != null ||
         _validateLocation() != null ||
         _validateDate() != null ||
+        _validateTime() != null ||
         _validateDescription(_description.text) != null ||
         _validateTicket(_ticket.text) != null;
   }
@@ -458,10 +495,14 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 50));
     if (!mounted) return;
 
+    final today = _today;
+    var initial = _selectedDate ?? today;
+    if (initial.isBefore(today)) initial = today;
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
-      firstDate: DateTime(2000),
+      initialDate: initial,
+      firstDate: today,
       lastDate: DateTime(2100),
     );
     if (!mounted) return;
@@ -469,25 +510,61 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
     if (picked == null) return;
 
-    setState(() => _selectedDate = picked);
+    setState(() {
+      _selectedDate = picked;
+      // Drop a time that would land in the past on the newly chosen day.
+      if (_selectedTime != null &&
+          _isDateTimeInPast(picked, _selectedTime!)) {
+        _selectedTime = null;
+      }
+    });
     // Continuously ask for time — user should not need a second tap.
     await _pickTime();
   }
 
   Future<void> _pickTime() async {
     FocusManager.instance.primaryFocus?.unfocus();
+    _markTouched(_fieldTime);
     await Future<void>.delayed(const Duration(milliseconds: 50));
     if (!mounted) return;
 
+    if (_selectedDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a date first')),
+      );
+      return;
+    }
+
+    final now = DateTime.now();
+    TimeOfDay initial = _selectedTime ?? TimeOfDay.now();
+    if (_isSelectedDateToday) {
+      // Prefer "now" so the dial starts at a valid upcoming time.
+      initial = TimeOfDay(hour: now.hour, minute: now.minute);
+      if (_selectedTime != null &&
+          !_isDateTimeInPast(_selectedDate!, _selectedTime!)) {
+        initial = _selectedTime!;
+      }
+    }
+
     final picked = await showTimePicker(
       context: context,
-      initialTime: _selectedTime ?? TimeOfDay.now(),
+      initialTime: initial,
     );
     if (!mounted) return;
     FocusManager.instance.primaryFocus?.unfocus();
-    if (picked != null) {
-      setState(() => _selectedTime = picked);
+    if (picked == null) return;
+
+    if (_isDateTimeInPast(_selectedDate!, picked)) {
+      setState(() => _selectedTime = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Choose a time from now onwards'),
+        ),
+      );
+      return;
     }
+
+    setState(() => _selectedTime = picked);
   }
 
   Future<void> _post() async {
@@ -799,6 +876,10 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                               decoration:
                                                   _inputDecoration(
                                                     hint: 'Select time',
+                                                    errorText: _fieldError(
+                                                      _fieldTime,
+                                                      _validateTime,
+                                                    ),
                                                   ).copyWith(
                                                     suffixIcon: const Icon(
                                                       Icons.access_time,

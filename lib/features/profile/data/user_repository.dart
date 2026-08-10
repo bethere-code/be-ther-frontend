@@ -91,9 +91,9 @@ class UserRepository {
         throw Exception(body?['error']?.toString() ?? 'Failed to update follow');
       }
       final data = body['data'];
-      if (data is Map<String, dynamic>) {
+      if (data is Map) {
         return (
-          following: data['following'] as bool? ?? false,
+          following: data['following'] == true,
           followersCount: (data['followersCount'] as num?)?.toInt() ?? 0,
         );
       }

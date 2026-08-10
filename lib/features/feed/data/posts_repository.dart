@@ -61,6 +61,33 @@ class PostsRepository {
     }
   }
 
+  Future<void> unhideOnProfile(String postId) async {
+    try {
+      // Prefer DELETE on the same hide resource; fall back to POST unhide.
+      try {
+        final res = await _dio.delete<Map<String, dynamic>>(
+          '/api/v1/posts/$postId/hide-on-profile',
+        );
+        _extractData(res.data, fallbackMessage: 'Failed to show event');
+        return;
+      } on DioException catch (e) {
+        final code = e.response?.statusCode;
+        if (code != 404 && code != 405) rethrow;
+      }
+      final res =
+          await _dio.post<Map<String, dynamic>>('/api/v1/posts/$postId/unhide-on-profile');
+      _extractData(res.data, fallbackMessage: 'Failed to show event');
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      if (code == 404) {
+        throw Exception(
+          'Show on profile needs a server update. Redeploy the backend, then try again.',
+        );
+      }
+      throw Exception(_apiMessage(e, fallback: 'Failed to show event'));
+    }
+  }
+
   Future<void> deletePost(String postId) async {
     try {
       final res = await _dio.delete<Map<String, dynamic>>('/api/v1/posts/$postId');

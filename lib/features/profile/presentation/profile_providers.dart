@@ -10,12 +10,22 @@ final userRepositoryProvider = Provider<UserRepository>((ref) {
 });
 
 final profileMeProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  // Re-fetch when the session changes so a new login never inherits
+  // another user's cached settings (e.g. calendarView).
+  final token = ref.watch(authNotifierProvider.select((s) => s.accessToken));
+  if (token == null || token.isEmpty) {
+    throw StateError('Not authenticated');
+  }
   final repo = ref.watch(userRepositoryProvider);
   return repo.me();
 });
 
 /// Loads a profile for [username], or the authenticated user when null.
 final profileViewProvider = FutureProvider.family<Map<String, dynamic>, String?>((ref, username) async {
+  final token = ref.watch(authNotifierProvider.select((s) => s.accessToken));
+  if (token == null || token.isEmpty) {
+    throw StateError('Not authenticated');
+  }
   final repo = ref.watch(userRepositoryProvider);
   final me = await repo.me();
   final meUsername = me['username'] as String? ?? '';
@@ -29,6 +39,10 @@ final profileViewProvider = FutureProvider.family<Map<String, dynamic>, String?>
 
 final profileCalendarProvider = FutureProvider.family<List<Map<String, dynamic>>, String>(
   (ref, username) async {
+    final token = ref.watch(authNotifierProvider.select((s) => s.accessToken));
+    if (token == null || token.isEmpty) {
+      throw StateError('Not authenticated');
+    }
     final repo = ref.watch(userRepositoryProvider);
     return repo.calendar(username);
   },

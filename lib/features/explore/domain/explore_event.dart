@@ -122,10 +122,10 @@ class ExploreEvent {
 
   bool get showAttendees => attendees > 0;
 
-  /// e.g. "Jul 19, 2026 · 18:00"
+  /// e.g. "Jul 19, 2026 · 6:00 PM"
   String get dateTimeLabel {
     final datePart = _formatDate(dateRaw);
-    final timePart = time?.trim();
+    final timePart = formattedTime;
     if (datePart == null && (timePart == null || timePart.isEmpty)) return '';
     if (datePart != null && timePart != null && timePart.isNotEmpty) {
       return '$datePart · $timePart';
@@ -134,6 +134,9 @@ class ExploreEvent {
   }
 
   String? get formattedDateOnly => _formatDate(dateRaw);
+
+  /// `HH:mm` / already-localized → `h:mm AM/PM`.
+  String? get formattedTime => EventDateUtils.formatTime12h(time);
 
   factory ExploreEvent.fromJson(Map<String, dynamic> json) {
     final id =
@@ -156,10 +159,10 @@ class ExploreEvent {
     final ticketUrl = _nullableTrim(json['ticketUrl'] as String?) ??
         _nullableTrim(details?['ticketUrl'] as String?);
 
-    final apiPast = json['isPast'] ?? json['isEventPast'];
-    final isPast = apiPast is bool
-        ? apiPast
-        : EventDateUtils.isEventPast(dateRaw: dateRaw, timeRaw: timeRaw);
+    final isPast = EventDateUtils.isEventPast(
+      dateRaw: dateRaw,
+      timeRaw: timeRaw,
+    );
 
     final likesCount = (json['likesCount'] as num?)?.toInt() ?? 0;
     final commentsCount = (json['commentsCount'] as num?)?.toInt() ?? 0;
