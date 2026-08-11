@@ -20,6 +20,8 @@ import '../../../core/design/widgets/be_ther_buttons.dart';
 import '../../../core/media/default_event_image.dart';
 import '../../../core/media/ticket_link_preview.dart';
 import '../../../core/network/api_client.dart';
+import '../../explore/presentation/explore_providers.dart';
+import '../../profile/presentation/profile_providers.dart';
 import '../data/places_repository.dart';
 import '../data/posts_repository.dart';
 import 'feed_providers.dart';
@@ -71,6 +73,9 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   final _taggedUsers = <String>[];
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
+  /// Set when the user picks a past time so the field shows the right error
+  /// after we clear the invalid selection.
+  bool _pastTimeRejected = false;
 
   static const _fieldEventName = 'eventName';
   static const _fieldDescription = 'description';
@@ -413,11 +418,12 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   String? _validateTime() {
     if (_selectedDate == null) return null;
     if (_selectedTime == null) {
+      if (_pastTimeRejected) return 'Choose a time from now onwards';
       if (_isSelectedDateToday) return 'Time is required for today';
       return null;
     }
     if (_isDateTimeInPast(_selectedDate!, _selectedTime!)) {
-      return 'Time must be from now onwards';
+      return 'Choose a time from now onwards';
     }
     return null;
   }
@@ -504,6 +510,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       initialDate: initial,
       firstDate: today,
       lastDate: DateTime(2100),
+      // Keyboard entry uses DD/MM/YYYY (en_GB), not MM/DD/YYYY (en_US).
+      locale: const Locale('en', 'GB'),
     );
     if (!mounted) return;
     FocusManager.instance.primaryFocus?.unfocus();
@@ -512,6 +520,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
     setState(() {
       _selectedDate = picked;
+      _pastTimeRejected = false;
       // Drop a time that would land in the past on the newly chosen day.
       if (_selectedTime != null &&
           _isDateTimeInPast(picked, _selectedTime!)) {
@@ -549,22 +558,30 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     final picked = await showTimePicker(
       context: context,
       initialTime: initial,
+      // Keep 12-hour AM/PM dial (en_GB date locale must not force 24h here).
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+          child: child!,
+        );
+      },
     );
     if (!mounted) return;
     FocusManager.instance.primaryFocus?.unfocus();
     if (picked == null) return;
 
     if (_isDateTimeInPast(_selectedDate!, picked)) {
-      setState(() => _selectedTime = null);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Choose a time from now onwards'),
-        ),
-      );
+      setState(() {
+        _selectedTime = null;
+        _pastTimeRejected = true;
+      });
       return;
     }
 
-    setState(() => _selectedTime = picked);
+    setState(() {
+      _selectedTime = picked;
+      _pastTimeRejected = false;
+    });
   }
 
   Future<void> _post() async {
@@ -609,7 +626,6 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       };
       await posts.createPost({
         'location': _eventName.text.trim(),
-        'country': place.country.isNotEmpty ? place.country : place.city,
         'status': _isGoing ? 'going' : 'interested',
         'imageUrl': url,
         'caption': _description.text.trim(),
@@ -619,6 +635,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         'eventDetails': eventDetails,
       });
       ref.invalidate(feedProvider);
+      ref.invalidate(exploreEventsProvider);
+      ref.invalidate(profileMeProvider);
       if (!mounted) return;
       _popRoute();
     } on DioException catch (e) {

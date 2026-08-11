@@ -10,6 +10,7 @@ import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../explore/domain/explore_event.dart';
 import '../../explore/presentation/widgets/explore_event_tile.dart';
+import '../../feed/presentation/feed_providers.dart';
 import '../domain/search_post.dart';
 import 'search_providers.dart';
 
@@ -208,9 +209,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   List<ExploreEvent> _displayItems(SearchPage page) {
-    if (_skip == 0) return page.items;
-    if (_results.isEmpty) return page.items;
-    return List<ExploreEvent>.unmodifiable(_results);
+    final deleted = ref.read(deletedPostIdsProvider);
+    List<ExploreEvent> raw;
+    if (_skip == 0) {
+      raw = page.items;
+    } else if (_results.isEmpty) {
+      raw = page.items;
+    } else {
+      raw = List<ExploreEvent>.unmodifiable(_results);
+    }
+    if (deleted.isEmpty) return raw;
+    return raw
+        .where((e) => !deleted.contains(e.id))
+        .toList(growable: false);
   }
 
   @override
@@ -221,6 +232,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     final params = (query: _activeQuery, skip: _skip);
     final asyncResults = ref.watch(searchResultsProvider(params));
+    ref.watch(deletedPostIdsProvider);
     final genAtWatch = _generation;
 
     return AppShell(
@@ -377,7 +389,7 @@ class _SearchHeader extends StatelessWidget {
               onSubmitted: (_) => onSubmit(),
               style: AppTextStyles.body(15, weight: FontWeight.w600),
               decoration: InputDecoration(
-                hintText: 'Event, venue, city, date, artist…',
+                hintText: 'Event, venue, city, area, state…',
                 hintStyle: AppTextStyles.body(
                   14,
                   color: AppColors.mutedForeground,
@@ -606,7 +618,7 @@ class _SearchIdle extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Event name, venue, city, date (e.g. 22 June 2026),\ndescription, or artist',
+              'Event name, venue, city, area, state, postal code,\ndate (e.g. 22 June 2026), or description',
               textAlign: TextAlign.center,
               style: AppTextStyles.body(
                 14,
@@ -648,7 +660,7 @@ class _SearchEmpty extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              'Try another city, venue, date, or keyword\nin the title or description',
+              'Try another city, area, venue, date, or keyword\nin the title or description',
               textAlign: TextAlign.center,
               style: AppTextStyles.body(
                 14,

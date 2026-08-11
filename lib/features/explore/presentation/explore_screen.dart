@@ -5,23 +5,47 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
+import '../../../core/design/app_images.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
-import '../../../core/design/widgets/shell_header_avatar.dart';
+import '../../feed/presentation/feed_providers.dart';
 import '../../feed/presentation/feed_screen.dart';
 import '../../search/presentation/search_screen.dart';
 import 'explore_providers.dart';
 import 'widgets/explore_event_tile.dart';
 
-class ExploreScreen extends ConsumerWidget {
+class ExploreScreen extends ConsumerStatefulWidget {
   const ExploreScreen({super.key});
 
   static const path = '/explore';
   static const name = 'explore';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ExploreScreen> createState() => _ExploreScreenState();
+}
+
+class _ExploreScreenState extends ConsumerState<ExploreScreen> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final events = ref.watch(exploreEventsProvider);
+    final deletedIds = ref.watch(deletedPostIdsProvider);
 
     return PopScope(
       canPop: false,
@@ -34,7 +58,7 @@ class ExploreScreen extends ConsumerWidget {
         header: PreferredSize(
           preferredSize: const Size.fromHeight(56),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: const BoxDecoration(
               color: AppColors.secondary,
               border: Border(
@@ -46,7 +70,14 @@ class ExploreScreen extends ConsumerWidget {
             ),
             child: Row(
               children: [
-                const ShellHeaderAvatar(),
+                InkWell(
+                  onTap: _scrollToTop,
+                  child: Image.asset(
+                    AppImages.betherNewLogo,
+                    fit: BoxFit.contain,
+                    width: 60,
+                  ),
+                ),
                 Expanded(
                   child: Center(
                     child: Text(
@@ -80,7 +111,10 @@ class ExploreScreen extends ConsumerWidget {
               Expanded(
                 child: events.when(
                   data: (items) {
-                    if (items.isEmpty) {
+                    final visible = items
+                        .where((e) => !deletedIds.contains(e.id))
+                        .toList(growable: false);
+                    if (visible.isEmpty) {
                       return Center(
                         child: Text(
                           'No posts to explore yet',
@@ -97,6 +131,7 @@ class ExploreScreen extends ConsumerWidget {
                       onRefresh: () =>
                           ref.refresh(exploreEventsProvider.future),
                       child: MasonryGridView.count(
+                        controller: _scrollController,
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                         physics: const BouncingScrollPhysics(
                           parent: AlwaysScrollableScrollPhysics(),
@@ -104,9 +139,9 @@ class ExploreScreen extends ConsumerWidget {
                         crossAxisCount: ExploreEventTileLayout.crossAxisCount,
                         crossAxisSpacing: ExploreEventTileLayout.gridSpacing,
                         mainAxisSpacing: ExploreEventTileLayout.gridSpacing,
-                        itemCount: items.length,
+                        itemCount: visible.length,
                         itemBuilder: (context, i) =>
-                            ExploreEventTile(event: items[i]),
+                            ExploreEventTile(event: visible[i]),
                       ),
                     );
                   },

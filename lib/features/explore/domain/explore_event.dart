@@ -51,6 +51,7 @@ class ExploreEvent {
     this.calendarStatus,
     required this.isPast,
     this.place,
+    this.address,
     this.country,
     this.venue,
     this.dateRaw,
@@ -68,6 +69,8 @@ class ExploreEvent {
   final String title;
   final String imageUrl;
   final String? place;
+  /// Places `formattedAddress` when the event was created (no fallbacks).
+  final String? address;
   final String? country;
   final String? venue;
   final String? dateRaw;
@@ -90,28 +93,27 @@ class ExploreEvent {
 
   String get heroTag => 'explore-event-image-$id';
 
-  /// Full place string for sheet / share (deduped).
+  /// Explore/search sheet location row — Places `formattedAddress` only.
   String get placeLabel {
-    final candidates = <String>[
-      place?.trim() ?? '',
-      country?.trim() ?? '',
-      venue?.trim() ?? '',
-    ];
-    for (final c in candidates) {
-      if (c.isEmpty) continue;
-      if (title.isNotEmpty && c.toLowerCase() == title.toLowerCase()) continue;
-      return c;
-    }
-    for (final c in candidates) {
-      if (c.isNotEmpty) return c;
-    }
-    return '';
+    final addressLabel = address?.trim() ?? '';
+    if (addressLabel.isEmpty) return '';
+    if (addressLabel.toLowerCase() == title.trim().toLowerCase()) return '';
+    return addressLabel;
   }
 
-  /// Grid tile: text before the first comma (e.g. "AMB cinemas, Hyd…" → "AMB cinemas").
+  /// Grid tile: first segment of the full address / place line.
   String get placeShort {
     final full = placeLabel.trim();
     if (full.isEmpty) return '';
+    // "Name · full address" → prefer the street address after the separator.
+    final dot = full.indexOf(' · ');
+    if (dot != -1) {
+      final after = full.substring(dot + 3).trim();
+      if (after.isNotEmpty) {
+        final comma = after.indexOf(',');
+        return comma == -1 ? after : after.substring(0, comma).trim();
+      }
+    }
     final comma = full.indexOf(',');
     if (comma == -1) return full;
     return full.substring(0, comma).trim();
@@ -159,6 +161,16 @@ class ExploreEvent {
     final ticketUrl = _nullableTrim(json['ticketUrl'] as String?) ??
         _nullableTrim(details?['ticketUrl'] as String?);
 
+    final eventLocation = details?['eventLocation'] is Map<String, dynamic>
+        ? details!['eventLocation'] as Map<String, dynamic>
+        : (json['eventLocation'] is Map<String, dynamic>
+            ? json['eventLocation'] as Map<String, dynamic>
+            : null);
+    final address = _resolveFormattedAddress(
+      jsonAddress: _nullableTrim(json['address'] as String?),
+      eventLocation: eventLocation,
+    );
+
     final isPast = EventDateUtils.isEventPast(
       dateRaw: dateRaw,
       timeRaw: timeRaw,
@@ -175,12 +187,13 @@ class ExploreEvent {
       title: title,
       imageUrl: json['image'] as String? ?? json['imageUrl'] as String? ?? '',
       place: _nullableTrim(json['place'] as String?),
+      address: address,
       country: _nullableTrim(json['country'] as String?),
       venue: venue,
       dateRaw: dateRaw,
       time: _nullableTrim(timeRaw),
       ticketUrl: ticketUrl,
-      caption: json['caption'] as String?,
+      caption: _nullableTrim(json['caption'] as String?),
       attendees: attendees,
       trending: json['trending'] as bool? ?? likesCount >= 5,
       status: json['status'] as String? ?? '',
@@ -196,6 +209,17 @@ class ExploreEvent {
     );
   }
 
+  /// Places `formattedAddress` only — never venue/country/tag stitching.
+  static String? _resolveFormattedAddress({
+    required String? jsonAddress,
+    required Map<String, dynamic>? eventLocation,
+  }) {
+    final fromLocation =
+        _nullableTrim(eventLocation?['formattedAddress'] as String?);
+    if (fromLocation != null) return fromLocation;
+    return jsonAddress;
+  }
+
   ExploreEvent copyWith({
     bool? inCalendar,
     String? calendarStatus,
@@ -208,6 +232,7 @@ class ExploreEvent {
       title: title,
       imageUrl: imageUrl,
       place: place,
+      address: address,
       country: country,
       venue: venue,
       dateRaw: dateRaw,

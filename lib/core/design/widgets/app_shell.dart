@@ -158,36 +158,53 @@ class _GlobeButton extends StatelessWidget {
 
   final bool active;
 
-  static const double _iconPadding = 5;
   static const double _iconSize = 45;
 
   @override
   Widget build(BuildContext context) {
-    // Active: coral tile + cream globe. Inactive: cream tile + navy globe.
-    final background = active ? AppColors.primary : AppColors.background;
-    final iconColor = active
-        ? AppColors.primaryForeground
-        : AppColors.secondary;
+    // Active (explore): coral tile. Elsewhere: plain white globe on the navy bar.
+    if (active) {
+      return Material(
+        color: AppColors.primary,
+        child: InkWell(
+          onTap: () => context.go('/explore'),
+          child: Container(
+            height: _iconSize,
+            width: _iconSize,
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: AppColors.border,
+                width: AppDimens.borderThick,
+              ),
+              boxShadow: AppDimens.railActiveShadow,
+            ),
+            child: Image.asset(
+              AppImages.globe,
+              fit: BoxFit.contain,
+              color: AppColors.primaryForeground,
+            ),
+          ),
+        ),
+      );
+    }
 
     return Material(
-      color: background,
+      color: Colors.transparent,
       child: InkWell(
         onTap: () => context.go('/explore'),
-        child: Container(
+        borderRadius: BorderRadius.circular(4),
+        child: SizedBox(
           height: _iconSize,
           width: _iconSize,
-          padding: const EdgeInsets.all(_iconPadding),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: AppColors.border,
-              width: AppDimens.borderThick,
+          child: Center(
+            child: Image.asset(
+              AppImages.globe,
+              width: 28,
+              height: 28,
+              fit: BoxFit.contain,
+              color: AppColors.background,
             ),
-            boxShadow: active ? AppDimens.railActiveShadow : null,
-          ),
-          child: Image.asset(
-            AppImages.globe,
-            fit: BoxFit.contain,
-            color: iconColor,
           ),
         ),
       ),

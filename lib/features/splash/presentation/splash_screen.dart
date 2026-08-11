@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_images.dart';
 import '../../../core/design/app_text_styles.dart';
+import '../../../core/routing/deep_link_listener.dart';
 import '../../../core/storage/onboarding_storage.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../feed/presentation/feed_screen.dart';
@@ -63,6 +64,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
     final auth = ref.read(authNotifierProvider);
     if (auth.isAuthenticated) {
+      final pending = ref.read(pendingDeepLinkProvider);
+      if (pending != null && pending.isNotEmpty) {
+        ref.read(pendingDeepLinkProvider.notifier).clearPending();
+        context.go(pending);
+        return;
+      }
       context.go(FeedScreen.path);
       return;
     }

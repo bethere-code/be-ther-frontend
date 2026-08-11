@@ -10,6 +10,7 @@ import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/author_avatar.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../auth/presentation/auth_notifier.dart';
+import '../../explore/presentation/explore_providers.dart';
 import '../../feed/presentation/feed_providers.dart';
 import '../../settings/presentation/settings_screen.dart';
 import 'profile_providers.dart';
@@ -187,9 +188,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Map<String, ProfileCalendarEvent> _eventsByDate(
     List<Map<String, dynamic>> items,
   ) {
+    final deleted = ref.read(deletedPostIdsProvider);
     final map = <String, ProfileCalendarEvent>{};
     for (final item in items) {
       final event = ProfileCalendarEvent.fromJson(item);
+      if (deleted.contains(event.postId)) continue;
       final key = DateFormat('yyyy-MM-dd').format(event.date);
       map.putIfAbsent(key, () => event);
     }
@@ -199,7 +202,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   List<ProfileCalendarEvent> _eventsChronological(
     List<Map<String, dynamic>> items,
   ) {
-    final events = items.map(ProfileCalendarEvent.fromJson).toList()
+    final deleted = ref.read(deletedPostIdsProvider);
+    final events = items
+        .map(ProfileCalendarEvent.fromJson)
+        .where((e) => !deleted.contains(e.postId))
+        .toList()
       ..sort((a, b) {
         final byDate = a.date.compareTo(b.date);
         if (byDate != 0) return byDate;
@@ -314,8 +321,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       onCalendarChanged: () {
         ref.invalidate(profileCalendarProvider(username));
         ref.invalidate(feedProvider);
+        ref.invalidate(exploreEventsProvider);
         if (isOwnProfile) {
           ref.invalidate(profileViewProvider(widget.username));
+          ref.invalidate(profileMeProvider);
         }
       },
     );
@@ -341,6 +350,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         final isOwnProfile =
             user['isOwnProfile'] as bool? ?? (widget.username == null);
         final calendarAsync = ref.watch(profileCalendarProvider(username));
+        // Rebuild calendar immediately when an event is deleted this session.
+        ref.watch(deletedPostIdsProvider);
 
         return AppShell(
           activeTab: ShellTab.home,

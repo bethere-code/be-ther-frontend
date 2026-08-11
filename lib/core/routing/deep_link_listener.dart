@@ -7,7 +7,7 @@ import '../../features/auth/presentation/auth_notifier.dart';
 import '../network/api_client.dart';
 import 'deep_link_utils.dart';
 
-/// Holds a deep-link path until the user is authenticated.
+/// Holds a deep-link path until the user is authenticated / hydrated.
 class PendingDeepLinkNotifier extends Notifier<String?> {
   @override
   String? build() => null;
@@ -55,15 +55,24 @@ class _DeepLinkListenerState extends ConsumerState<DeepLinkListener> {
     if (route == null) return;
 
     final auth = ref.read(authNotifierProvider);
-    if (!auth.isAuthenticated) {
+
+    // Tokens not loaded yet — stash and let splash / redirect finish hydrate.
+    // Do NOT send the user to Launch (that looked like a sign-out).
+    if (!auth.isReady || !auth.isAuthenticated) {
       ref.read(pendingDeepLinkProvider.notifier).setPending(route);
-      ref.read(goRouterRefreshProvider).refresh();
+      if (auth.isReady && !auth.isAuthenticated) {
+        ref.read(goRouterRefreshProvider).refresh();
+      }
       return;
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.go(route);
+      final router = GoRouter.maybeOf(context);
+      if (router == null) return;
+      final current = router.state.uri.path;
+      if (current == route) return;
+      router.go(route);
     });
   }
 

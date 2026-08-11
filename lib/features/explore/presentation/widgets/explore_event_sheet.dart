@@ -8,6 +8,7 @@ import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/author_avatar.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../../core/design/widgets/expandable_caption.dart';
 import '../../../../core/utils/link_utils.dart';
 import '../../../auth/presentation/auth_notifier.dart';
 import '../../../feed/presentation/calendar_status_store.dart';
@@ -85,15 +86,15 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
   bool _isMine(Map<String, dynamic>? me) {
     final author = event.author;
     if (me == null || author == null) return false;
-    final myId = me['_id']?.toString();
-    if (myId != null &&
-        myId.isNotEmpty &&
-        author.id.isNotEmpty &&
-        myId == author.id) {
+    final myId = me['_id']?.toString() ?? me['id']?.toString() ?? '';
+    if (myId.isNotEmpty && author.id.isNotEmpty && myId == author.id) {
       return true;
     }
-    final myUsername = me['username'] as String? ?? '';
-    return myUsername.isNotEmpty && myUsername == author.username;
+    final myUsername = (me['username'] as String?)?.trim() ?? '';
+    final authorUsername = author.username.trim();
+    return myUsername.isNotEmpty &&
+        authorUsername.isNotEmpty &&
+        myUsername.toLowerCase() == authorUsername.toLowerCase();
   }
 
   void _openLikes() {
@@ -120,12 +121,16 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
 
   Future<void> _handleCalendarTap() async {
     if (event.postId.isEmpty || _calendarBusy || event.isPast) return;
+    final me = ref.read(authNotifierProvider).user;
+    final isMine = _isMine(me);
     final choice = await showCalendarRsvpSheet(
       context: context,
-      alreadyOnCalendar: _inCalendar,
-      currentStatus: _calendarStatus,
+      alreadyOnCalendar: isMine ? true : _inCalendar,
+      currentStatus: _calendarStatus ?? (isMine ? 'going' : null),
+      allowRemove: !isMine,
     );
     if (choice == null || !mounted) return;
+    if (isMine && choice == CalendarRsvpChoice.none) return;
 
     final status = switch (choice) {
       CalendarRsvpChoice.interested => 'interested',
@@ -143,10 +148,12 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
       final inCalendar = cleared
           ? false
           : (data['inCalendar'] as bool? ?? (nextStatus != null));
-      final resolved = inCalendar ? (nextStatus ?? status) : null;
+      final resolved = inCalendar
+          ? (nextStatus ?? status)
+          : (isMine ? status : null);
       ref
           .read(calendarStatusStoreProvider.notifier)
-          .setStatus(event.postId, resolved);
+          .setStatus(event.postId, isMine ? (nextStatus ?? status) : resolved);
       final meUsername =
           ref.read(authNotifierProvider).user?['username'] as String?;
       if (meUsername != null && meUsername.isNotEmpty) {
@@ -154,8 +161,13 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
       }
       if (mounted) {
         setState(() {
-          _calendarStatus = resolved;
-          _inCalendar = resolved != null;
+          if (isMine) {
+            _calendarStatus = nextStatus ?? status;
+            _inCalendar = true;
+          } else {
+            _calendarStatus = resolved;
+            _inCalendar = resolved != null;
+          }
         });
       }
     } catch (e) {
@@ -270,45 +282,6 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                                 url: event.imageUrl,
                                 fit: BoxFit.cover,
                               ),
-                              if (place.isNotEmpty)
-                                Positioned(
-                                  top: 12,
-                                  right: 12,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
-                                    ),
-                                    color: AppColors.secondary.withValues(
-                                      alpha: 0.9,
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.place,
-                                          size: 14,
-                                          color: AppColors.background,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxWidth: 160,
-                                          ),
-                                          child: Text(
-                                            place.toUpperCase(),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: AppTextStyles.display(
-                                              12,
-                                              color: AppColors.background,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
                             ],
                           ),
                         ),
@@ -343,6 +316,14 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                       color: AppColors.secondary,
                     ),
                   ),
+                  if ((event.caption ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    ExpandableCaption(
+                      key: ValueKey('explore-caption-${event.id}'),
+                      text: event.caption!.trim(),
+                      trimLines: 3,
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Container(
                     width: double.infinity,
@@ -402,7 +383,7 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                               ),
                             ),
                           )
-                        else if (!isMine)
+                        else
                           SizedBox(
                             width: double.infinity,
                             height: 44,
@@ -642,7 +623,7 @@ class _MetaChip extends StatelessWidget {
         Flexible(
           child: Text(
             label,
-            maxLines: expanded ? 2 : 1,
+            maxLines: expanded ? 3 : 1,
             overflow: TextOverflow.ellipsis,
             style: AppTextStyles.body(
               13.5,

@@ -8,11 +8,19 @@ import '../../../core/storage/token_storage.dart';
 import '../data/auth_repository.dart';
 
 class AuthState {
-  const AuthState({this.accessToken, this.refreshToken, this.user});
+  const AuthState({
+    this.accessToken,
+    this.refreshToken,
+    this.user,
+    this.isReady = false,
+  });
 
   final String? accessToken;
   final String? refreshToken;
   final Map<String, dynamic>? user;
+
+  /// False until [AuthNotifier.hydrateFromStorage] finishes (success or clear).
+  final bool isReady;
 
   bool get isAuthenticated => accessToken != null && accessToken!.isNotEmpty;
 
@@ -20,12 +28,14 @@ class AuthState {
     String? accessToken,
     String? refreshToken,
     Map<String, dynamic>? user,
+    bool? isReady,
     bool clearUser = false,
   }) {
     return AuthState(
       accessToken: accessToken ?? this.accessToken,
       refreshToken: refreshToken ?? this.refreshToken,
       user: clearUser ? null : (user ?? this.user),
+      isReady: isReady ?? this.isReady,
     );
   }
 }
@@ -58,7 +68,8 @@ class AuthNotifier extends Notifier<AuthState> {
 
   @override
   AuthState build() {
-    return const AuthState();
+    // Start unready so deep links cannot treat "tokens not loaded yet" as signed-out.
+    return const AuthState(isReady: false);
   }
 
   TokenStorage get _storage => ref.read(tokenStorageProvider);
@@ -72,7 +83,7 @@ class AuthNotifier extends Notifier<AuthState> {
     Future<Null> run() async {
       final (access, refresh) = await _storage.read();
       if (refresh == null || refresh.isEmpty) {
-        state = const AuthState();
+        state = const AuthState(isReady: true);
         return;
       }
 
@@ -86,17 +97,26 @@ class AuthNotifier extends Notifier<AuthState> {
             accessToken: access,
             refreshToken: refresh,
             user: user,
+            isReady: true,
           );
           return;
         } on ApiException catch (e) {
           final authExpired = e.statusCode == 401 || e.statusCode == 403;
           if (!authExpired) {
             // Offline or server error — keep tokens so the session survives relaunch.
-            state = AuthState(accessToken: access, refreshToken: refresh);
+            state = AuthState(
+              accessToken: access,
+              refreshToken: refresh,
+              isReady: true,
+            );
             return;
           }
         } catch (_) {
-          state = AuthState(accessToken: access, refreshToken: refresh);
+          state = AuthState(
+            accessToken: access,
+            refreshToken: refresh,
+            isReady: true,
+          );
           return;
         }
       }
@@ -104,7 +124,7 @@ class AuthNotifier extends Notifier<AuthState> {
       final restored = await _restoreViaRefresh(refresh);
       if (!restored) {
         await _storage.clear();
-        state = const AuthState();
+        state = const AuthState(isReady: true);
       }
     }
 
@@ -125,14 +145,24 @@ class AuthNotifier extends Notifier<AuthState> {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       user: tokens.user,
+      isReady: true,
     );
   }
 
   Future<bool> tryRefresh() async {
-    final refresh = state.refreshToken;
+    var refresh = state.refreshToken;
+    if (refresh == null || refresh.isEmpty) {
+      // Deep-link / early API call before hydrate — read storage, never wipe.
+      final (_, stored) = await _storage.read();
+      refresh = stored;
+    }
     if (refresh == null || refresh.isEmpty) return false;
+
     final ok = await _restoreViaRefresh(refresh);
-    if (!ok) await logout();
+    // Only clear a fully hydrated session; never wipe tokens mid-startup.
+    if (!ok && state.isReady) {
+      await logout();
+    }
     return ok;
   }
 
@@ -158,6 +188,7 @@ class AuthNotifier extends Notifier<AuthState> {
         accessToken: next.accessToken,
         refreshToken: next.refreshToken,
         user: user,
+        isReady: true,
       );
       return true;
     } catch (_) {
@@ -168,7 +199,7 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> logout() async {
     await GoogleSignIn.instance.signOut();
     await _storage.clear();
-    state = const AuthState();
+    state = const AuthState(isReady: true);
   }
 
   void updateUser(Map<String, dynamic> patch) {

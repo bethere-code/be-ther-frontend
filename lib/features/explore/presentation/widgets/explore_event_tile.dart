@@ -17,7 +17,7 @@ import 'explore_event_sheet.dart';
 /// Shared layout constants for explore / search event tiles.
 abstract final class ExploreEventTileLayout {
   static const double calendarHeight = 36;
-  static const double ticketButtonSize = 30;
+  static const double ticketButtonSize = 25;
   static const int crossAxisCount = 2;
   static const double gridSpacing = 14;
   static const double imageMaxHeight = 220;
@@ -72,16 +72,35 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
     _inCalendar = _calendarStatus != null;
   }
 
+  bool _isMine(Map<String, dynamic>? me) {
+    final author = widget.event.author;
+    if (me == null || author == null) return false;
+    final myId = me['_id']?.toString() ?? me['id']?.toString() ?? '';
+    if (myId.isNotEmpty && author.id.isNotEmpty && myId == author.id) {
+      return true;
+    }
+    final myUsername = (me['username'] as String?)?.trim() ?? '';
+    final authorUsername = author.username.trim();
+    return myUsername.isNotEmpty &&
+        authorUsername.isNotEmpty &&
+        myUsername.toLowerCase() == authorUsername.toLowerCase();
+  }
+
   Future<void> _handleCalendarTap() async {
     final postId = widget.event.postId;
     if (postId.isEmpty || _calendarBusy || widget.event.isPast) return;
 
+    final me = ref.read(authNotifierProvider).user;
+    final isMine = _isMine(me);
     final choice = await showCalendarRsvpSheet(
       context: context,
-      alreadyOnCalendar: _inCalendar,
-      currentStatus: _calendarStatus,
+      alreadyOnCalendar: isMine ? true : _inCalendar,
+      currentStatus: _calendarStatus ?? (isMine ? 'going' : null),
+      // Authors cannot remove their own event from calendar.
+      allowRemove: !isMine,
     );
     if (choice == null || !mounted) return;
+    if (isMine && choice == CalendarRsvpChoice.none) return;
 
     final status = switch (choice) {
       CalendarRsvpChoice.interested => 'interested',
@@ -99,10 +118,12 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
       final inCalendar = cleared
           ? false
           : (data['inCalendar'] as bool? ?? (nextStatus != null));
-      final resolved = inCalendar ? (nextStatus ?? status) : null;
+      final resolved = inCalendar
+          ? (nextStatus ?? status)
+          : (isMine ? status : null);
       ref
           .read(calendarStatusStoreProvider.notifier)
-          .setStatus(postId, resolved);
+          .setStatus(postId, isMine ? (nextStatus ?? status) : resolved);
       final meUsername =
           ref.read(authNotifierProvider).user?['username'] as String?;
       if (meUsername != null && meUsername.isNotEmpty) {
@@ -110,8 +131,13 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
       }
       if (mounted) {
         setState(() {
-          _calendarStatus = resolved;
-          _inCalendar = resolved != null;
+          if (isMine) {
+            _calendarStatus = nextStatus ?? status;
+            _inCalendar = true;
+          } else {
+            _calendarStatus = resolved;
+            _inCalendar = resolved != null;
+          }
         });
       }
     } catch (e) {
@@ -362,54 +388,62 @@ class _DateTimeRow extends StatelessWidget {
   final String? date;
   final String? time;
 
+  static final TextStyle _metaStyle = AppTextStyles.body(
+    11,
+    color: AppColors.mutedForeground,
+    weight: FontWeight.w600,
+    height: 1.1,
+  );
+
   @override
   Widget build(BuildContext context) {
     final hasDate = date != null && date!.isNotEmpty;
     final hasTime = time != null && time!.isNotEmpty;
     if (!hasDate && !hasTime) return const SizedBox.shrink();
 
-    return Row(
+    // Stack time under date so narrow grid tiles don't truncate the year.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (hasDate) ...[
-          const Icon(
-            Icons.calendar_today_outlined,
-            size: 12,
-            color: AppColors.mutedForeground,
-          ),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              date!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.body(
-                11,
+        if (hasDate)
+          Row(
+            children: [
+              const Icon(
+                Icons.calendar_today_outlined,
+                size: 12,
                 color: AppColors.mutedForeground,
-                weight: FontWeight.w600,
-                height: 1.1,
               ),
-            ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  date!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _metaStyle,
+                ),
+              ),
+            ],
           ),
-        ],
-        if (hasDate && hasTime) const SizedBox(width: 8),
-        if (hasTime) ...[
-          const Icon(
-            Icons.access_time,
-            size: 12,
-            color: AppColors.mutedForeground,
+        if (hasDate && hasTime) const SizedBox(height: 8),
+        if (hasTime)
+          Row(
+            children: [
+              const Icon(
+                Icons.access_time,
+                size: 12,
+                color: AppColors.mutedForeground,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  time!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _metaStyle,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 4),
-          Text(
-            time!,
-            maxLines: 1,
-            style: AppTextStyles.body(
-              11,
-              color: AppColors.mutedForeground,
-              weight: FontWeight.w600,
-              height: 1.1,
-            ),
-          ),
-        ],
       ],
     );
   }

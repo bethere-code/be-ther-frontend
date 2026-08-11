@@ -21,6 +21,7 @@ import '../../features/settings/presentation/settings_screen.dart';
 import '../network/api_client.dart';
 import 'app_route_observer.dart';
 import 'deep_link_listener.dart';
+import 'deep_link_utils.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
@@ -63,13 +64,35 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
+    // Always start on splash. Platform deep links are handled by
+    // [DeepLinkListener] after auth hydrate — otherwise `/e/...` opens
+    // before tokens load and redirect treats the user as signed out.
     initialLocation: SplashScreen.path,
+    overridePlatformDefaultLocation: true,
     observers: [appRouteObserver],
     refreshListenable: refresh,
     redirect: (context, state) {
+      // Normalize share / platform deep links before auth gates.
+      final fromDeepLink = eventRouteFromUri(state.uri);
+      if (fromDeepLink != null && state.uri.path != fromDeepLink) {
+        return fromDeepLink;
+      }
+
       final auth = ref.read(authNotifierProvider);
       final loc = state.matchedLocation;
       final isSplash = loc == SplashScreen.path;
+
+      // Hold deep links until splash finishes hydrateFromStorage.
+      if (!auth.isReady) {
+        if (fromDeepLink != null || SharedEventPaths.isEventLocation(loc)) {
+          ref
+              .read(pendingDeepLinkProvider.notifier)
+              .setPending(fromDeepLink ?? loc);
+        }
+        if (!isSplash) return SplashScreen.path;
+        return null;
+      }
+
       if (isSplash) return null;
 
       final public = loc == LaunchScreen.path ||
@@ -79,8 +102,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           loc == AuthOtpScreen.path;
 
       if (!auth.isAuthenticated && !public) {
-        if (loc.startsWith('/event/')) {
-          ref.read(pendingDeepLinkProvider.notifier).setPending(loc);
+        if (SharedEventPaths.isEventLocation(loc) ||
+            (fromDeepLink != null && SharedEventPaths.isEventLocation(fromDeepLink))) {
+          ref
+              .read(pendingDeepLinkProvider.notifier)
+              .setPending(fromDeepLink ?? loc);
         }
         return LaunchScreen.path;
       }
@@ -94,6 +120,33 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return FeedScreen.path;
       }
       return null;
+    },
+    errorBuilder: (context, state) {
+      final recovered = eventRouteFromUri(state.uri);
+      if (recovered != null) {
+        return _DeepLinkRecoveryPage(target: recovered);
+      }
+      return Scaffold(
+        appBar: AppBar(title: const Text('Page Not Found')),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  state.error?.toString() ?? 'Page not found',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              TextButton(
+                onPressed: () => context.go(FeedScreen.path),
+                child: const Text('Home'),
+              ),
+            ],
+          ),
+        ),
+      );
     },
     routes: [
       GoRoute(
@@ -152,6 +205,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           SharedEventScreen(postId: state.pathParameters['postId'] ?? ''),
         ),
       ),
+      // Legacy alias from earlier builds.
+      GoRoute(
+        path: '/event/:postId',
+        redirect: (context, state) {
+          final id = state.pathParameters['postId'] ?? '';
+          return id.isEmpty ? FeedScreen.path : SharedEventScreen.pathFor(id);
+        },
+      ),
       GoRoute(
         path: ExploreScreen.path,
         name: ExploreScreen.name,
@@ -195,3 +256,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+/// Recovers from unmatched deep-link locations by navigating to the event route.
+class _DeepLinkRecoveryPage extends StatefulWidget {
+  const _DeepLinkRecoveryPage({required this.target});
+
+  final String target;
+
+  @override
+  State<_DeepLinkRecoveryPage> createState() => _DeepLinkRecoveryPageState();
+}
+
+class _DeepLinkRecoveryPageState extends State<_DeepLinkRecoveryPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.go(widget.target);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
+}

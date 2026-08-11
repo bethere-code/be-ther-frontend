@@ -1,3 +1,4 @@
+import 'package:be_ther/core/design/app_images.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,10 +24,27 @@ class NotificationsScreen extends ConsumerStatefulWidget {
 }
 
 class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
+  final _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _markAllRead());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Future<void> _markAllRead() async {
@@ -109,7 +127,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       header: PreferredSize(
         preferredSize: const Size.fromHeight(56),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: const BoxDecoration(
             color: AppColors.secondary,
             border: Border(
@@ -122,7 +140,14 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
           child: Row(
             children: [
               // Matches Figma Make header spacer (no avatar in alerts header).
-              const SizedBox(width: 40),
+              InkWell(
+                onTap: _scrollToTop,
+                child: Image.asset(
+                  AppImages.betherNewLogo,
+                  fit: BoxFit.contain,
+                  width: 60,
+                ),
+              ),
               Expanded(
                 child: Center(
                   child: Text(
@@ -182,6 +207,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                 await ref.read(notificationsProvider.future);
               },
               child: ListView.builder(
+                controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 // Full-width rows; right rail floats over content (Figma Make).
                 padding: EdgeInsets.zero,
@@ -190,10 +216,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                   final n = items[i];
                   return NotificationListTile(
                     notification: n,
-                    onOpen: () => _openNotification(
-                      context: context,
-                      n: n,
-                    ),
+                    onOpen: () => _openNotification(context: context, n: n),
                   );
                 },
               ),
@@ -211,10 +234,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                   SelectableText(
                     '$e',
                     textAlign: TextAlign.center,
-                    style: AppTextStyles.body(
-                      14,
-                      color: AppColors.foreground,
-                    ),
+                    style: AppTextStyles.body(14, color: AppColors.foreground),
                   ),
                   const SizedBox(height: 16),
                   FilledButton(
