@@ -33,6 +33,31 @@ class CalendarStatusStore extends Notifier<Map<String, String?>> {
     if (state.containsKey(id)) return state[id];
     return fallback;
   }
+
+  /// Write server truth into the store (including `null` = not on calendar).
+  void syncFromApi(String postId, String? status) {
+    setStatus(postId, status);
+  }
+}
+
+/// Shared RSVP resolution used by feed, explore sheet, and notifications.
+///
+/// Priority: in-memory store → API calendar fields → own-post `status` fallback.
+String? resolveViewerCalendarStatus({
+  required CalendarStatusStore store,
+  required String postId,
+  String? apiCalendarStatus,
+  bool inCalendar = false,
+  bool isMine = false,
+  String? postStatus,
+}) {
+  final api =
+      apiCalendarStatus ??
+      (inCalendar ? 'going' : null);
+  final ownFallback = isMine
+      ? (postStatus == 'interested' ? 'interested' : 'going')
+      : null;
+  return store.statusFor(postId, fallback: api ?? ownFallback);
 }
 
 String calendarButtonLabel(String? status) {

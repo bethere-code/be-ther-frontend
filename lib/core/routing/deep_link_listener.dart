@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/auth_notifier.dart';
+import '../../features/feed/presentation/feed_screen.dart';
 import '../network/api_client.dart';
 import 'deep_link_utils.dart';
 
@@ -72,7 +73,19 @@ class _DeepLinkListenerState extends ConsumerState<DeepLinkListener> {
       if (router == null) return;
       final current = router.state.uri.path;
       if (current == route) return;
-      router.go(route);
+      // Already in the app with a stack → push so hardware back returns here.
+      // Cold open / replace stack → go; SharedEventScreen PopScope sends to feed.
+      final onShell = current == FeedScreen.path ||
+          current.startsWith('/explore') ||
+          current.startsWith('/profile') ||
+          current.startsWith('/notifications') ||
+          current.startsWith('/search') ||
+          current.startsWith('/add');
+      if (onShell || router.canPop()) {
+        router.push(route);
+      } else {
+        router.go(route);
+      }
     });
   }
 

@@ -81,19 +81,14 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
     final postId = widget.item['_id']?.toString() ?? '';
     final apiStatus = widget.item['calendarStatus'] as String?;
     final postStatus = widget.item['status'] as String?;
-    final ownFallback = postStatus == 'interested' ? 'interested' : 'going';
-    final fromStore = ref
-        .read(calendarStatusStoreProvider.notifier)
-        .statusFor(
-          postId,
-          fallback:
-              apiStatus ??
-              (_isOwnPost
-                  ? ownFallback
-                  : ((widget.item['inCalendar'] as bool? ?? false)
-                        ? 'going'
-                        : null)),
-        );
+    final fromStore = resolveViewerCalendarStatus(
+      store: ref.read(calendarStatusStoreProvider.notifier),
+      postId: postId,
+      apiCalendarStatus: apiStatus,
+      inCalendar: widget.item['inCalendar'] as bool? ?? false,
+      isMine: _isOwnPost,
+      postStatus: postStatus,
+    );
     _calendarStatus = fromStore;
     _inCalendar = _isOwnPost || _calendarStatus != null;
     _attendeesCount = (widget.item['calendarCount'] as num?)?.toInt() ?? 0;
@@ -524,9 +519,16 @@ class _EventDetails extends StatelessWidget {
     final dateRaw = details['date'] as String?;
     final time = details['time'] as String?;
     final venue = details['venue'] as String?;
+    final eventLocation = details['eventLocation'] is Map<String, dynamic>
+        ? details['eventLocation'] as Map<String, dynamic>
+        : null;
+    final formattedAddress =
+        (eventLocation?['formattedAddress'] as String?)?.trim();
     final displayDate = _formatDisplayDate(dateRaw);
     final displayTime = _formatDisplayTime(time);
-    final displayVenue = venue?.trim();
+    final displayVenue = (formattedAddress != null && formattedAddress.isNotEmpty)
+        ? formattedAddress
+        : venue?.trim();
     final hasDateTime =
         displayDate != null || (displayTime != null && displayTime.isNotEmpty);
     final hasVenue = displayVenue != null && displayVenue.isNotEmpty;
@@ -574,7 +576,7 @@ class _EventDetails extends StatelessWidget {
               icon: Icons.place_outlined,
               label: displayVenue,
               expanded: true,
-              maxLines: 2,
+              maxLines: 3,
             ),
           ],
           if (showAttendees) ...[
@@ -582,12 +584,12 @@ class _EventDetails extends StatelessWidget {
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: isOwnPost ? onAttendeesTap : null,
+                onTap: onAttendeesTap,
                 child: _EventDetailMeta(
                   icon: Icons.people_outline,
                   label: attendeesCount == 1
-                      ? '1 going'
-                      : '$attendeesCount going',
+                      ? '1 Person'
+                      : '$attendeesCount People',
                   expanded: true,
                   trailing: const Icon(
                     Icons.chevron_right,

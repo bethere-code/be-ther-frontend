@@ -74,6 +74,19 @@ class AuthNotifier extends Notifier<AuthState> {
 
   TokenStorage get _storage => ref.read(tokenStorageProvider);
 
+  Future<void> _persistUser(Map<String, dynamic>? user) async {
+    if (user == null) return;
+    await _storage.writeUser(user);
+  }
+
+  /// Prefer a fresh profile; never drop an existing/cached user while logged in.
+  Map<String, dynamic>? _keepUser(
+    Map<String, dynamic>? next, {
+    Map<String, dynamic>? cached,
+  }) {
+    return next ?? state.user ?? cached;
+  }
+
   Future<void> hydrateFromStorage() async {
     if (_hydrateInFlight != null) {
       await _hydrateInFlight;
@@ -82,6 +95,8 @@ class AuthNotifier extends Notifier<AuthState> {
 
     Future<Null> run() async {
       final (access, refresh) = await _storage.read();
+      final cachedUser = await _storage.readUser();
+
       if (refresh == null || refresh.isEmpty) {
         state = const AuthState(isReady: true);
         return;
@@ -90,9 +105,19 @@ class AuthNotifier extends Notifier<AuthState> {
       final repo = ref.read(authRepositoryProvider);
       final hasAccess = access != null && access.isNotEmpty;
 
+      // Restore tokens + cached profile immediately so the shell never flashes
+      // empty while /me or refresh is in flight.
+      state = AuthState(
+        accessToken: hasAccess ? access : null,
+        refreshToken: refresh,
+        user: cachedUser,
+        isReady: false,
+      );
+
       if (hasAccess) {
         try {
           final user = await repo.me(access);
+          await _persistUser(user);
           state = AuthState(
             accessToken: access,
             refreshToken: refresh,
@@ -103,10 +128,11 @@ class AuthNotifier extends Notifier<AuthState> {
         } on ApiException catch (e) {
           final authExpired = e.statusCode == 401 || e.statusCode == 403;
           if (!authExpired) {
-            // Offline or server error — keep tokens so the session survives relaunch.
+            // Offline or server error — keep tokens + cached user.
             state = AuthState(
               accessToken: access,
               refreshToken: refresh,
+              user: _keepUser(null, cached: cachedUser),
               isReady: true,
             );
             return;
@@ -115,13 +141,14 @@ class AuthNotifier extends Notifier<AuthState> {
           state = AuthState(
             accessToken: access,
             refreshToken: refresh,
+            user: _keepUser(null, cached: cachedUser),
             isReady: true,
           );
           return;
         }
       }
 
-      final restored = await _restoreViaRefresh(refresh);
+      final restored = await _restoreViaRefresh(refresh, cachedUser: cachedUser);
       if (!restored) {
         await _storage.clear();
         state = const AuthState(isReady: true);
@@ -141,6 +168,7 @@ class AuthNotifier extends Notifier<AuthState> {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
     );
+    await _persistUser(tokens.user);
     state = AuthState(
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -166,7 +194,11 @@ class AuthNotifier extends Notifier<AuthState> {
     return ok;
   }
 
-  Future<bool> _restoreViaRefresh(String refreshToken) async {
+  Future<bool> _restoreViaRefresh(
+    String refreshToken, {
+    Map<String, dynamic>? cachedUser,
+  }) async {
+    final previousUser = state.user ?? cachedUser;
     try {
       final repo = ref.read(authRepositoryProvider);
       final next = await repo.refresh(refreshToken);
@@ -180,14 +212,17 @@ class AuthNotifier extends Notifier<AuthState> {
         try {
           user = await repo.me(next.accessToken);
         } catch (_) {
-          // Tokens are valid; profile can load after the first API call.
+          // Tokens are valid; keep the previous/cached profile instead of nulling it.
         }
       }
+
+      final kept = _keepUser(user, cached: previousUser);
+      await _persistUser(kept);
 
       state = AuthState(
         accessToken: next.accessToken,
         refreshToken: next.refreshToken,
-        user: user,
+        user: kept,
         isReady: true,
       );
       return true;
@@ -205,7 +240,10 @@ class AuthNotifier extends Notifier<AuthState> {
   void updateUser(Map<String, dynamic> patch) {
     final u = state.user;
     if (u == null) return;
-    state = state.copyWith(user: {...u, ...patch});
+    final next = {...u, ...patch};
+    state = state.copyWith(user: next);
+    // Fire-and-forget; UI already has the updated map in memory.
+    _persistUser(next);
   }
 }
 

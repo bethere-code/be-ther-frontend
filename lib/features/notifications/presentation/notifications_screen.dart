@@ -7,10 +7,13 @@ import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
+import '../../explore/domain/explore_event.dart';
+import '../../explore/presentation/widgets/explore_event_sheet.dart';
+import '../../feed/presentation/calendar_status_store.dart';
+import '../../feed/presentation/feed_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
 import 'notifications_providers.dart';
 import 'widgets/notification_list_tile.dart';
-import 'widgets/notification_post_sheet.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
@@ -57,36 +60,6 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     }
   }
 
-  static void _showMessagesInfo(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.background,
-        title: Text(
-          'MESSAGES',
-          style: AppTextStyles.display(22, color: AppColors.secondary),
-        ),
-        content: Text(
-          'Direct messages are available when you and another user star each other. Coming in a future update.',
-          style: AppTextStyles.body(15, color: AppColors.foreground),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'OK',
-              style: AppTextStyles.body(
-                14,
-                weight: FontWeight.w700,
-                color: AppColors.primary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _openNotification({
     required BuildContext context,
     required Map<String, dynamic> n,
@@ -95,22 +68,57 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         ? n['actorUserId'] as Map<String, dynamic>
         : <String, dynamic>{};
     final username = actor['username'] as String? ?? '';
-    final type = n['type'] as String? ?? 'star';
+    final type = n['type'] as String? ?? 'follow';
     final post = n['postId'] is Map<String, dynamic>
         ? n['postId'] as Map<String, dynamic>
         : null;
 
     if (!context.mounted) return;
 
-    if (type == 'star' && username.isNotEmpty) {
+    final isFollow = type == 'follow' || type == 'star';
+    if (isFollow && username.isNotEmpty) {
       context.push(ProfileScreen.pathForUser(username));
       return;
     }
     if (post != null && post.isNotEmpty) {
-      await showNotificationPostSheet(
+      final postId = (post['postId'] ?? post['_id'])?.toString() ?? '';
+      var payload = <String, dynamic>{
+        ...post,
+        'postId': postId,
+      };
+
+      // Fresh fetch wins — notification embeds can omit viewer calendar fields.
+      if (postId.isNotEmpty) {
+        try {
+          final fresh =
+              await ref.read(postsRepositoryProvider).fetchPost(postId);
+          payload = {
+            ...fresh,
+            'postId': fresh['postId'] ?? fresh['_id'] ?? postId,
+          };
+          final status = fresh['calendarStatus'] as String?;
+          final inCal = fresh['inCalendar'] as bool? ?? false;
+          ref.read(calendarStatusStoreProvider.notifier).syncFromApi(
+                postId,
+                status ?? (inCal ? 'going' : null),
+              );
+        } catch (_) {
+          // Fall back to enriched notification payload / local store.
+          final status = payload['calendarStatus'] as String?;
+          final inCal = payload['inCalendar'] as bool? ?? false;
+          if (status != null || inCal) {
+            ref.read(calendarStatusStoreProvider.notifier).syncFromApi(
+                  postId,
+                  status ?? 'going',
+                );
+          }
+        }
+      }
+
+      if (!context.mounted) return;
+      await showExploreEventSheet(
         context: context,
-        post: post,
-        actorUsername: username,
+        event: ExploreEvent.fromJson(payload),
       );
     } else if (username.isNotEmpty) {
       context.push(ProfileScreen.pathForUser(username));
@@ -127,7 +135,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       header: PreferredSize(
         preferredSize: const Size.fromHeight(56),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
           decoration: const BoxDecoration(
             color: AppColors.secondary,
             border: Border(
@@ -138,6 +146,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             ),
           ),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               // Matches Figma Make header spacer (no avatar in alerts header).
               InkWell(
@@ -148,26 +157,25 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                   width: 60,
                 ),
               ),
-              Expanded(
-                child: Center(
-                  child: Text(
-                    'ALERTS',
-                    style: AppTextStyles.display(
-                      28,
-                      color: AppColors.primary,
-                      letterSpacing: 0.1,
-                    ),
+              Center(
+                child: Text(
+                  'ALERTS',
+                  style: AppTextStyles.display(
+                    28,
+                    color: AppColors.primary,
+                    letterSpacing: 0.1,
                   ),
                 ),
               ),
-              IconButton(
-                onPressed: () => _showMessagesInfo(context),
-                icon: const Icon(
-                  Icons.mail_outline,
-                  color: AppColors.background,
-                  size: 24,
-                ),
-              ),
+              const SizedBox(width: 50),
+              // IconButton(
+              //   onPressed: () => _showMessagesInfo(context),
+              //   icon: const Icon(
+              //     Icons.mail_outline,
+              //     color: AppColors.background,
+              //     size: 24,
+              //   ),
+              // ),
             ],
           ),
         ),

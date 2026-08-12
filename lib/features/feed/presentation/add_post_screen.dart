@@ -512,6 +512,10 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       lastDate: DateTime(2100),
       // Keyboard entry uses DD/MM/YYYY (en_GB), not MM/DD/YYYY (en_US).
       locale: const Locale('en', 'GB'),
+      errorFormatText: 'Use DD/MM/YYYY',
+      errorInvalidText: 'Cannot select a past date',
+      fieldHintText: 'DD/MM/YYYY',
+      fieldLabelText: 'Enter date',
     );
     if (!mounted) return;
     FocusManager.instance.primaryFocus?.unfocus();

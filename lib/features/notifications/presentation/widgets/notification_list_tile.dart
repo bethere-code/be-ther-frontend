@@ -7,9 +7,9 @@ import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/author_avatar.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../../core/utils/event_date_utils.dart';
 import '../../../../core/utils/time_utils.dart';
 import '../../../profile/presentation/profile_screen.dart';
-import 'notification_post_sheet.dart';
 
 class NotificationListTile extends StatelessWidget {
   const NotificationListTile({
@@ -49,33 +49,38 @@ class NotificationListTile extends StatelessWidget {
     return trimmed;
   }
 
+  static String? _formatEventTime(Map<String, dynamic>? post) {
+    if (post == null) return null;
+    final details = post['eventDetails'] as Map<String, dynamic>?;
+    return EventDateUtils.formatTime12h(details?['time']?.toString());
+  }
+
   @override
   Widget build(BuildContext context) {
     final read = notification['read'] as bool? ?? true;
     final actor = notification['actorUserId'] is Map<String, dynamic>
         ? notification['actorUserId'] as Map<String, dynamic>
         : <String, dynamic>{};
-    final name = actor['displayName'] as String? ??
+    final name =
+        actor['displayName'] as String? ??
         actor['username'] as String? ??
         'User';
     final username = actor['username'] as String? ?? '';
     final avatar = actor['avatarUrl'] as String? ?? '';
     final badge = actor['badge'] as String?;
     final type = notification['type'] as String? ?? 'follow';
-    final mutual = notification['mutualFollow'] as bool? ??
-        notification['mutualStar'] as bool? ??
-        false;
     final post = notification['postId'] is Map<String, dynamic>
         ? notification['postId'] as Map<String, dynamic>
         : null;
     final postImage = post?['imageUrl'] as String? ?? '';
     final eventTitle = post?['location'] as String? ?? '';
     final eventDate = _formatEventDate(post);
+    final eventTime = _formatEventTime(post);
+    final hasEvent = (type == 'wishlist' || type == 'calendar') && post != null;
     final createdAt = DateTime.tryParse(
       notification['createdAt']?.toString() ?? '',
     );
-    final timestamp =
-        createdAt != null ? getRelativeTime(createdAt) : '';
+    final timestamp = createdAt != null ? getRelativeTime(createdAt) : '';
 
     // Opaque unread tint over cream/card — never translucent over navy shell.
     final rowColor = read
@@ -95,9 +100,11 @@ class NotificationListTile extends StatelessWidget {
               ),
             ),
           ),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: hasEvent
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.center,
             children: [
               AuthorAvatar(
                 avatarUrl: avatar,
@@ -150,42 +157,18 @@ class NotificationListTile extends StatelessWidget {
                         ],
                       ],
                     ),
-                    if (type == 'follow' || type == 'star') ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          const _StarChip(
-                            label: 'NEW FOLLOW',
-                            background: AppColors.accent,
-                            foreground: AppColors.accentForeground,
-                          ),
-                          if (mutual)
-                            const _StarChip(
-                              label: 'MUTUAL',
-                              background: AppColors.primary,
-                              foreground: AppColors.primaryForeground,
-                            ),
-                        ],
-                      ),
-                    ],
-                    if ((type == 'wishlist' || type == 'calendar') &&
-                        post != null) ...[
+                    if (hasEvent) ...[
                       const SizedBox(height: 8),
                       _EventSnippet(
                         title: eventTitle.isNotEmpty ? eventTitle : 'Event',
                         dateLabel: eventDate,
+                        timeLabel: eventTime,
                         imageUrl: postImage,
-                        kind: type,
-                        onTap: () => showNotificationPostSheet(
-                          context: context,
-                          post: post,
-                          actorUsername: username,
-                        ),
+                        onTap: onOpen,
                       ),
                     ],
-                    if (username.isNotEmpty) ...[
+                    // Profile link only for event notifications (not follows).
+                    if (hasEvent && username.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       GestureDetector(
                         onTap: () =>
@@ -211,68 +194,23 @@ class NotificationListTile extends StatelessWidget {
   }
 }
 
-class _StarChip extends StatelessWidget {
-  const _StarChip({
-    required this.label,
-    required this.background,
-    required this.foreground,
-  });
-
-  final String label;
-  final Color background;
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: background,
-        border: Border.all(
-          color: AppColors.border,
-          width: AppDimens.border,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.star, size: 14, color: foreground),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: AppTextStyles.display(
-              12,
-              color: foreground,
-              letterSpacing: 0.05,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _EventSnippet extends StatelessWidget {
   const _EventSnippet({
     required this.title,
     required this.dateLabel,
+    required this.timeLabel,
     required this.imageUrl,
-    required this.kind,
     required this.onTap,
   });
 
   final String title;
   final String? dateLabel;
+  final String? timeLabel;
   final String imageUrl;
-  final String kind;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final statusLabel = kind == 'calendar' ? 'CALENDARED' : 'WISHLISTED';
-    final statusIcon =
-        kind == 'calendar' ? Icons.calendar_today : Icons.bookmark_border;
-
     return Material(
       color: AppColors.muted,
       child: InkWell(
@@ -340,21 +278,27 @@ class _EventSnippet extends StatelessWidget {
                         ],
                       ),
                     ],
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(statusIcon, size: 12, color: AppColors.primary),
-                        const SizedBox(width: 4),
-                        Text(
-                          statusLabel,
-                          style: AppTextStyles.display(
-                            11.2,
-                            color: AppColors.primary,
-                            letterSpacing: 0.05,
+                    if (timeLabel != null && timeLabel!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.access_time,
+                            size: 12,
+                            color: AppColors.mutedForeground,
                           ),
-                        ),
-                      ],
-                    ),
+                          const SizedBox(width: 4),
+                          Text(
+                            timeLabel!,
+                            style: AppTextStyles.body(
+                              12,
+                              weight: FontWeight.w700,
+                              color: AppColors.mutedForeground,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

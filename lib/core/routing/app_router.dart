@@ -10,6 +10,8 @@ import '../../features/explore/presentation/explore_screen.dart';
 import '../../features/launch/presentation/launch_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
+import '../../features/profile/presentation/profile_connections_screen.dart';
+import '../../features/profile/presentation/profile_events_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/auth/presentation/auth_email_screen.dart';
@@ -230,6 +232,40 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               state,
               ProfileScreen(username: state.pathParameters['username']),
             ),
+            routes: [
+              GoRoute(
+                path: 'events',
+                name: ProfileEventsScreen.name,
+                pageBuilder: (context, state) => _fadePage(
+                  state,
+                  ProfileEventsScreen(
+                    username: state.pathParameters['username'] ?? '',
+                  ),
+                ),
+              ),
+              GoRoute(
+                path: 'followers',
+                name: ProfileConnectionsScreen.followersName,
+                pageBuilder: (context, state) => _fadePage(
+                  state,
+                  ProfileConnectionsScreen(
+                    username: state.pathParameters['username'] ?? '',
+                    mode: ProfileConnectionsMode.followers,
+                  ),
+                ),
+              ),
+              GoRoute(
+                path: 'following',
+                name: ProfileConnectionsScreen.followingName,
+                pageBuilder: (context, state) => _fadePage(
+                  state,
+                  ProfileConnectionsScreen(
+                    username: state.pathParameters['username'] ?? '',
+                    mode: ProfileConnectionsMode.following,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

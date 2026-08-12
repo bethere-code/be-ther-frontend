@@ -18,6 +18,36 @@ class UserRepository {
     return (data['items'] as List<dynamic>? ?? []).whereType<Map<String, dynamic>>().toList();
   }
 
+  Future<List<Map<String, dynamic>>> events(String username) async {
+    final data = await _getData(
+      '/api/v1/users/$username/events',
+      fallback: 'Failed to load events',
+    );
+    return (data['items'] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> followers(String username) async {
+    final data = await _getData(
+      '/api/v1/users/$username/followers',
+      fallback: 'Failed to load followers',
+    );
+    return (data['items'] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> following(String username) async {
+    final data = await _getData(
+      '/api/v1/users/$username/following',
+      fallback: 'Failed to load following',
+    );
+    return (data['items'] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+  }
+
   Future<Map<String, dynamic>> patchMe(Map<String, dynamic> payload) async {
     try {
       final res = await _dio.patch<Map<String, dynamic>>('/api/v1/users/me', data: payload);

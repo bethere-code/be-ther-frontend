@@ -26,9 +26,11 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _private = false;
   bool _push = true;
+
   /// Default for every account until the user explicitly changes it.
   String _calendarView = 'full';
   var _hydrateStarted = false;
+
   /// True after server settings are applied (or failed → local defaults).
   var _settingsReady = false;
 
@@ -45,16 +47,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       try {
         final user = await ref.read(profileMeProvider.future);
         if (!mounted) return;
-        final settings = user['settings'];
-        if (settings is Map) {
-          setState(() {
-            _private = settings['isPrivateProfile'] as bool? ?? false;
-            _push = settings['pushEnabled'] as bool? ?? true;
-            _calendarView = _normalizeCalendarView(settings['calendarView']);
-            _settingsReady = true;
-          });
-          return;
-        }
+        setState(() {
+          _private = user.settings.isPrivateProfile;
+          _push = user.settings.pushEnabled;
+          _calendarView = _normalizeCalendarView(user.settings.calendarView);
+          _settingsReady = true;
+        });
+        return;
       } catch (_) {
         // Keep local defaults (full calendar).
       }
@@ -73,7 +72,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
-        title: Text('SETTINGS', style: AppTextStyles.display(32, color: AppColors.primary, letterSpacing: 0.1)),
+        title: Text(
+          'SETTINGS',
+          style: AppTextStyles.display(
+            32,
+            color: AppColors.primary,
+            letterSpacing: 0.1,
+          ),
+        ),
       ),
       body: me.when(
         data: (_) {
@@ -82,10 +88,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _sectionTitle('PROFILE'),
               const ProfileEditSection(),
               SwitchListTile(
-                title: Text(_private ? 'Private Profile' : 'Public Profile', style: AppTextStyles.body(16, weight: FontWeight.w800)),
+                title: Text(
+                  _private ? 'Private Profile' : 'Public Profile',
+                  style: AppTextStyles.body(16, weight: FontWeight.w800),
+                ),
                 subtitle: Text(
-                  _private ? 'Only starred users can see your posts' : 'Anyone can view your profile and posts',
-                  style: AppTextStyles.body(13, color: AppColors.mutedForeground),
+                  _private
+                      ? 'Only starred users can see your posts'
+                      : 'Anyone can view your profile and posts',
+                  style: AppTextStyles.body(
+                    13,
+                    color: AppColors.mutedForeground,
+                  ),
                 ),
                 value: _private,
                 onChanged: (v) async {
@@ -93,7 +107,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   await _save();
                 },
               ),
-              const Divider(height: 1, thickness: AppDimens.borderThick, color: AppColors.border),
+              const Divider(
+                height: 1,
+                thickness: AppDimens.borderThick,
+                color: AppColors.border,
+              ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                 child: Text(
@@ -153,28 +171,59 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               _sectionTitle('NOTIFICATIONS'),
               SwitchListTile(
-                title: Text('Push Notifications', style: AppTextStyles.body(16, weight: FontWeight.w800)),
-                subtitle: Text('Stars and wishlists', style: AppTextStyles.body(13, color: AppColors.mutedForeground)),
+                title: Text(
+                  'Push Notifications',
+                  style: AppTextStyles.body(16, weight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  'Stars and wishlists',
+                  style: AppTextStyles.body(
+                    13,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
                 value: _push,
                 onChanged: (v) async {
                   setState(() => _push = v);
                   await _save();
                 },
               ),
-              const Divider(height: 1, thickness: AppDimens.borderThick, color: AppColors.border),
+              const Divider(
+                height: 1,
+                thickness: AppDimens.borderThick,
+                color: AppColors.border,
+              ),
               _sectionTitle('ACCOUNT'),
               ListTile(
-                title: Text('Log Out', style: AppTextStyles.body(16, weight: FontWeight.w800, color: AppColors.destructive)),
+                title: Text(
+                  'Log Out',
+                  style: AppTextStyles.body(
+                    16,
+                    weight: FontWeight.w800,
+                    color: AppColors.destructive,
+                  ),
+                ),
                 onTap: () async {
                   final ok = await showDialog<bool>(
                     context: context,
                     builder: (ctx) => AlertDialog(
-                      title: Text('LOG OUT?', style: AppTextStyles.display(22, color: AppColors.secondary)),
+                      title: Text(
+                        'LOG OUT?',
+                        style: AppTextStyles.display(
+                          22,
+                          color: AppColors.secondary,
+                        ),
+                      ),
                       content: const Text('Are you sure you want to log out?'),
                       actions: [
-                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('CANCEL'),
+                        ),
                         FilledButton(
-                          style: FilledButton.styleFrom(backgroundColor: AppColors.destructive),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.destructive,
+                          ),
                           onPressed: () => Navigator.pop(ctx, true),
                           child: const Text('LOG OUT'),
                         ),
@@ -188,12 +237,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   }
                 },
               ),
-              const Divider(height: 1, thickness: AppDimens.borderThick, color: AppColors.border),
+              const Divider(
+                height: 1,
+                thickness: AppDimens.borderThick,
+                color: AppColors.border,
+              ),
               _sectionTitle('SUPPORT'),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                 child: Text(
-                  'For support, email us at',
+                  'Need help? \nJust drop us an email—we\'re here for you! 😊',
                   style: AppTextStyles.body(
                     14,
                     color: AppColors.mutedForeground,
@@ -202,7 +255,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
               ListTile(
-                leading: const Icon(Icons.mail_outline, color: AppColors.secondary),
+                leading: const Icon(
+                  Icons.mail_outline,
+                  color: AppColors.secondary,
+                ),
                 title: Text(
                   'be.there.accnts@gmail.com',
                   style: AppTextStyles.body(
@@ -216,7 +272,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              Center(child: Text('BE THER v1.0.0', style: AppTextStyles.body(13, color: AppColors.mutedForeground))),
+              Center(
+                child: Text(
+                  'BE THER v1.0.0',
+                  style: AppTextStyles.body(
+                    13,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
+              ),
             ],
           );
         },
@@ -231,7 +295,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       color: AppColors.muted,
-      child: Text(text, style: AppTextStyles.display(13, color: AppColors.mutedForeground, letterSpacing: 0.1)),
+      child: Text(
+        text,
+        style: AppTextStyles.display(
+          13,
+          color: AppColors.mutedForeground,
+          letterSpacing: 0.1,
+        ),
+      ),
     );
   }
 

@@ -24,93 +24,113 @@ class SharedEventScreen extends ConsumerWidget {
 
   static String pathFor(String id) => '/e/$id';
 
+  /// App-bar and hardware back: pop if possible, else land on feed
+  /// (deep links often replace the stack so [canPop] is false).
+  static void leave(BuildContext context) {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(FeedScreen.path);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final postAsync = ref.watch(sharedPostProvider(postId));
     const headerHeight = kToolbarHeight;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-      ),
-      child: AppShell(
-        activeTab: ShellTab.home,
-        showRail: true,
-        header: PreferredSize(
-          preferredSize: const Size.fromHeight(headerHeight),
-          child: Container(
-            height: headerHeight,
-            padding: const EdgeInsets.only(right: 12),
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: AppColors.secondary,
-              border: Border(
-                bottom: BorderSide(
-                  color: AppColors.border,
-                  width: AppDimens.borderThick,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        leave(context);
+      },
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+        ),
+        child: AppShell(
+          activeTab: ShellTab.home,
+          showRail: true,
+          header: PreferredSize(
+            preferredSize: const Size.fromHeight(headerHeight),
+            child: Container(
+              height: headerHeight,
+              padding: const EdgeInsets.only(right: 12),
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: AppColors.secondary,
+                border: Border(
+                  bottom: BorderSide(
+                    color: AppColors.border,
+                    width: AppDimens.borderThick,
+                  ),
                 ),
               ),
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: () {
-                    if (context.canPop()) {
-                      context.pop();
-                    } else {
-                      context.go(FeedScreen.path);
-                    }
-                  },
-                  icon: const Icon(Icons.arrow_back, color: AppColors.background),
-                ),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => context.go(FeedScreen.path),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Image.asset(
-                        AppImages.betherNewLogo,
-                        height: 28,
-                        fit: BoxFit.contain,
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => leave(context),
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      color: AppColors.background,
+                    ),
+                  ),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => context.go(FeedScreen.path),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Image.asset(
+                          AppImages.betherNewLogo,
+                          height: 28,
+                          fit: BoxFit.contain,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                IconButton(
-                  onPressed: () => context.push('/search'),
-                  iconSize: 24,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                  icon: const Icon(Icons.search, color: AppColors.background),
-                ),
-              ],
+                  IconButton(
+                    onPressed: () => context.push('/search'),
+                    iconSize: 24,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 44,
+                      minHeight: 44,
+                    ),
+                    icon: const Icon(
+                      Icons.search,
+                      color: AppColors.background,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        child: Container(
-          color: AppColors.background,
-          child: postAsync.when(
-            loading: () => ListView(
-              children: const [PostSkeleton()],
-            ),
-            error: (error, _) => _ErrorState(
-              message: error.toString().replaceFirst('Exception: ', ''),
-              onBack: () => context.go(FeedScreen.path),
-            ),
-            data: (item) => ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: [
-                FeedPostCard(
-                  item: item,
-                  recordFeedImpression: false,
-                  onInteractionChanged: () {
-                    ref.invalidate(sharedPostProvider(postId));
-                  },
-                ),
-                const SizedBox(height: 24),
-              ],
+          child: Container(
+            color: AppColors.background,
+            child: postAsync.when(
+              loading: () => ListView(
+                children: const [PostSkeleton()],
+              ),
+              error: (error, _) => _ErrorState(
+                message: error.toString().replaceFirst('Exception: ', ''),
+                onBack: () => leave(context),
+              ),
+              data: (item) => ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  FeedPostCard(
+                    item: item,
+                    recordFeedImpression: false,
+                    onInteractionChanged: () {
+                      ref.invalidate(sharedPostProvider(postId));
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
           ),
         ),

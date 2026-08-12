@@ -194,9 +194,7 @@ Future<void> showProfileEventSheet({
   required BuildContext context,
   required ProfileCalendarEvent event,
   required String profileUsername,
-  required bool showWishlist,
   required bool isOwnProfile,
-  required Future<bool> Function() onToggleWishlist,
   required VoidCallback onCalendarChanged,
 }) {
   return showModalBottomSheet<void>(
@@ -210,9 +208,7 @@ Future<void> showProfileEventSheet({
     builder: (context) => _ProfileEventSheet(
       event: event,
       profileUsername: profileUsername,
-      showWishlist: showWishlist,
       isOwnProfile: isOwnProfile,
-      onToggleWishlist: onToggleWishlist,
       onCalendarChanged: onCalendarChanged,
     ),
   );
@@ -222,17 +218,13 @@ class _ProfileEventSheet extends ConsumerStatefulWidget {
   const _ProfileEventSheet({
     required this.event,
     required this.profileUsername,
-    required this.showWishlist,
     required this.isOwnProfile,
-    required this.onToggleWishlist,
     required this.onCalendarChanged,
   });
 
   final ProfileCalendarEvent event;
   final String profileUsername;
-  final bool showWishlist;
   final bool isOwnProfile;
-  final Future<bool> Function() onToggleWishlist;
   final VoidCallback onCalendarChanged;
 
   @override
@@ -242,7 +234,6 @@ class _ProfileEventSheet extends ConsumerStatefulWidget {
 class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   final _sheetMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
-  late bool _bookmarked;
   late bool _inCalendar;
   String? _calendarStatus;
   bool _busy = false;
@@ -261,28 +252,54 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   @override
   void initState() {
     super.initState();
-    _bookmarked = event.bookmarked;
     _likesCount = event.likesCount;
     _commentsCount = event.commentsCount;
     _hiddenOnProfile = event.hiddenOnProfile;
-    final fromStore = ref
-        .read(calendarStatusStoreProvider.notifier)
-        .statusFor(
-          event.postId,
-          fallback:
-              event.calendarStatus ??
-              (event.isAuthoredByMe
-                  ? (event.status == 'interested' ? 'interested' : 'going')
-                  : (event.inCalendar ? 'going' : null)),
-        );
-    _calendarStatus = fromStore;
-    _inCalendar = event.isAuthoredByMe || _calendarStatus != null;
+    _syncCalendarFromViewer();
     _goingCount = event.calendarCount;
-    if (event.isAuthoredByMe && event.postId.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (event.isAuthoredByMe && event.postId.isNotEmpty) {
         _loadGoingOnce();
+      }
+      // Re-fetch viewer RSVP so we never show the profile owner's status.
+      if (!event.isAuthoredByMe && event.postId.isNotEmpty) {
+        _refreshViewerCalendarStatus();
+      }
+    });
+  }
+
+  void _syncCalendarFromViewer() {
+    final resolved = resolveViewerCalendarStatus(
+      store: ref.read(calendarStatusStoreProvider.notifier),
+      postId: event.postId,
+      apiCalendarStatus: event.calendarStatus,
+      inCalendar: event.inCalendar,
+      isMine: event.isAuthoredByMe,
+      postStatus: event.status,
+    );
+    _calendarStatus = resolved;
+    _inCalendar = event.isAuthoredByMe || resolved != null;
+  }
+
+  Future<void> _refreshViewerCalendarStatus() async {
+    try {
+      final post = await ref
+          .read(postsRepositoryProvider)
+          .fetchPost(event.postId);
+      final status = post['calendarStatus'] as String?;
+      final inCal = post['inCalendar'] as bool? ?? false;
+      final resolved = status ?? (inCal ? 'going' : null);
+      ref
+          .read(calendarStatusStoreProvider.notifier)
+          .syncFromApi(event.postId, resolved);
+      if (!mounted) return;
+      setState(() {
+        _calendarStatus = resolved;
+        _inCalendar = resolved != null;
       });
+    } catch (_) {
+      // Keep store / API fallback already applied in initState.
     }
   }
 
@@ -393,17 +410,6 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   String get _headerLabel {
     if (_showOwnerRow) return '@${event.author!.username}';
     return 'EVENT DETAILS';
-  }
-
-  Future<void> _toggleWishlist() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      final saved = await widget.onToggleWishlist();
-      if (mounted) setState(() => _bookmarked = saved);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Future<void> _toggleCalendar() async {
@@ -632,11 +638,8 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
     final showViewsRow = showOwnInsights && event.viewCount > 0;
     final showOwnerStatusToggle =
         widget.isOwnProfile && event.isAuthoredByMe && !event.isPast;
-    final showStatusButton =
-        !event.isAuthoredByMe &&
-        !event.isPast &&
-        _inCalendar &&
-        (widget.isOwnProfile || !widget.showWishlist);
+    // Same Interested / Going RSVP as feed & explore (no wishlist).
+    final showVisitorRsvp = !event.isAuthoredByMe && !event.isPast;
     final caption = event.caption?.trim() ?? '';
     final locationForShare = fullLocation.isNotEmpty
         ? fullLocation
@@ -973,55 +976,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                                       ),
                                     ),
                                   ),
-                                ] else if (widget.showWishlist) ...[
-                                  const SizedBox(height: 12),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 44,
-                                    child: FilledButton(
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor: _bookmarked
-                                            ? AppColors.primary
-                                            : AppColors.accent,
-                                        foregroundColor: _bookmarked
-                                            ? AppColors.primaryForeground
-                                            : AppColors.accentForeground,
-                                        shape: const RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.zero,
-                                        ),
-                                      ),
-                                      onPressed: _busy ? null : _toggleWishlist,
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            _bookmarked
-                                                ? Icons.bookmark
-                                                : Icons.bookmark_border,
-                                            size: 18,
-                                            color: _bookmarked
-                                                ? AppColors.primaryForeground
-                                                : AppColors.accentForeground,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            _bookmarked
-                                                ? 'SAVED'
-                                                : 'ADD TO WISHLIST',
-                                            style: AppTextStyles.display(
-                                              14,
-                                              color: _bookmarked
-                                                  ? AppColors.primaryForeground
-                                                  : AppColors.accentForeground,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ] else if (showStatusButton ||
-                                    (!showOwnInsights && !_inCalendar)) ...[
+                                ] else if (showVisitorRsvp) ...[
                                   const SizedBox(height: 12),
                                   SizedBox(
                                     width: double.infinity,
@@ -1065,7 +1020,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                                             ),
                                     ),
                                   ),
-                                  if (showStatusButton) ...[
+                                  if (_inCalendar) ...[
                                     const SizedBox(height: 8),
                                     Text(
                                       'Tap to change status or remove from your calendar.',
@@ -1320,7 +1275,7 @@ class _GoingInsightRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = count == 1 ? '1 going' : '$count going';
+    final label = count == 1 ? '1 Person' : '$count People';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

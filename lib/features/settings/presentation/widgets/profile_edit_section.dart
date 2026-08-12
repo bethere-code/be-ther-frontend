@@ -43,7 +43,7 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
   Future<void> _changePhoto() async {
     final user = ref.read(profileMeProvider).value;
     if (user == null) return;
-    final hasAvatar = (user['avatarUrl'] as String? ?? '').isNotEmpty;
+    final hasAvatar = user.avatarUrl.isNotEmpty;
     final mobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
     final action = await showModalBottomSheet<String>(
@@ -65,8 +65,14 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
               ),
             if (hasAvatar)
               ListTile(
-                leading: Icon(Icons.delete_outline, color: AppColors.destructive),
-                title: Text('Remove photo', style: TextStyle(color: AppColors.destructive)),
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: AppColors.destructive,
+                ),
+                title: Text(
+                  'Remove photo',
+                  style: TextStyle(color: AppColors.destructive),
+                ),
                 onTap: () => Navigator.pop(ctx, 'remove'),
               ),
             ListTile(
@@ -84,12 +90,20 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('REMOVE PHOTO?', style: AppTextStyles.display(22, color: AppColors.secondary)),
+          title: Text(
+            'REMOVE PHOTO?',
+            style: AppTextStyles.display(22, color: AppColors.secondary),
+          ),
           content: const Text('Your profile will show the default avatar.'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('CANCEL'),
+            ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: AppColors.destructive),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.destructive,
+              ),
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('REMOVE'),
             ),
@@ -100,7 +114,9 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
       return;
     }
 
-    final source = action == 'camera' ? ImageSource.camera : ImageSource.gallery;
+    final source = action == 'camera'
+        ? ImageSource.camera
+        : ImageSource.gallery;
     final path = await pickPhoto(context, source: source, square: true);
     if (!mounted || path == null) return;
 
@@ -148,20 +164,25 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
 
     return me.when(
       data: (user) {
-        final avatar = user['avatarUrl'] as String? ?? '';
-        final name = user['displayName'] as String? ?? '';
-        final bio = user['bio'] as String? ?? '';
-        final username = user['username'] as String? ?? '';
-        final badge = user['badge'] as String?;
+        final avatar = user.avatarUrl;
+        final name = user.displayName;
+        final bio = user.bio;
+        final username = user.username;
+        final badge = user.badge;
 
         return Column(
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               decoration: const BoxDecoration(
                 color: AppColors.card,
-                border: Border(bottom: BorderSide(color: AppColors.border, width: AppDimens.borderThick)),
+                border: Border(
+                  bottom: BorderSide(
+                    color: AppColors.border,
+                    width: AppDimens.borderThick,
+                  ),
+                ),
               ),
               child: Column(
                 children: [
@@ -189,7 +210,10 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                               child: SizedBox(
                                 width: 24,
                                 height: 24,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           )
@@ -202,9 +226,16 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                               decoration: BoxDecoration(
                                 color: AppColors.primary,
                                 shape: BoxShape.circle,
-                                border: Border.all(color: AppColors.card, width: 2),
+                                border: Border.all(
+                                  color: AppColors.card,
+                                  width: 2,
+                                ),
                               ),
-                              child: const Icon(Icons.camera_alt, size: 14, color: AppColors.background),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                size: 14,
+                                color: AppColors.background,
+                              ),
                             ),
                           ),
                       ],
@@ -213,21 +244,32 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                   const SizedBox(height: 12),
                   Text(
                     name,
-                    style: AppTextStyles.display(18, color: AppColors.secondary, letterSpacing: 0.02),
+                    style: AppTextStyles.display(
+                      18,
+                      color: AppColors.secondary,
+                      letterSpacing: 0.02,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   if (username.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
                       '@$username',
-                      style: AppTextStyles.body(14, color: AppColors.mutedForeground, weight: FontWeight.w600),
+                      style: AppTextStyles.body(
+                        14,
+                        color: AppColors.mutedForeground,
+                        weight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ],
               ),
             ),
             ListTile(
-              title: Text('Name', style: AppTextStyles.body(16, weight: FontWeight.w800)),
+              title: Text(
+                'Name',
+                style: AppTextStyles.body(16, weight: FontWeight.w800),
+              ),
               subtitle: Text(
                 name,
                 style: AppTextStyles.body(14, color: AppColors.mutedForeground),
@@ -237,14 +279,23 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
               trailing: const Icon(Icons.chevron_right),
               onTap: _saving ? null : () => _editName(name),
             ),
-            const Divider(height: 1, thickness: AppDimens.borderThick, color: AppColors.border),
+            const Divider(
+              height: 1,
+              thickness: AppDimens.borderThick,
+              color: AppColors.border,
+            ),
             ListTile(
-              title: Text('Bio', style: AppTextStyles.body(16, weight: FontWeight.w800)),
+              title: Text(
+                'Bio',
+                style: AppTextStyles.body(16, weight: FontWeight.w800),
+              ),
               subtitle: Text(
                 bio.isEmpty ? 'Add a bio…' : bio,
                 style: AppTextStyles.body(
                   14,
-                  color: bio.isEmpty ? AppColors.mutedForeground : AppColors.foreground,
+                  color: bio.isEmpty
+                      ? AppColors.mutedForeground
+                      : AppColors.foreground,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -252,7 +303,11 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
               trailing: const Icon(Icons.chevron_right),
               onTap: _saving ? null : () => _editBio(bio),
             ),
-            const Divider(height: 1, thickness: AppDimens.borderThick, color: AppColors.border),
+            const Divider(
+              height: 1,
+              thickness: AppDimens.borderThick,
+              color: AppColors.border,
+            ),
           ],
         );
       },
@@ -262,7 +317,10 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
       ),
       error: (e, _) => Padding(
         padding: const EdgeInsets.all(16),
-        child: Text('Could not load profile: $e', style: AppTextStyles.body(14, color: AppColors.destructive)),
+        child: Text(
+          'Could not load profile: $e',
+          style: AppTextStyles.body(14, color: AppColors.destructive),
+        ),
       ),
     );
   }

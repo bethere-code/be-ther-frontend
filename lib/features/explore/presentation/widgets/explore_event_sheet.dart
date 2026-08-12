@@ -14,6 +14,7 @@ import '../../../auth/presentation/auth_notifier.dart';
 import '../../../feed/presentation/calendar_status_store.dart';
 import '../../../feed/presentation/feed_providers.dart';
 import '../../../feed/presentation/widgets/calendar_rsvp_sheet.dart';
+import '../../../feed/presentation/widgets/feed_attendees_sheet.dart';
 import '../../../feed/presentation/widgets/feed_comments_sheet.dart';
 import '../../../feed/presentation/widgets/feed_likes_sheet.dart';
 import '../../../profile/presentation/profile_providers.dart';
@@ -61,26 +62,41 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
     super.initState();
     _likesCount = event.likesCount;
     _commentsCount = event.commentsCount;
-    final api = event.calendarStatus ?? (event.inCalendar ? 'going' : null);
-    _calendarStatus = api;
-    _inCalendar = api != null;
+    _syncCalendarStatus();
     // Explore + search: count only when this details sheet opens.
     // If the same post was already seen in the feed this session, enqueue is a no-op.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || event.postId.isEmpty) return;
+      _syncCalendarStatus(notify: true);
       final me = ref.read(authNotifierProvider).user;
       if (_isMine(me)) return;
-      final fromStore = ref
-          .read(calendarStatusStoreProvider.notifier)
-          .statusFor(event.postId, fallback: _calendarStatus);
-      if (fromStore != _calendarStatus) {
-        setState(() {
-          _calendarStatus = fromStore;
-          _inCalendar = fromStore != null;
-        });
-      }
       ref.read(eventViewRecorderProvider).enqueue(event.postId);
     });
+  }
+
+  void _syncCalendarStatus({bool notify = false}) {
+    final me = ref.read(authNotifierProvider).user;
+    final isMine = _isMine(me);
+    final resolved = resolveViewerCalendarStatus(
+      store: ref.read(calendarStatusStoreProvider.notifier),
+      postId: event.postId,
+      apiCalendarStatus: event.calendarStatus,
+      inCalendar: event.inCalendar,
+      isMine: isMine,
+      postStatus: event.status,
+    );
+    final nextIn = isMine || resolved != null;
+    if (!notify) {
+      _calendarStatus = resolved;
+      _inCalendar = nextIn;
+      return;
+    }
+    if (resolved != _calendarStatus || nextIn != _inCalendar) {
+      setState(() {
+        _calendarStatus = resolved;
+        _inCalendar = nextIn;
+      });
+    }
   }
 
   bool _isMine(Map<String, dynamic>? me) {
@@ -106,6 +122,15 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
     );
   }
 
+  void _openAttendees() {
+    if (event.postId.isEmpty || event.attendees < 1) return;
+    showFeedAttendeesSheet(
+      context: context,
+      postId: event.postId,
+      initialCount: event.attendees,
+    );
+  }
+
   void _openComments() {
     if (event.postId.isEmpty) return;
     showFeedCommentsSheet(
@@ -123,10 +148,18 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
     if (event.postId.isEmpty || _calendarBusy || event.isPast) return;
     final me = ref.read(authNotifierProvider).user;
     final isMine = _isMine(me);
+    final current = resolveViewerCalendarStatus(
+      store: ref.read(calendarStatusStoreProvider.notifier),
+      postId: event.postId,
+      apiCalendarStatus: event.calendarStatus ?? _calendarStatus,
+      inCalendar: event.inCalendar || _inCalendar,
+      isMine: isMine,
+      postStatus: event.status,
+    );
     final choice = await showCalendarRsvpSheet(
       context: context,
-      alreadyOnCalendar: isMine ? true : _inCalendar,
-      currentStatus: _calendarStatus ?? (isMine ? 'going' : null),
+      alreadyOnCalendar: isMine ? true : current != null,
+      currentStatus: current ?? (isMine ? 'going' : null),
       allowRemove: !isMine,
     );
     if (choice == null || !mounted) return;
@@ -193,6 +226,16 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
   Widget build(BuildContext context) {
     final me = ref.watch(authNotifierProvider).user;
     final isMine = _isMine(me);
+    // Keep button in sync if feed/explore updated RSVP while this sheet is open.
+    ref.watch(calendarStatusStoreProvider);
+    final effectiveStatus = resolveViewerCalendarStatus(
+      store: ref.read(calendarStatusStoreProvider.notifier),
+      postId: event.postId,
+      apiCalendarStatus: event.calendarStatus ?? _calendarStatus,
+      inCalendar: event.inCalendar || _inCalendar,
+      isMine: isMine,
+      postStatus: event.status,
+    );
     final author = event.author;
     final place = event.placeLabel;
     final dateLabel = event.formattedDateOnly;
@@ -201,34 +244,40 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
         ? '@${author!.username}'
         : 'EVENT DETAILS';
 
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: Material(
-        color: AppColors.background,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height * 0.9,
-          ),
-          child: DecoratedBox(
-            decoration: const BoxDecoration(
-              border: Border(
-                top: BorderSide(
-                  color: AppColors.border,
-                  width: AppDimens.borderThick,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => Navigator.of(context).maybePop(),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: GestureDetector(
+          // Keep sheet content taps from dismissing.
+          onTap: () {},
+          child: Material(
+            color: AppColors.background,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+              ),
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: AppColors.border,
+                      width: AppDimens.borderThick,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                10,
-                16,
-                16 + MediaQuery.viewPaddingOf(context).bottom,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    10,
+                    16,
+                    16 + MediaQuery.viewPaddingOf(context).bottom,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                   Center(
                     child: Container(
                       width: 40,
@@ -354,9 +403,17 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                                 label: timeLabel,
                               ),
                             if (event.showAttendees)
-                              _MetaChip(
-                                icon: Icons.person_outline,
-                                label: '${event.attendees} going',
+                              Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _openAttendees,
+                                  child: _MetaChip(
+                                    icon: Icons.person_outline,
+                                    label: event.attendees == 1
+                                        ? '1 Person'
+                                        : '${event.attendees} People',
+                                  ),
+                                ),
                               ),
                           ],
                         ),
@@ -390,10 +447,10 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                             child: FilledButton(
                               style: FilledButton.styleFrom(
                                 backgroundColor: calendarButtonBackground(
-                                  _calendarStatus,
+                                  effectiveStatus,
                                 ),
                                 foregroundColor: calendarButtonForeground(
-                                  _calendarStatus,
+                                  effectiveStatus,
                                 ),
                                 shape: const RoundedRectangleBorder(
                                   borderRadius: BorderRadius.zero,
@@ -409,16 +466,16 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
                                         color: calendarButtonForeground(
-                                          _calendarStatus,
+                                          effectiveStatus,
                                         ),
                                       ),
                                     )
                                   : Text(
-                                      calendarButtonLabel(_calendarStatus),
+                                      calendarButtonLabel(effectiveStatus),
                                       style: AppTextStyles.display(
                                         14,
                                         color: calendarButtonForeground(
-                                          _calendarStatus,
+                                          effectiveStatus,
                                         ),
                                       ),
                                     ),
@@ -593,6 +650,8 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                     ],
                   ),
                 ],
+                  ),
+                ),
               ),
             ),
           ),

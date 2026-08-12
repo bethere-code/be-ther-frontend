@@ -92,7 +92,7 @@ class _BottomBar extends ConsumerWidget {
     final auth = ref.watch(authNotifierProvider);
     final user = auth.user;
     final me = ref.watch(profileMeProvider);
-    final badge = me.value?['badge'] as String? ?? user?['badge'] as String?;
+    final badge = me.value?.badge ?? user?['badge'] as String?;
     final onProfile = _isProfileRoute(context);
 
     return Container(
@@ -128,22 +128,17 @@ class _BottomBar extends ConsumerWidget {
                 ),
               ),
             )
-          else if (user != null)
+          else
             AuthorAvatar(
-              avatarUrl: user['avatarUrl'] as String? ?? '',
-              username: user['username'] as String? ?? '',
+              avatarUrl: user?['avatarUrl'] as String? ??
+                  me.value?.avatarUrl ??
+                  '',
+              username: user?['username'] as String? ??
+                  me.value?.username ??
+                  '',
               badge: badge,
               size: _leadingHeight,
               onTap: () => context.push(ProfileScreen.path),
-            )
-          else
-            Text(
-              'BE THER',
-              style: AppTextStyles.display(
-                20,
-                color: AppColors.background,
-                letterSpacing: 0.15,
-              ),
             ),
           const Spacer(),
           _GlobeButton(active: activeTab == ShellTab.explore),

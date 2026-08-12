@@ -13,6 +13,8 @@ import '../../auth/presentation/auth_notifier.dart';
 import '../../explore/presentation/explore_providers.dart';
 import '../../feed/presentation/feed_providers.dart';
 import '../../settings/presentation/settings_screen.dart';
+import 'profile_connections_screen.dart';
+import 'profile_events_screen.dart';
 import 'profile_providers.dart';
 import 'widgets/profile_event_sheet.dart';
 
@@ -203,25 +205,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     List<Map<String, dynamic>> items,
   ) {
     final deleted = ref.read(deletedPostIdsProvider);
-    final events = items
-        .map(ProfileCalendarEvent.fromJson)
-        .where((e) => !deleted.contains(e.postId))
-        .toList()
-      ..sort((a, b) {
-        final byDate = a.date.compareTo(b.date);
-        if (byDate != 0) return byDate;
-        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
-      });
+    final events =
+        items
+            .map(ProfileCalendarEvent.fromJson)
+            .where((e) => !deleted.contains(e.postId))
+            .toList()
+          ..sort((a, b) {
+            final byDate = a.date.compareTo(b.date);
+            if (byDate != 0) return byDate;
+            return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          });
     return events;
   }
 
-  String _calendarViewMode(Map<String, dynamic> user, {required bool isOwn}) {
+  String _calendarViewMode(ProfileUser user, {required bool isOwn}) {
     if (!isOwn) return 'full';
-    final settings = user['settings'];
-    if (settings is Map && settings['calendarView'] == 'events-only') {
-      return 'events-only';
-    }
-    return 'full';
+    return user.settings.calendarView;
   }
 
   Future<void> _setOwnCalendarView(String mode) async {
@@ -309,15 +308,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       context: context,
       event: event,
       profileUsername: username,
-      showWishlist: !isOwnProfile,
       isOwnProfile: isOwnProfile,
-      onToggleWishlist: () async {
-        final saved = await ref
-            .read(postsRepositoryProvider)
-            .toggleBookmark(event.postId);
-        ref.invalidate(profileCalendarProvider(username));
-        return saved;
-      },
       onCalendarChanged: () {
         ref.invalidate(profileCalendarProvider(username));
         ref.invalidate(feedProvider);
@@ -346,9 +337,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         child: Center(child: SelectableText('$e')),
       ),
       data: (user) {
-        final username = user['username'] as String? ?? '';
-        final isOwnProfile =
-            user['isOwnProfile'] as bool? ?? (widget.username == null);
+        final username = user.username;
+        final isOwnProfile = user.isOwnProfile || widget.username == null;
         final calendarAsync = ref.watch(profileCalendarProvider(username));
         // Rebuild calendar immediately when an event is deleted this session.
         ref.watch(deletedPostIdsProvider);
@@ -695,7 +685,7 @@ class _ProfileInfoSection extends ConsumerStatefulWidget {
     this.onToggleFollow,
   });
 
-  final Map<String, dynamic> user;
+  final ProfileUser user;
   final bool isOwnProfile;
   final Future<({bool following, int followersCount})> Function()?
   onToggleFollow;
@@ -721,14 +711,16 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
     super.didUpdateWidget(oldWidget);
     // Don't clobber an in-flight optimistic update with stale provider data.
     if (_followBusy) return;
-    if (!identical(oldWidget.user, widget.user)) {
+    if (oldWidget.user.id != widget.user.id ||
+        oldWidget.user.isFollowing != widget.user.isFollowing ||
+        oldWidget.user.followersCount != widget.user.followersCount) {
       setState(() => _readFollowState(widget.user));
     }
   }
 
-  void _readFollowState(Map<String, dynamic> user) {
-    _isFollowing = user['isFollowing'] == true;
-    _followersCount = (user['followersCount'] as num?)?.toInt() ?? 0;
+  void _readFollowState(ProfileUser user) {
+    _isFollowing = user.isFollowing;
+    _followersCount = user.followersCount;
   }
 
   Future<void> _handleToggleFollow() async {
@@ -737,7 +729,7 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
 
     final wasFollowing = _isFollowing;
     if (wasFollowing) {
-      final username = (widget.user['username'] as String?)?.trim() ?? '';
+      final username = widget.user.username.trim();
       final label = username.isNotEmpty ? '@$username' : 'this user';
       final ok = await showDialog<bool>(
         context: context,
@@ -797,16 +789,15 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
 
   @override
   Widget build(BuildContext context) {
-    final avatar = widget.user['avatarUrl'] as String? ?? '';
-    final display = widget.user['displayName'] as String? ?? '';
-    final bio = widget.user['bio'] as String? ?? '';
-    final events = (widget.user['eventsCount'] as num?)?.toInt() ?? 0;
-    final following = (widget.user['followingCount'] as num?)?.toInt() ?? 0;
-    final joined = widget.user['joined'] as String? ?? '';
+    final avatar = widget.user.avatarUrl;
+    final display = widget.user.displayName;
+    final bio = widget.user.bio;
+    final events = widget.user.eventsCount;
+    final following = widget.user.followingCount;
+    final joined = widget.user.joined;
     // Badges paused — multi-signal scoring later (activity, events, followers, …).
-    // final badge = widget.user['badge'] as String?;
-    final canDM = widget.user['canDM'] as bool? ?? false;
-    final username = widget.user['username'] as String? ?? '';
+    // final badge = widget.user.badge;
+    final username = widget.user.username;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -836,11 +827,35 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
               Expanded(
                 child: Row(
                   children: [
-                    _Stat(value: '$events', label: 'EVENTS'),
+                    _Stat(
+                      value: '$events',
+                      label: 'EVENTS',
+                      onTap: username.isEmpty
+                          ? null
+                          : () => context.push(
+                              ProfileEventsScreen.pathFor(username),
+                            ),
+                    ),
                     const SizedBox(width: 8),
-                    _Stat(value: '$_followersCount', label: 'FOLLOWERS'),
+                    _Stat(
+                      value: '$_followersCount',
+                      label: 'FOLLOWERS',
+                      onTap: username.isEmpty || _followersCount < 1
+                          ? null
+                          : () => context.push(
+                              ProfileConnectionsScreen.followersPath(username),
+                            ),
+                    ),
                     const SizedBox(width: 8),
-                    _Stat(value: '$following', label: 'FOLLOWING'),
+                    _Stat(
+                      value: '$following',
+                      label: 'FOLLOWING',
+                      onTap: username.isEmpty || following < 1
+                          ? null
+                          : () => context.push(
+                              ProfileConnectionsScreen.followingPath(username),
+                            ),
+                    ),
                   ],
                 ),
               ),
@@ -859,12 +874,12 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
                   ),
                 ),
               ),
-              if (!widget.isOwnProfile && _isFollowing && canDM)
-                const Icon(
-                  Icons.mail_outline,
-                  color: AppColors.primary,
-                  size: 20,
-                ),
+              // if (!widget.isOwnProfile && _isFollowing && widget.user.canDM)
+              //   const Icon(
+              //     Icons.mail_outline,
+              //     color: AppColors.primary,
+              //     size: 20,
+              //   ),
             ],
           ),
           // if (badge != null) ...[
@@ -1281,52 +1296,66 @@ class _CalendarDayCell extends StatelessWidget {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.value, required this.label});
+  const _Stat({required this.value, required this.label, this.onTap});
 
   final String value;
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     // Narrow phones (and large system text scale) shrink each Expanded column
     // until long labels like FOLLOWERS wrap mid-word. Scale down to keep one line.
-    return Expanded(
-      child: MediaQuery.withClampedTextScaling(
-        maxScaleFactor: 1.15,
-        child: Column(
-          children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                value,
-                maxLines: 1,
-                softWrap: false,
-                textAlign: TextAlign.center,
-                style: AppTextStyles.display(
-                  22,
-                  color: AppColors.secondary,
-                  letterSpacing: 0.02,
-                ),
+    final content = MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.15,
+      child: Column(
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              maxLines: 1,
+              softWrap: false,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.display(
+                22,
+                color: AppColors.secondary,
+                letterSpacing: 0.02,
               ),
             ),
-            const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                label,
-                maxLines: 1,
-                softWrap: false,
-                textAlign: TextAlign.center,
-                style: AppTextStyles.body(
-                  11,
-                  color: AppColors.mutedForeground,
-                  weight: FontWeight.w800,
-                ),
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              maxLines: 1,
+              softWrap: false,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.body(
+                11,
+                color: AppColors.mutedForeground,
+                weight: FontWeight.w800,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+
+    return Expanded(
+      child: onTap == null
+          ? content
+          : Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: content,
+                ),
+              ),
+            ),
     );
   }
 }

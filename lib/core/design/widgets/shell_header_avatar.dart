@@ -17,10 +17,9 @@ class ShellHeaderAvatar extends ConsumerWidget {
     final authUser = ref.watch(authNotifierProvider).user;
     final me = ref.watch(profileMeProvider);
     final profile = me.value;
-    final avatarUrl =
-        profile?['avatarUrl'] as String? ?? authUser?['avatarUrl'] as String? ?? '';
-    final badge = profile?['badge'] as String? ?? authUser?['badge'] as String?;
-    final username = profile?['username'] as String? ?? authUser?['username'] as String? ?? '';
+    final avatarUrl = profile?.avatarUrl ?? authUser?['avatarUrl'] as String? ?? '';
+    final badge = profile?.badge ?? authUser?['badge'] as String?;
+    final username = profile?.username ?? authUser?['username'] as String? ?? '';
 
     return AuthorAvatar(
       avatarUrl: avatarUrl,
