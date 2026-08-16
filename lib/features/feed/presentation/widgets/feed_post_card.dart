@@ -309,7 +309,11 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                     ),
                   ),
                 ),
-                FeedPostMoreMenu(postId: id, isPast: isPast),
+                FeedPostMoreMenu(
+                  postId: id,
+                  isPast: isPast,
+                  isOwnPost: _isOwnPost,
+                ),
                 // Container(
                 //   padding: const EdgeInsets.symmetric(
                 //     horizontal: 12,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +8,7 @@ import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/author_avatar.dart';
+import '../../../core/routing/app_route_observer.dart';
 import 'profile_providers.dart';
 import 'profile_screen.dart';
 import 'widgets/profile_subpage_scaffold.dart';
@@ -13,7 +16,7 @@ import 'widgets/profile_subpage_scaffold.dart';
 export 'profile_providers.dart' show ProfileConnectionsMode;
 
 /// Shared Followers / Following list — tap a row to open that profile.
-class ProfileConnectionsScreen extends ConsumerWidget {
+class ProfileConnectionsScreen extends ConsumerStatefulWidget {
   const ProfileConnectionsScreen({
     super.key,
     required this.username,
@@ -31,19 +34,79 @@ class ProfileConnectionsScreen extends ConsumerWidget {
   static const followingName = 'profile-following';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(
-      profileConnectionsProvider((username: username, mode: mode)),
-    );
-    final title = mode == ProfileConnectionsMode.followers
+  ConsumerState<ProfileConnectionsScreen> createState() =>
+      _ProfileConnectionsScreenState();
+}
+
+class _ProfileConnectionsScreenState
+    extends ConsumerState<ProfileConnectionsScreen>
+    with RouteAware {
+  bool _routeSubscribed = false;
+  bool _refreshing = false;
+
+  ProfileConnectionsKey get _key =>
+      (username: widget.username, mode: widget.mode);
+
+  @override
+  void initState() {
+    super.initState();
+    // Always fetch latest followers/following when opening this screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_silentRefresh());
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (!_routeSubscribed && route is PageRoute<void>) {
+      appRouteObserver.subscribe(this, route);
+      _routeSubscribed = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_routeSubscribed) {
+      appRouteObserver.unsubscribe(this);
+    }
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // Returning from a nested profile (e.g. after unfollow) — soft API refresh.
+    unawaited(_silentRefresh());
+  }
+
+  Future<void> _silentRefresh() async {
+    if (_refreshing) return;
+    _refreshing = true;
+    try {
+      // refresh keeps prior list visible (skipLoadingOnRefresh).
+      final _ = await ref.refresh(profileConnectionsProvider(_key).future);
+    } catch (_) {
+      // Keep the current list if the background refresh fails.
+    } finally {
+      if (mounted) _refreshing = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final async = ref.watch(profileConnectionsProvider(_key));
+    final title = widget.mode == ProfileConnectionsMode.followers
         ? 'FOLLOWERS'
         : 'FOLLOWING';
 
     return ProfileSubpageScaffold(
       title: title,
-      subtitle: '@$username',
+      subtitle: '@${widget.username}',
       child: async.when(
         skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppColors.primary),
         ),
@@ -60,12 +123,8 @@ class ProfileConnectionsScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
-                  onPressed: () => ref.invalidate(
-                    profileConnectionsProvider((
-                      username: username,
-                      mode: mode,
-                    )),
-                  ),
+                  onPressed: () =>
+                      ref.invalidate(profileConnectionsProvider(_key)),
                   child: const Text('RETRY'),
                 ),
               ],
@@ -76,7 +135,7 @@ class ProfileConnectionsScreen extends ConsumerWidget {
           if (items.isEmpty) {
             return Center(
               child: Text(
-                mode == ProfileConnectionsMode.followers
+                widget.mode == ProfileConnectionsMode.followers
                     ? 'No followers yet'
                     : 'Not following anyone yet',
                 style: AppTextStyles.body(
@@ -89,11 +148,7 @@ class ProfileConnectionsScreen extends ConsumerWidget {
           return RefreshIndicator(
             color: AppColors.primary,
             backgroundColor: AppColors.card,
-            onRefresh: () async {
-              final key = (username: username, mode: mode);
-              ref.invalidate(profileConnectionsProvider(key));
-              await ref.read(profileConnectionsProvider(key).future);
-            },
+            onRefresh: _silentRefresh,
             child: ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
               itemCount: items.length,

@@ -20,12 +20,52 @@ import '../../../core/design/widgets/be_ther_buttons.dart';
 import '../../../core/media/default_event_image.dart';
 import '../../../core/media/ticket_link_preview.dart';
 import '../../../core/network/api_client.dart';
+import '../../auth/presentation/auth_notifier.dart';
 import '../../explore/presentation/explore_providers.dart';
 import '../../profile/presentation/profile_providers.dart';
 import '../data/places_repository.dart';
 import '../data/posts_repository.dart';
 import 'feed_providers.dart';
 import 'widgets/event_place_field.dart';
+
+Map<String, dynamic> _feedItemFromCreatedPost(
+  Map<String, dynamic> created,
+  Map<String, dynamic>? me,
+) {
+  final id =
+      created['postId']?.toString() ?? created['_id']?.toString() ?? '';
+  final author = me == null
+      ? created['authorId']
+      : <String, dynamic>{
+          '_id': me['_id'] ?? me['id'],
+          'id': me['_id'] ?? me['id'],
+          'username': me['username'],
+          'displayName': me['displayName'] ?? me['username'],
+          'avatarUrl': me['avatarUrl'] ?? '',
+          if (me['badge'] != null) 'badge': me['badge'],
+        };
+
+  final inCalendar = created['inCalendar'] == true;
+  final calendarCount = created['calendarCount'];
+  final resolvedCalendarCount = calendarCount is num
+      ? calendarCount.toInt()
+      : (inCalendar ? 1 : 0);
+
+  return <String, dynamic>{
+    ...created,
+    '_id': id,
+    'postId': id,
+    if (author is Map<String, dynamic>) 'authorId': author,
+    'liked': created['liked'] ?? false,
+    'bookmarked': created['bookmarked'] ?? false,
+    'likesCount': created['likesCount'] ?? 0,
+    'commentsCount': created['commentsCount'] ?? 0,
+    'calendarCount': resolvedCalendarCount,
+    'inCalendar': created['inCalendar'] ?? true,
+    'calendarStatus':
+        created['calendarStatus'] ?? created['status'] ?? 'going',
+  };
+}
 
 class AddPostScreen extends ConsumerStatefulWidget {
   const AddPostScreen({super.key});
@@ -628,7 +668,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         if (_userLatLng != null)
           'userLocation': {'lat': _userLatLng!.lat, 'lng': _userLatLng!.lng},
       };
-      await posts.createPost({
+      final created = await posts.createPost({
         'location': _eventName.text.trim(),
         'status': _isGoing ? 'going' : 'interested',
         'imageUrl': url,
@@ -638,9 +678,16 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         if (_taggedUsers.isNotEmpty) 'taggedUsernames': _taggedUsers,
         'eventDetails': eventDetails,
       });
-      ref.invalidate(feedProvider);
+      final me = ref.read(authNotifierProvider).user;
+      ref.read(feedLocalInsertsProvider.notifier).prepend(
+            _feedItemFromCreatedPost(created, me),
+          );
       ref.invalidate(exploreEventsProvider);
       ref.invalidate(profileMeProvider);
+      final username = me?['username']?.toString().trim() ?? '';
+      if (username.isNotEmpty) {
+        ref.invalidate(profileEventsProvider(username));
+      }
       if (!mounted) return;
       _popRoute();
     } on DioException catch (e) {

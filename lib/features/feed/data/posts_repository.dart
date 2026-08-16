@@ -297,7 +297,7 @@ class PostsRepository {
     }
   }
 
-  Future<String> createPost(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> createPost(Map<String, dynamic> payload) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>('/api/v1/posts', data: payload);
       final data = _extractData(res.data, fallbackMessage: 'Failed to create post');
@@ -305,7 +305,11 @@ class PostsRepository {
       if (id.isEmpty) {
         throw const FormatException('Create post returned empty id');
       }
-      return id;
+      return {
+        ...data,
+        '_id': id,
+        'postId': id,
+      };
     } on DioException catch (e) {
       throw Exception(_apiMessage(e, fallback: 'Failed to create post'));
     }

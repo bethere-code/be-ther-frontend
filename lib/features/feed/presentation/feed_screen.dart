@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,7 @@ import '../../../core/design/widgets/post_skeleton.dart';
 import '../../../core/routing/app_route_observer.dart';
 import '../../../core/utils/popup_menu_utils.dart';
 import '../../profile/presentation/profile_providers.dart';
+import '../data/posts_repository.dart';
 import 'add_post_screen.dart';
 import 'feed_providers.dart';
 import 'widgets/feed_permissions_coordinator.dart';
@@ -30,12 +33,14 @@ class FeedScreen extends ConsumerStatefulWidget {
 class _FeedScreenState extends ConsumerState<FeedScreen>
     with RouteAware, WidgetsBindingObserver {
   late ScrollController _scrollController;
-  List<Map<String, dynamic>> _allItems = [];
-  int _currentSkip = 0;
+  final List<Map<String, dynamic>> _allItems = [];
+  int? _nextSkip;
   bool _isLoadingMore = false;
-  bool _hasMore = true;
+  bool _hasBootstrapped = false;
   bool _routeSubscribed = false;
   bool _permissionCheckQueued = false;
+  bool _wasCovered = false;
+  bool _isRefreshing = false;
   GoRouter? _goRouter;
 
   @override
@@ -80,11 +85,29 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     if (ModalRoute.of(context)?.isCurrent != true) return;
     if (GoRouterState.of(context).matchedLocation != FeedScreen.path) return;
     _schedulePermissionCheck();
+    if (_wasCovered) {
+      _wasCovered = false;
+      _maybeSyncFromApi();
+    }
+  }
+
+  @override
+  void didPushNext() {
+    _wasCovered = true;
   }
 
   @override
   void didPopNext() {
     _schedulePermissionCheck();
+    _wasCovered = false;
+    _maybeSyncFromApi();
+  }
+
+  void _maybeSyncFromApi() {
+    // After creating an event we keep a local top insert; syncing when the
+    // user returns (or later revisits) replaces it with the API feed.
+    if (ref.read(feedLocalInsertsProvider).isEmpty) return;
+    unawaited(_syncFromApi());
   }
 
   @override
@@ -128,32 +151,119 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     }
   }
 
-  void _loadMore() {
-    if (_isLoadingMore || !_hasMore) return;
-    setState(() {
-      _isLoadingMore = true;
-      _currentSkip += 10;
-    });
+  String _itemId(Map<String, dynamic> item) =>
+      item['_id']?.toString() ??
+      item['postId']?.toString() ??
+      item['id']?.toString() ??
+      '';
+
+  void _applyFirstPage(FeedPage page) {
+    _allItems
+      ..clear()
+      ..addAll(page.items);
+    _nextSkip = page.nextSkip;
+    _hasBootstrapped = true;
   }
 
-  void _resetPagination() {
-    setState(() {
-      _allItems.clear();
-      _currentSkip = 0;
-      _isLoadingMore = false;
-      _hasMore = true;
-    });
+  List<Map<String, dynamic>> _mergeVisibleItems({
+    required List<Map<String, dynamic>> sourceItems,
+    required List<Map<String, dynamic>> localInserts,
+    required Set<String> deletedIds,
+  }) {
+    final seen = <String>{};
+    final merged = <Map<String, dynamic>>[];
+
+    void addAll(Iterable<Map<String, dynamic>> items) {
+      for (final item in items) {
+        final id = _itemId(item);
+        if (id.isNotEmpty) {
+          if (deletedIds.contains(id) || !seen.add(id)) continue;
+        }
+        merged.add(item);
+      }
+    }
+
+    addAll(localInserts);
+    addAll(sourceItems);
+    return merged;
+  }
+
+  Future<void> _loadMore() async {
+    final skip = _nextSkip;
+    if (_isLoadingMore || skip == null) return;
+
+    setState(() => _isLoadingMore = true);
+    try {
+      final page = await ref.read(feedPageProvider(skip).future);
+      if (!mounted) return;
+
+      final seen = _allItems.map(_itemId).where((id) => id.isNotEmpty).toSet();
+      final fresh = page.items.where((item) {
+        final id = _itemId(item);
+        return id.isEmpty || seen.add(id);
+      });
+
+      setState(() {
+        _allItems.addAll(fresh);
+        _nextSkip = page.nextSkip;
+        _isLoadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoadingMore = false);
+    }
+  }
+
+  Future<void> _syncFromApi() async {
+    try {
+      await _refresh();
+    } catch (_) {
+      // Keep local inserts if the refresh fails.
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+    _nextSkip = null;
+    _isLoadingMore = false;
+    try {
+      final page = await ref.refresh(feedProvider.future);
+      if (!mounted) return;
+      // Clear optimistic inserts only after API data arrives so the new
+      // event does not disappear during the round-trip.
+      ref.read(feedLocalInsertsProvider.notifier).clear();
+      setState(() => _applyFirstPage(page));
+    } finally {
+      _isRefreshing = false;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Initial load or refresh
-    final feed = _currentSkip == 0
-        ? ref.watch(feedProvider)
-        : ref.watch(feedPageProvider(_currentSkip));
+    final feed = ref.watch(feedProvider);
     final deletedIds = ref.watch(deletedPostIdsProvider);
+    final localInserts = ref.watch(feedLocalInsertsProvider);
 
-    // const feedHeaderHeight = kToolbarHeight;
+    // First page only — never reset scroll by re-applying while paginating.
+    ref.listen<AsyncValue<FeedPage>>(feedProvider, (prev, next) {
+      next.whenData((page) {
+        if (!mounted || _hasBootstrapped) return;
+        setState(() => _applyFirstPage(page));
+      });
+    });
+
+    ref.listen<List<Map<String, dynamic>>>(feedLocalInsertsProvider, (
+      prev,
+      next,
+    ) {
+      if (next.isEmpty) return;
+      if (prev != null && next.length <= prev.length) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _scrollToTop();
+      });
+    });
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -210,37 +320,28 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
         child: Container(
           color: AppColors.background,
           child: feed.when(
+            skipLoadingOnReload: true,
+            skipLoadingOnRefresh: true,
             data: (page) {
-              // Update pagination state based on new data
-              if (_currentSkip == 0) {
-                _allItems = page.items;
-                _hasMore = page.nextSkip != null;
-              } else if (_currentSkip > 0) {
-                _allItems.addAll(page.items);
-                _hasMore = page.nextSkip != null;
-              }
+              final sourceItems =
+                  _hasBootstrapped ? _allItems : page.items;
 
-              if (mounted && _isLoadingMore) {
-                setState(() => _isLoadingMore = false);
-              }
+              final visibleItems = _mergeVisibleItems(
+                sourceItems: sourceItems,
+                localInserts: localInserts,
+                deletedIds: deletedIds,
+              );
 
-              final visibleItems = deletedIds.isEmpty
-                  ? _allItems
-                  : _allItems
-                      .where((item) {
-                        final id = item['_id']?.toString() ??
-                            item['id']?.toString() ??
-                            '';
-                        return id.isEmpty || !deletedIds.contains(id);
-                      })
-                      .toList(growable: false);
+              if (!_hasBootstrapped) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted || _hasBootstrapped) return;
+                  setState(() => _applyFirstPage(page));
+                });
+              }
 
               if (visibleItems.isEmpty) {
                 return RefreshIndicator(
-                  onRefresh: () async {
-                    _resetPagination();
-                    final _ = await ref.refresh(feedProvider.future);
-                  },
+                  onRefresh: _refresh,
                   child: CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
@@ -254,32 +355,62 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                   ),
                 );
               }
+
               return RefreshIndicator(
-                onRefresh: () async {
-                  _resetPagination();
-                  final _ = await ref.refresh(feedProvider.future);
-                },
+                onRefresh: _refresh,
                 child: ListView.builder(
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
-                  itemCount: visibleItems.length + (_isLoadingMore ? 1 : 0),
+                  itemCount:
+                      visibleItems.length + (_isLoadingMore ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == visibleItems.length) {
                       return const Padding(
                         padding: EdgeInsets.symmetric(vertical: 16),
-                        child: CircularProgressIndicator(),
+                        child: Center(child: CircularProgressIndicator()),
                       );
                     }
                     final item = visibleItems[index];
-                    return RepaintBoundary(child: FeedPostCard(item: item));
+                    return RepaintBoundary(
+                      child: FeedPostCard(
+                        key: ValueKey(_itemId(item)),
+                        item: item,
+                      ),
+                    );
                   },
                 ),
               );
             },
-            loading: () => ListView.builder(
-              itemCount: 5,
-              itemBuilder: (context, index) => const PostSkeleton(),
-            ),
+            loading: () {
+              if (localInserts.isEmpty) {
+                return ListView.builder(
+                  itemCount: 5,
+                  itemBuilder: (context, index) => const PostSkeleton(),
+                );
+              }
+              final visibleItems = _mergeVisibleItems(
+                sourceItems: const [],
+                localInserts: localInserts,
+                deletedIds: deletedIds,
+              );
+              return RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView.builder(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  itemCount: visibleItems.length,
+                  itemBuilder: (context, index) {
+                    final item = visibleItems[index];
+                    return RepaintBoundary(
+                      child: FeedPostCard(
+                        key: ValueKey(_itemId(item)),
+                        item: item,
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
             error: (e, _) => Center(child: SelectableText('$e')),
           ),
         ),

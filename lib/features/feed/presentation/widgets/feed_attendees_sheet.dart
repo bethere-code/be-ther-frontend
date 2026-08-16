@@ -299,7 +299,7 @@ class _StatusChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: AppTextStyles.display(11, color: fg, letterSpacing: 0.04),
+        style: AppTextStyles.display(11, color: fg, letterSpacing: 0.06),
       ),
     );
   }

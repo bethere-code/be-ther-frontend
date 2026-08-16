@@ -28,6 +28,38 @@ class DeletedPostIdsNotifier extends Notifier<Set<String>> {
   bool contains(String postId) => state.contains(postId.trim());
 }
 
+/// Newly created posts shown at the top of the feed until the next API refresh.
+final feedLocalInsertsProvider =
+    NotifierProvider<FeedLocalInsertsNotifier, List<Map<String, dynamic>>>(
+  FeedLocalInsertsNotifier.new,
+);
+
+class FeedLocalInsertsNotifier extends Notifier<List<Map<String, dynamic>>> {
+  @override
+  List<Map<String, dynamic>> build() => const [];
+
+  void prepend(Map<String, dynamic> post) {
+    final id = post['_id']?.toString() ?? post['postId']?.toString() ?? '';
+    if (id.isEmpty) {
+      state = [post, ...state];
+      return;
+    }
+    state = [
+      post,
+      ...state.where((p) {
+        final existing =
+            p['_id']?.toString() ?? p['postId']?.toString() ?? '';
+        return existing != id;
+      }),
+    ];
+  }
+
+  void clear() {
+    if (state.isEmpty) return;
+    state = const [];
+  }
+}
+
 final feedProvider = FutureProvider<FeedPage>((ref) async {
   final repo = ref.watch(postsRepositoryProvider);
   return repo.fetchFeed();

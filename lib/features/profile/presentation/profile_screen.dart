@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +11,7 @@ import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/author_avatar.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../core/routing/app_route_observer.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../explore/presentation/explore_providers.dart';
 import '../../feed/presentation/feed_providers.dart';
@@ -33,7 +36,8 @@ class ProfileScreen extends ConsumerStatefulWidget {
   ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+class _ProfileScreenState extends ConsumerState<ProfileScreen>
+    with RouteAware {
   static const _daysPerChunk = 28;
   static const _dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
   static const _monthNames = [
@@ -59,6 +63,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   int _dayCount = _daysPerChunk * 2;
   bool _loadingMoreDays = false;
   bool _pendingJumpToToday = true;
+  bool _routeSubscribed = false;
+
+  /// Username we already refreshed lists for on this visit.
+  String? _hydratedListsFor;
 
   @override
   void initState() {
@@ -67,10 +75,39 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (!_routeSubscribed && route is PageRoute<void>) {
+      appRouteObserver.subscribe(this, route);
+      _routeSubscribed = true;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.username != widget.username) {
+      // Switching profiles — allow a fresh hydrate for the new user.
+      _hydratedListsFor = null;
+      _pendingJumpToToday = true;
+    }
+  }
+
+  @override
   void dispose() {
+    if (_routeSubscribed) {
+      appRouteObserver.unsubscribe(this);
+    }
     _profileScrollController.dispose();
     _calendarScrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // Returning to this profile (e.g. from Events / settings) — refresh lists.
+    _hydratedListsFor = null;
   }
 
   DateTime _todayDate() {
@@ -242,8 +279,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _refresh(String calendarUsername) async {
     ref.invalidate(profileViewProvider(widget.username));
     ref.invalidate(profileCalendarProvider(calendarUsername));
-    await ref.read(profileViewProvider(widget.username).future);
-    await ref.read(profileCalendarProvider(calendarUsername).future);
+    ref.invalidate(profileEventsProvider(calendarUsername));
+    await Future.wait([
+      ref.read(profileViewProvider(widget.username).future),
+      ref.read(profileCalendarProvider(calendarUsername).future),
+      ref.read(profileEventsProvider(calendarUsername).future),
+    ]);
+  }
+
+  /// Fresh calendar + authored-events fetch for this profile visit.
+  /// Does not block the UI; Events tab and calendar pick up the new data.
+  void _hydrateProfileLists(String username) {
+    if (username.isEmpty || _hydratedListsFor == username) return;
+    _hydratedListsFor = username;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.invalidate(profileCalendarProvider(username));
+      ref.invalidate(profileEventsProvider(username));
+      // Soft refresh header counts (events / followers) without a full spinner.
+      ref.invalidate(profileViewProvider(widget.username));
+
+      unawaited(ref.read(profileCalendarProvider(username).future));
+      unawaited(ref.read(profileEventsProvider(username).future));
+      unawaited(ref.read(profileViewProvider(widget.username).future));
+    });
   }
 
   Widget _buildCalendarGrid({
@@ -311,6 +371,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       isOwnProfile: isOwnProfile,
       onCalendarChanged: () {
         ref.invalidate(profileCalendarProvider(username));
+        ref.invalidate(profileEventsProvider(username));
         ref.invalidate(feedProvider);
         ref.invalidate(exploreEventsProvider);
         if (isOwnProfile) {
@@ -339,7 +400,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       data: (user) {
         final username = user.username;
         final isOwnProfile = user.isOwnProfile || widget.username == null;
+        // Always refresh authored-events + calendar for this visit (own or others).
+        _hydrateProfileLists(username);
         final calendarAsync = ref.watch(profileCalendarProvider(username));
+        // Keep Events cache warm so the Events screen opens on fresh data.
+        ref.watch(profileEventsProvider(username));
         // Rebuild calendar immediately when an event is deleted this session.
         ref.watch(deletedPostIdsProvider);
 
@@ -355,6 +420,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 : null,
           ),
           child: calendarAsync.when(
+            skipLoadingOnReload: true,
+            skipLoadingOnRefresh: true,
             data: (items) {
               final eventsByDate = _eventsByDate(items);
               final todayDate = _todayDate();

@@ -12,10 +12,14 @@ class FeedPostMoreMenu extends ConsumerWidget {
     super.key,
     required this.postId,
     this.isPast = false,
+    this.isOwnPost = false,
   });
 
   final String postId;
   final bool isPast;
+
+  /// Authors can mark their own upcoming events as cancelled.
+  final bool isOwnPost;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,7 +45,7 @@ class FeedPostMoreMenu extends ConsumerWidget {
         }
       },
       itemBuilder: (context) => [
-        if (!isPast)
+        if (isOwnPost && !isPast)
           PopupMenuItem(
             value: 'event_cancelled',
             child: Text(

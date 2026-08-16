@@ -36,6 +36,10 @@ class _LowercaseAlphanumericUsernameFormatter extends TextInputFormatter {
 }
 
 class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
+  static const _nameMaxLength = 30;
+  static const _usernameMaxLength = 20;
+  static const _usernameMinLength = 3;
+
   final _name = TextEditingController();
   final _username = TextEditingController();
   final _email = TextEditingController();
@@ -45,6 +49,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
   bool _loading = false;
   bool _obscurePassword = true;
   String? _error;
+  String? _nameError;
   String? _usernameError;
   String? _emailError;
   bool _checkingUsername = false;
@@ -80,16 +85,21 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
   static final _passwordRegex = RegExp(r'^.{8,}$');
 
   String? _validate() {
-    if (_name.text.trim().isEmpty) return 'Enter your name';
+    final name = _name.text;
+    if (name.trim().isEmpty) return 'Enter your name';
+    if (name.length > _nameMaxLength) {
+      return 'Name must be at most $_nameMaxLength characters';
+    }
     final u = _username.text.trim();
-    if (u.length < 3 || u.length > 32) {
-      return 'Username must be 3–32 characters';
+    if (u.length < _usernameMinLength || u.length > _usernameMaxLength) {
+      return 'Username must be $_usernameMinLength–$_usernameMaxLength characters';
     }
     if (!RegExp(r'^[a-z0-9]+$').hasMatch(u)) {
       return 'Username: lowercase letters and digits only';
     }
     final e = _email.text.trim();
     if (!_emailRegex.hasMatch(e)) return 'Enter a valid email';
+    if (_nameError != null) return _nameError;
     if (_usernameError != null) return _usernameError;
     if (_emailError != null) return _emailError;
     final p = _password.text;
@@ -106,6 +116,17 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
     return null;
   }
 
+  void _onNameChanged(String raw) {
+    // Count includes spaces; no counter UI — surface as an error only.
+    final error = raw.length > _nameMaxLength
+        ? 'Name must be at most $_nameMaxLength characters'
+        : null;
+    setState(() {
+      _nameError = error;
+      if (_error != null) _error = null;
+    });
+  }
+
   void _scheduleUsernameAvailabilityCheck(String raw) {
     if (_loading) return;
     final username = raw.trim().toLowerCase();
@@ -117,8 +138,18 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
       setState(() {});
       return;
     }
-    if (username.length < 3) {
-      setState(() => _usernameError = 'Username must be at least 3 characters');
+    if (username.length < _usernameMinLength) {
+      setState(
+        () => _usernameError =
+            'Username must be at least $_usernameMinLength characters',
+      );
+      return;
+    }
+    if (username.length > _usernameMaxLength) {
+      setState(
+        () => _usernameError =
+            'Username must be at most $_usernameMaxLength characters',
+      );
       return;
     }
     if (!RegExp(r'^[a-z0-9]+$').hasMatch(username)) {
@@ -132,11 +163,9 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
     _usernameDebounce = Timer(const Duration(milliseconds: 450), () async {
       final requestId = ++_usernameRequestId;
       try {
-        print("checkSignupAvailability: $username");
         final result = await ref
             .read(authRepositoryProvider)
             .checkSignupAvailability(username: username);
-        print("checkSignupAvailability: $result");
         if (!mounted ||
             requestId != _usernameRequestId ||
             _username.text.trim() != username) {
@@ -228,6 +257,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
     }
     setState(() {
       _error = null;
+      _nameError = null;
       _usernameError = null;
       _emailError = null;
       _loading = true;
@@ -301,15 +331,24 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                   controller: _name,
                   readOnly: _loading,
                   textCapitalization: TextCapitalization.words,
-                  onChanged: (_) => setState(() {}),
+                  onChanged: _onNameChanged,
                   decoration: InputDecoration(
                     hintText: 'first name',
                     hintStyle: AppTextStyles.body(
                       13,
                       color: AppColors.mutedForeground,
                     ),
+                    // Never show Flutter's character counter.
+                    counterText: '',
                   ),
                 ),
+                if (_nameError != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _nameError!,
+                    style: AppTextStyles.body(13, color: AppColors.destructive),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 _fieldLabelWithStatus(
                   'Username',
@@ -319,11 +358,6 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                   available: _usernameAvailable,
                 ),
                 const SizedBox(height: 6),
-                // Text(
-                //   'Lowercase, no spaces (letters and numbers only)',
-                //   style: AppTextStyles.body(12, color: AppColors.mutedForeground),
-                // ),
-                // const SizedBox(height: 8),
                 TextField(
                   controller: _username,
                   readOnly: _loading,
@@ -336,6 +370,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                       color: AppColors.mutedForeground,
                     ),
                     hintText: 'janesmith (letters and numbers only)',
+                    counterText: '',
                   ),
                 ),
                 if (_usernameError != null) ...[
