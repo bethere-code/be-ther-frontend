@@ -96,6 +96,7 @@ flutter:
   assets:
     - assets/env/app.env
     - assets/images/
+    - assets/images/figma-make/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

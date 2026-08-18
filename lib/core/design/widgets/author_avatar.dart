@@ -16,6 +16,7 @@ class AuthorAvatar extends StatelessWidget {
     this.size = 40,
     this.onTap,
     this.interactive = true,
+    this.heroTag,
   });
 
   final String avatarUrl;
@@ -27,10 +28,13 @@ class AuthorAvatar extends StatelessWidget {
   /// When false, renders a non-tappable circle (e.g. profile header).
   final bool interactive;
 
+  /// Unique per visible route. Omit when the same user can appear twice.
+  final String? heroTag;
+
   @override
   Widget build(BuildContext context) {
     final borderColor = badgeBorderColor(badge);
-    final child = Container(
+    Widget child = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
@@ -51,22 +55,29 @@ class AuthorAvatar extends StatelessWidget {
       ),
     );
 
-    if (!interactive) return child;
+    if (interactive) {
+      final handler =
+          onTap ??
+          (username.isEmpty
+              ? null
+              : () => context.push(
+                    ProfileScreen.pathForUser(username),
+                    extra: heroTag,
+                  ));
+      if (handler != null) {
+        child = Material(
+          color: Colors.transparent,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: handler,
+            child: child,
+          ),
+        );
+      }
+    }
 
-    final handler =
-        onTap ??
-        (username.isEmpty
-            ? null
-            : () => context.push(ProfileScreen.pathForUser(username)));
-    if (handler == null) return child;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: handler,
-        child: child,
-      ),
-    );
+    final tag = heroTag?.trim() ?? '';
+    if (tag.isEmpty) return child;
+    return Hero(tag: tag, child: child);
   }
 }

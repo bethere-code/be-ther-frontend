@@ -16,6 +16,7 @@ import '../app_dimens.dart';
 import '../app_images.dart';
 import '../app_text_styles.dart';
 import 'author_avatar.dart';
+import 'pressable.dart';
 
 enum ShellTab { home, add, notifications, explore }
 
@@ -290,28 +291,27 @@ class _RailIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected ? AppColors.primary : AppColors.secondary,
-      child: InkWell(
-        onTap: onTap,
-        child: SizedBox(
-          width: _squareSize,
-          height: _squareSize,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: AppColors.border,
-                width: AppDimens.borderThick,
-              ),
-              boxShadow: selected ? AppDimens.railActiveShadow : null,
-            ),
-            child: Center(
-              child: Icon(
-                icon,
-                size: _iconSize,
-                color: selected ? AppColors.card : AppColors.background,
-              ),
-            ),
+    return Pressable(
+      onTap: onTap,
+      haptic: true,
+      scale: 0.96,
+      shadowNormal: selected ? AppDimens.railActiveShadow : null,
+      shadowPressed: selected ? AppDimens.railActiveShadowPressed : null,
+      child: Container(
+        width: _squareSize,
+        height: _squareSize,
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : AppColors.secondary,
+          border: Border.all(
+            color: AppColors.border,
+            width: AppDimens.borderThick,
+          ),
+        ),
+        child: Center(
+          child: Icon(
+            icon,
+            size: _iconSize,
+            color: selected ? AppColors.card : AppColors.background,
           ),
         ),
       ),

@@ -889,6 +889,9 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
                 // badge: badge,
                 size: 96,
                 interactive: false,
+                heroTag: GoRouterState.of(context).extra is String
+                    ? GoRouterState.of(context).extra as String
+                    : null,
               ),
               const SizedBox(width: 16),
               Expanded(

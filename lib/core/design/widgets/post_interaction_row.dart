@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../features/feed/presentation/feed_providers.dart';
@@ -36,16 +37,29 @@ class PostInteractionRow extends ConsumerStatefulWidget {
   ConsumerState<PostInteractionRow> createState() => _PostInteractionRowState();
 }
 
-class _PostInteractionRowState extends ConsumerState<PostInteractionRow> {
+class _PostInteractionRowState extends ConsumerState<PostInteractionRow>
+    with SingleTickerProviderStateMixin {
   late bool _liked;
   late int _likesCount;
   late int _commentsCount;
   bool _likeBusy = false;
 
+  late final AnimationController _heartCtrl;
+
   @override
   void initState() {
     super.initState();
     _syncFromWidget();
+    _heartCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 160),
+    );
+  }
+
+  @override
+  void dispose() {
+    _heartCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -71,23 +85,38 @@ class _PostInteractionRowState extends ConsumerState<PostInteractionRow> {
 
   Future<void> _toggleLike() async {
     if (widget.postId.isEmpty || _likeBusy) return;
-    setState(() => _likeBusy = true);
+    // Optimistic flip immediately.
+    final prevLiked = _liked;
+    final prevCount = _likesCount;
+    setState(() {
+      _liked = !_liked;
+      _likesCount += _liked ? 1 : -1;
+      if (_likesCount < 0) _likesCount = 0;
+      _likeBusy = true;
+    });
+    HapticFeedback.selectionClick();
+    _heartCtrl.forward().then((_) => _heartCtrl.reverse());
+
     try {
       final liked =
           await ref.read(postsRepositoryProvider).toggleLike(widget.postId);
       if (!mounted) return;
       setState(() {
         _liked = liked;
-        _likesCount += liked ? 1 : -1;
+        _likesCount = prevCount + (liked ? 1 : -1);
         if (_likesCount < 0) _likesCount = 0;
       });
       widget.onInteractionChanged?.call();
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not update like')),
-        );
-      }
+      // Revert on failure.
+      if (!mounted) return;
+      setState(() {
+        _liked = prevLiked;
+        _likesCount = prevCount;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update like')),
+      );
     } finally {
       if (mounted) setState(() => _likeBusy = false);
     }
@@ -120,10 +149,15 @@ class _PostInteractionRowState extends ConsumerState<PostInteractionRow> {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        IconButton(
-          icon: Icon(_liked ? Icons.favorite : Icons.favorite_border),
-          color: _liked ? AppColors.primary : AppColors.foreground,
-          onPressed: widget.postId.isEmpty || _likeBusy ? null : _toggleLike,
+        ScaleTransition(
+          scale: Tween(begin: 1.0, end: 1.25).animate(
+            CurvedAnimation(parent: _heartCtrl, curve: Curves.easeOutCubic),
+          ),
+          child: IconButton(
+            icon: Icon(_liked ? Icons.favorite : Icons.favorite_border),
+            color: _liked ? AppColors.primary : AppColors.foreground,
+            onPressed: widget.postId.isEmpty ? null : _toggleLike,
+          ),
         ),
         InkWell(
           onTap: _likesCount > 0 ? _openLikes : null,

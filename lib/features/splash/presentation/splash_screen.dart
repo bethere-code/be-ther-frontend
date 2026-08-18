@@ -40,24 +40,37 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _runStartup();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _runStartup();
+    });
   }
 
   Future<void> _runStartup() async {
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    if (!mounted) return;
-    setState(() => _zoomStep = 1);
-
-    for (var i = 1; i < _words.length; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 1500));
-      if (!mounted) return;
+    final noMotion = MediaQuery.disableAnimationsOf(context);
+    if (noMotion) {
+      // Skip all animation, show last word immediately.
       setState(() {
-        _wordIndex = i;
-        _zoomStep += 1;
+        _wordIndex = _words.length - 1;
+        _zoomStep = _words.length;
       });
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      if (!mounted) return;
+    } else {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (!mounted) return;
+      setState(() => _zoomStep = 1);
+
+      for (var i = 1; i < _words.length; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        if (!mounted) return;
+        setState(() {
+          _wordIndex = i;
+          _zoomStep += 1;
+        });
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (!mounted) return;
     }
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    if (!mounted) return;
 
     await ref.read(authNotifierProvider.notifier).hydrateFromStorage();
     if (!mounted) return;

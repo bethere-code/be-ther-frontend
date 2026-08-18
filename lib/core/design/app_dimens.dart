@@ -20,4 +20,13 @@ abstract final class AppDimens {
   static const List<BoxShadow> railActiveShadow = [
     BoxShadow(color: AppColors.border, offset: Offset(0, 4), blurRadius: 0),
   ];
+
+  /// Pressed-state shadow for primary CTA: pushed in.
+  static const List<BoxShadow> primaryButtonShadowPressed = [
+    BoxShadow(color: AppColors.background, offset: Offset(0, 2), blurRadius: 0),
+  ];
+
+  static const List<BoxShadow> railActiveShadowPressed = [
+    BoxShadow(color: AppColors.border, offset: Offset(0, 1), blurRadius: 0),
+  ];
 }

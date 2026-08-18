@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -135,10 +136,25 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
 
   void _scrollToTop() {
     if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final offset = position.pixels;
+    if (offset <= 0) return;
+
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _scrollController.jumpTo(0);
+      return;
+    }
+
+    // animateTo(0) from far down builds every card on the way — that's the lag.
+    // Jump to one viewport, then ease the last screen.
+    final easeRange = position.viewportDimension;
+    if (offset > easeRange) {
+      _scrollController.jumpTo(easeRange);
+    }
     _scrollController.animateTo(
       0,
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.decelerate,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -323,8 +339,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
             skipLoadingOnReload: true,
             skipLoadingOnRefresh: true,
             data: (page) {
-              final sourceItems =
-                  _hasBootstrapped ? _allItems : page.items;
+              final sourceItems = _hasBootstrapped ? _allItems : page.items;
 
               final visibleItems = _mergeVisibleItems(
                 sourceItems: sourceItems,
@@ -360,9 +375,11 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                 onRefresh: _refresh,
                 child: ListView.builder(
                   controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  itemCount:
-                      visibleItems.length + (_isLoadingMore ? 1 : 0),
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(800),
+                  itemCount: visibleItems.length + (_isLoadingMore ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == visibleItems.length) {
                       return const Padding(
@@ -371,12 +388,20 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                       );
                     }
                     final item = visibleItems[index];
-                    return RepaintBoundary(
+                    final card = RepaintBoundary(
                       child: FeedPostCard(
                         key: ValueKey(_itemId(item)),
                         item: item,
                       ),
                     );
+                    if (index < localInserts.length &&
+                        localInserts.isNotEmpty) {
+                      return _AnimatedFeedCard(
+                        key: ValueKey('anim-${_itemId(item)}'),
+                        child: card,
+                      );
+                    }
+                    return card;
                   },
                 ),
               );
@@ -414,6 +439,51 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
             error: (e, _) => Center(child: SelectableText('$e')),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Fade + scale in for newly prepended posts.
+class _AnimatedFeedCard extends StatefulWidget {
+  const _AnimatedFeedCard({required super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_AnimatedFeedCard> createState() => _AnimatedFeedCardState();
+}
+
+class _AnimatedFeedCardState extends State<_AnimatedFeedCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) return widget.child;
+    return FadeTransition(
+      opacity: CurvedAnimation(parent: _ctrl, curve: Curves.easeOut),
+      child: ScaleTransition(
+        scale: Tween(
+          begin: 0.97,
+          end: 1.0,
+        ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic)),
+        child: widget.child,
       ),
     );
   }

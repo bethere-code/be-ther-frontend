@@ -31,9 +31,10 @@ CustomTransitionPage<void> _fadePage(GoRouterState state, Widget child) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
     child: child,
-    transitionDuration: const Duration(milliseconds: 180),
-    reverseTransitionDuration: const Duration(milliseconds: 140),
+    transitionDuration: const Duration(milliseconds: 220),
+    reverseTransitionDuration: const Duration(milliseconds: 160),
     transitionsBuilder: (context, animation, secondaryAnimation, pageChild) {
+      if (MediaQuery.disableAnimationsOf(context)) return pageChild;
       final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
       return FadeTransition(opacity: curved, child: pageChild);
     },
@@ -49,6 +50,7 @@ CustomTransitionPage<void> _sheetPage(GoRouterState state, Widget child) {
     transitionDuration: const Duration(milliseconds: 280),
     reverseTransitionDuration: const Duration(milliseconds: 220),
     transitionsBuilder: (context, animation, secondaryAnimation, pageChild) {
+      if (MediaQuery.disableAnimationsOf(context)) return pageChild;
       final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
       return SlideTransition(
         position: Tween<Offset>(

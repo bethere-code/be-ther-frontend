@@ -11,6 +11,7 @@ import '../../../../core/design/widgets/author_avatar.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../../core/design/widgets/expandable_caption.dart';
 import '../../../../core/design/widgets/post_interaction_row.dart';
+import '../../../../core/design/widgets/pressable.dart';
 import '../../../../core/utils/event_date_utils.dart';
 import '../../../../core/utils/post_author.dart';
 import '../../../../core/utils/time_utils.dart';
@@ -276,6 +277,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                   username: username,
                   badge: badge,
                   size: 44,
+                  heroTag: id.isEmpty ? null : 'avatar-$id',
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -350,12 +352,15 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
               ],
             ),
           ),
-          AspectRatio(
-            aspectRatio: 21 / 9,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                BeTherNetworkImage(url: imageUrl, fit: BoxFit.cover),
+          if (id.isNotEmpty)
+            Hero(
+              tag: 'post-image-$id',
+              child: AspectRatio(
+                aspectRatio: 21 / 9,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    BeTherNetworkImage(url: imageUrl, fit: BoxFit.cover),
                 // Positioned(
                 //   top: 12,
                 //   right: 12,
@@ -388,6 +393,12 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
               ],
             ),
           ),
+          )
+          else
+            AspectRatio(
+              aspectRatio: 21 / 9,
+              child: BeTherNetworkImage(url: imageUrl, fit: BoxFit.cover),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Text(
@@ -622,22 +633,28 @@ class _EventDetails extends StatelessWidget {
           ] else ...[
             if (showCalendarButton) ...[
               if (hasMeta) const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: calendarButtonBackground(calendarStatus),
-                    foregroundColor: calendarButtonForeground(calendarStatus),
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
+              Pressable(
+                onTap: onCalendarToggle,
+                enabled: !isLoading,
+                haptic: true,
+                scale: 0.97,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: calendarButtonBackground(calendarStatus),
+                      foregroundColor: calendarButtonForeground(calendarStatus),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
                     ),
-                  ),
-                  onPressed: isLoading ? null : onCalendarToggle,
-                  child: Text(
-                    calendarButtonLabel(calendarStatus),
-                    style: AppTextStyles.display(
-                      14,
-                      color: calendarButtonForeground(calendarStatus),
+                    onPressed: isLoading ? null : onCalendarToggle,
+                    child: Text(
+                      calendarButtonLabel(calendarStatus),
+                      style: AppTextStyles.display(
+                        14,
+                        color: calendarButtonForeground(calendarStatus),
+                      ),
                     ),
                   ),
                 ),
