@@ -6,6 +6,7 @@ import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/be_ther_buttons.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/theme/app_theme.dart';
 import 'auth_notifier.dart';
 import 'auth_otp_route_extra.dart';
 import 'auth_otp_screen.dart';
@@ -35,6 +36,8 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
   bool _obscurePassword = true;
   bool _loading = false;
   String? _error;
+  String? _identifierError;
+  String? _passwordError;
 
   @override
   void dispose() {
@@ -62,10 +65,14 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
     final identifier = _identifier.text.trim();
     final validation = _validateIdentifier(identifier);
     if (validation != null) {
-      setState(() => _error = validation);
+      setState(() {
+        _identifierError = validation;
+        _error = null;
+      });
       return;
     }
     setState(() {
+      _identifierError = null;
       _error = null;
       _loading = true;
     });
@@ -96,14 +103,24 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
     final identifier = _identifier.text.trim();
     final validation = _validateIdentifier(identifier);
     if (validation != null) {
-      setState(() => _error = validation);
+      setState(() {
+        _identifierError = validation;
+        _passwordError = null;
+        _error = null;
+      });
       return;
     }
     if (_password.text.length < 8) {
-      setState(() => _error = 'Password must be at least 8 characters');
+      setState(() {
+        _identifierError = null;
+        _passwordError = 'Password must be at least 8 characters';
+        _error = null;
+      });
       return;
     }
     setState(() {
+      _identifierError = null;
+      _passwordError = null;
       _error = null;
       _loading = true;
     });
@@ -147,54 +164,38 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
   @override
   Widget build(BuildContext context) {
     final insets = MediaQuery.of(context).viewInsets.bottom;
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _goBack,
-        ),
-        title: Text(
-          'LOG IN',
-          style: AppTextStyles.display(
-            28,
-            color: AppColors.primary,
-            letterSpacing: 0.08,
+    return Theme(
+      data: AppTheme.authFields(Theme.of(context)),
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _goBack,
+          ),
+          title: Text(
+            'LOG IN',
+            style: AppTextStyles.display(
+              28,
+              color: AppColors.primary,
+              letterSpacing: 0.08,
+            ),
           ),
         ),
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + insets),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight - 48),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Email or username',
-                  style: AppTextStyles.body(
-                    14,
-                    color: AppColors.mutedForeground,
-                    weight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _identifier,
-                  readOnly: _loading,
-                  keyboardType: TextInputType.emailAddress,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    hintText: 'you@example.com or username',
-                  ),
-                ),
-                if (_usePassword) ...[
-                  const SizedBox(height: 16),
+        body: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + insets),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight - 48,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    'Password',
+                    'Email or username',
                     style: AppTextStyles.body(
                       14,
                       color: AppColors.mutedForeground,
@@ -203,125 +204,171 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
                   ),
                   const SizedBox(height: 8),
                   TextField(
-                    controller: _password,
+                    controller: _identifier,
                     readOnly: _loading,
-                    obscureText: _obscurePassword,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      hintText: 'Enter password',
-                      suffixIcon: IconButton(
-                        onPressed: _loading
-                            ? null
-                            : () => setState(
-                                () => _obscurePassword = !_obscurePassword,
-                              ),
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                        ),
+                    keyboardType: TextInputType.emailAddress,
+                    onChanged: (_) => setState(() => _identifierError = null),
+                    decoration: const InputDecoration(
+                      hintText: 'you@example.com or username',
+                    ),
+                  ),
+                  if (_identifierError != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      _identifierError!,
+                      style: AppTextStyles.body(
+                        13,
+                        color: AppColors.destructive,
                       ),
                     ),
-                  ),
-                ],
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: AppTextStyles.body(14, color: AppColors.destructive),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                BeTherPrimaryButton(
-                  label: _loading
-                      ? (_usePassword ? 'SIGNING IN...' : 'VERIFYING...')
-                      : (_usePassword ? 'LOG IN' : 'VERIFY OTP'),
-                  enabled: !_loading,
-                  onPressed: _usePassword
-                      ? _loginWithPassword
-                      : _requestOtpLogin,
-                ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.center,
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.all(8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    onPressed: _loading
-                        ? null
-                        : () => setState(() {
-                            _error = null;
-                            _usePassword = !_usePassword;
-                          }),
-                    child: Text(
-                      _usePassword
-                          ? 'Use OTP instead'
-                          : 'Login with password instead',
+                  ],
+                  if (_usePassword) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Password',
                       style: AppTextStyles.body(
-                        12,
+                        14,
                         color: AppColors.mutedForeground,
                         weight: FontWeight.w700,
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Center(child: Text('OR')),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.center,
-                  child: SizedBox(
-                    width: 230,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: AppColors.card,
-                        side: BorderSide(color: AppColors.border, width: 2),
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _password,
+                      readOnly: _loading,
+                      obscureText: _obscurePassword,
+                      onChanged: (_) => setState(() => _passwordError = null),
+                      decoration: InputDecoration(
+                        hintText: 'Enter password',
+                        suffixIcon: IconButton(
+                          onPressed: _loading
+                              ? null
+                              : () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
                         ),
                       ),
-                      onPressed: _loading ? null : _google,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Image.asset(
-                            'assets/images/google.png',
-                            width: 18,
-                            height: 18,
+                    ),
+                    if (_passwordError != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _passwordError!,
+                        style: AppTextStyles.body(
+                          13,
+                          color: AppColors.destructive,
+                        ),
+                      ),
+                    ],
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      style: AppTextStyles.body(
+                        14,
+                        color: AppColors.destructive,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  BeTherPrimaryButton(
+                    label: _loading
+                        ? (_usePassword ? 'SIGNING IN...' : 'VERIFYING...')
+                        : (_usePassword ? 'LOG IN' : 'VERIFY OTP'),
+                    enabled: !_loading,
+                    onPressed: _usePassword
+                        ? _loginWithPassword
+                        : _requestOtpLogin,
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.center,
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.all(8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: _loading
+                          ? null
+                          : () => setState(() {
+                              _error = null;
+                              _usePassword = !_usePassword;
+                            }),
+                      child: Text(
+                        _usePassword
+                            ? 'Use OTP instead'
+                            : 'Login with password instead',
+                        style: AppTextStyles.body(
+                          12,
+                          color: AppColors.mutedForeground,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Center(child: Text('OR')),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.center,
+                    child: SizedBox(
+                      width: 230,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: AppColors.card,
+                          side: BorderSide(color: AppColors.border, width: 2),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
                           ),
-                          const SizedBox(width: 10),
-                          Text(
-                            _loading ? 'CONNECTING...' : 'Continue with Google',
-                            style: AppTextStyles.body(
-                              13,
-                              color: AppColors.foreground,
-                              weight: FontWeight.w700,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                        ),
+                        onPressed: _loading ? null : _google,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Image.asset(
+                              'assets/images/google.png',
+                              width: 18,
+                              height: 18,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 10),
+                            Text(
+                              _loading
+                                  ? 'CONNECTING...'
+                                  : 'Continue with Google',
+                              style: AppTextStyles.body(
+                                13,
+                                color: AppColors.foreground,
+                                weight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Center(
-                  child: Text(
-                    'If account exists, we log you in. Otherwise, we create for you.',
-                    style: AppTextStyles.body(
-                      12,
-                      color: AppColors.mutedForeground,
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text(
+                      'If account exists, we log you in. Otherwise, we create for you.',
+                      style: AppTextStyles.body(
+                        12,
+                        color: AppColors.mutedForeground,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

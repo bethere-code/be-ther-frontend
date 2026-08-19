@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
@@ -13,6 +14,14 @@ import '../../launch/presentation/launch_screen.dart';
 import '../../profile/presentation/profile_providers.dart';
 import 'blocked_users_screen.dart';
 import 'widgets/profile_edit_section.dart';
+
+Future<String>? _appVersionFuture;
+
+Future<String> _appVersion() {
+  return _appVersionFuture ??= PackageInfo.fromPlatform().then(
+    (pkg) => 'BE THER \nv${pkg.version} (${pkg.buildNumber})',
+  );
+}
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -95,8 +104,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 subtitle: Text(
                   _private
-                      ? 'Only followers see your events in feed, explore, and on your profile'
-                      : 'Anyone can view your profile and posts',
+                      ? 'Only people who follow you can see your events in the feed, explore, and on your profile'
+                      : 'Anyone can find your public events in the feed, explore, and on your profile',
                   style: AppTextStyles.body(
                     13,
                     color: AppColors.mutedForeground,
@@ -269,7 +278,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               _sectionTitle('SUPPORT'),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
                 child: Text(
                   'Need help? \nJust drop us an email—we\'re here for you! 😊',
                   style: AppTextStyles.body(
@@ -297,15 +306,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              Center(
-                child: Text(
-                  'BE THER v1.0.0',
-                  style: AppTextStyles.body(
-                    13,
-                    color: AppColors.mutedForeground,
-                  ),
-                ),
-              ),
+              const _AppVersionFooter(),
             ],
           );
         },
@@ -399,6 +400,28 @@ class _CalendarViewButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _AppVersionFooter extends StatelessWidget {
+  const _AppVersionFooter();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _appVersion(),
+      builder: (context, snap) {
+        final text = snap.data;
+        if (text == null) return const SizedBox.shrink();
+        return Center(
+          child: Text(
+            text,
+            textAlign: TextAlign.center,
+            style: AppTextStyles.body(13, color: AppColors.mutedForeground),
+          ),
+        );
+      },
     );
   }
 }

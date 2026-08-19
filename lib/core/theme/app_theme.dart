@@ -84,4 +84,19 @@ class AppTheme {
       ),
     );
   }
+
+  /// Auth screens: thinner field rings than the rest of the app chrome.
+  static ThemeData authFields(ThemeData theme) {
+    OutlineInputBorder side(Color color) => OutlineInputBorder(
+      borderRadius: BorderRadius.zero,
+      borderSide: BorderSide(color: color, width: AppDimens.borderThin),
+    );
+    return theme.copyWith(
+      inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+        border: side(AppColors.border),
+        enabledBorder: side(AppColors.border),
+        focusedBorder: side(AppColors.ring),
+      ),
+    );
+  }
 }

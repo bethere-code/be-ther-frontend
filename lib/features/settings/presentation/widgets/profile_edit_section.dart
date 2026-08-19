@@ -294,6 +294,7 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        const SizedBox(width: 10),
                         Flexible(
                           child: Text(
                             '@$username',
@@ -306,20 +307,24 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          tooltip: 'Edit username',
-                          onPressed: _saving ? null : () => _editUsername(user),
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 40,
-                            minHeight: 40,
-                          ),
-                          icon: const Icon(
-                            Icons.edit_outlined,
-                            size: 18,
-                            color: AppColors.secondary,
+                        const SizedBox(width: 5),
+                        // IconButton(
+                        //   tooltip: 'Edit username',
+                        //   onPressed: _saving ? null : () => _editUsername(user),
+                        //   visualDensity: VisualDensity.compact,
+                        //   padding: EdgeInsets.zero,
+                        //   // constraints: const BoxConstraints(
+                        //   //   minWidth: 40,
+                        //   //   minHeight: 40,
+                        //   // ),
+                        //   icon:
+                        // ),
+                        InkWell(
+                          onTap: _saving ? null : () => _editUsername(user),
+                          child: const Icon(
+                            Icons.edit,
+                            size: 16,
+                            color: AppColors.primary,
                           ),
                         ),
                       ],
@@ -705,130 +710,154 @@ class _UsernameEditDialogState extends ConsumerState<_UsernameEditDialog> {
   @override
   Widget build(BuildContext context) {
     final canSave = !_saving && !_checking && _available;
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: AlertDialog(
-            backgroundColor: AppColors.card,
-            shape: RoundedRectangleBorder(
-              side: const BorderSide(
-                color: AppColors.border,
-                width: AppDimens.borderThick,
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final statusColor = _checking
+        ? AppColors.mutedForeground
+        : _available
+        ? AppColors.secondary
+        : AppColors.destructive;
+    // Strip AlertDialog's own keyboard pad, then lift once so buttons
+    // clear the keyboard without stacking insets (that flew it off-screen).
+    return MediaQuery.removeViewInsets(
+      context: context,
+      removeBottom: true,
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(bottom: keyboard),
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.sizeOf(context).width - 20,
               ),
-              borderRadius: BorderRadius.zero,
-            ),
-            title: Text(
-              'USERNAME',
-              style: AppTextStyles.display(22, color: AppColors.secondary),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  '3–20 lowercase letters and digits.',
-                  style: AppTextStyles.body(
-                    13,
-                    color: AppColors.mutedForeground,
-                  ),
+              child: AlertDialog(
+                backgroundColor: AppColors.card,
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 16,
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _controller,
-                  focusNode: _focus,
-                  autofocus: true,
-                  maxLength: _max,
-                  enabled: !_saving,
-                  keyboardType: TextInputType.text,
-                  textInputAction: TextInputAction.done,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[a-z0-9]')),
-                    LengthLimitingTextInputFormatter(_max),
-                  ],
-                  decoration: InputDecoration(
-                    prefixText: '@',
-                    hintText: 'username',
-                    counterText: '',
-                    filled: true,
-                    fillColor: AppColors.background,
-                    focusedBorder: const OutlineInputBorder(
-                      borderRadius: BorderRadius.zero,
-                      borderSide: BorderSide(
-                        color: AppColors.ring,
-                        width: AppDimens.border,
-                      ),
-                    ),
-                    border: const OutlineInputBorder(
-                      borderRadius: BorderRadius.zero,
-                      borderSide: BorderSide(
-                        color: AppColors.border,
-                        width: AppDimens.border,
-                      ),
-                    ),
+                titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+                contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                shape: RoundedRectangleBorder(
+                  side: const BorderSide(
+                    color: AppColors.border,
+                    width: AppDimens.borderThick,
                   ),
-                  onChanged: _onChanged,
-                  onSubmitted: (_) {
-                    if (canSave) unawaited(_save());
-                  },
+                  borderRadius: BorderRadius.zero,
                 ),
-                const SizedBox(height: 8),
-                Row(
+                title: Text(
+                  'USERNAME',
+                  style: AppTextStyles.display(22, color: AppColors.secondary),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (_checking)
-                      const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      Icon(
-                        _available
-                            ? Icons.check_circle_outline
-                            : Icons.info_outline,
-                        size: 16,
-                        color: _available
-                            ? AppColors.primary
-                            : AppColors.mutedForeground,
+                    Text(
+                      '3–20 lowercase letters and digits.',
+                      style: AppTextStyles.body(
+                        13,
+                        color: AppColors.mutedForeground,
                       ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _status ?? '',
-                        style: AppTextStyles.body(
-                          13,
-                          color: _available
-                              ? AppColors.secondary
-                              : AppColors.mutedForeground,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _controller,
+                      focusNode: _focus,
+                      autofocus: true,
+                      maxLength: _max,
+                      enabled: !_saving,
+                      keyboardType: TextInputType.text,
+                      textInputAction: TextInputAction.done,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[a-z0-9]')),
+                        LengthLimitingTextInputFormatter(_max),
+                      ],
+                      decoration: InputDecoration(
+                        prefixText: '@',
+                        hintText: 'username',
+                        counterText: '',
+                        filled: true,
+                        fillColor: AppColors.background,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        focusedBorder: const OutlineInputBorder(
+                          borderRadius: BorderRadius.zero,
+                          borderSide: BorderSide(
+                            color: AppColors.ring,
+                            width: AppDimens.border,
+                          ),
+                        ),
+                        border: const OutlineInputBorder(
+                          borderRadius: BorderRadius.zero,
+                          borderSide: BorderSide(
+                            color: AppColors.border,
+                            width: AppDimens.border,
+                          ),
                         ),
                       ),
+                      onChanged: _onChanged,
+                      onSubmitted: (_) {
+                        if (canSave) unawaited(_save());
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        if (_checking)
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        else
+                          Icon(
+                            _available
+                                ? Icons.check_circle_outline
+                                : Icons.info_outline,
+                            size: 16,
+                            color: _available
+                                ? AppColors.primary
+                                : AppColors.destructive,
+                          ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _status ?? '',
+                            style: AppTextStyles.body(13, color: statusColor),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+                actions: [
+                  TextButton(
+                    onPressed: _saving ? null : () => Navigator.pop(context),
+                    child: const Text('CANCEL'),
+                  ),
+                  FilledButton(
+                    onPressed: canSave ? _save : null,
+                    child: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.primaryForeground,
+                            ),
+                          )
+                        : const Text('SAVE'),
+                  ),
+                ],
+              ),
             ),
-            actions: [
-              TextButton(
-                onPressed: _saving ? null : () => Navigator.pop(context),
-                child: const Text('CANCEL'),
-              ),
-              FilledButton(
-                onPressed: canSave ? _save : null,
-                child: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.primaryForeground,
-                        ),
-                      )
-                    : const Text('SAVE'),
-              ),
-            ],
           ),
         ),
       ),
