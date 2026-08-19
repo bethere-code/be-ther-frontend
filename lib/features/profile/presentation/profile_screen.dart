@@ -20,6 +20,7 @@ import '../../settings/presentation/settings_screen.dart';
 import 'profile_connections_screen.dart';
 import 'profile_events_screen.dart';
 import 'profile_providers.dart';
+import 'widgets/profile_actions_sheet.dart';
 import 'widgets/profile_event_sheet.dart';
 import 'widgets/profile_private_notice.dart';
 
@@ -395,6 +396,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     String username,
   ) async {
     final result = await ref.read(userRepositoryProvider).toggleFollow(username);
+    _refreshAfterProfileSocial(username);
+    return result;
+  }
+
+  void _refreshAfterProfileSocial(String username) {
     ref.invalidate(profileViewProvider(widget.username));
     ref.invalidate(profileViewProvider(username));
     ref.invalidate(profileCalendarProvider(username));
@@ -411,7 +417,81 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         mode: ProfileConnectionsMode.following,
       )),
     );
-    return result;
+    ref.invalidate(feedProvider);
+    ref.invalidate(exploreEventsProvider);
+  }
+
+  Future<void> _openProfileActions(ProfileUser user) async {
+    final username = user.username;
+    await showProfileActionsSheet(
+      context: context,
+      username: username,
+      isFollowedBy: user.isFollowedBy,
+      isBlocked: user.isBlocked,
+      onRemoveFollower: () async {
+        try {
+          await ref.read(userRepositoryProvider).removeFollower(username);
+          _refreshAfterProfileSocial(username);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Follower removed')),
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+          );
+        }
+      },
+      onBlock: () async {
+        try {
+          await ref.read(userRepositoryProvider).setBlocked(username, blocked: true);
+          _refreshAfterProfileSocial(username);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User blocked')),
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+          );
+        }
+      },
+      onUnblock: () async {
+        try {
+          await ref.read(userRepositoryProvider).setBlocked(username, blocked: false);
+          _refreshAfterProfileSocial(username);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User unblocked')),
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+          );
+        }
+      },
+      onReport: (reason, details) async {
+        try {
+          await ref.read(userRepositoryProvider).reportUser(
+                username: username,
+                reason: reason,
+                details: details,
+              );
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Report sent. The team will review it.')),
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+          );
+        }
+      },
+    );
   }
 
   @override
@@ -483,7 +563,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           user: user,
           isOwnProfile: isOwnProfile,
           lockCounts: lockCounts,
-          onToggleFollow: isOwnProfile ? null : () => _toggleFollow(username),
+          onToggleFollow: isOwnProfile || user.isBlocked
+              ? null
+              : () => _toggleFollow(username),
         );
 
         return AppShell(
@@ -496,6 +578,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             onSettings: isOwnProfile
                 ? () => context.push(SettingsScreen.path)
                 : null,
+            onMore: isOwnProfile ? null : () => _openProfileActions(user),
           ),
           child: showPrivateCalendar
               ? ColoredBox(
@@ -712,7 +795,7 @@ class _PrivateProfilePaneState extends State<_PrivateProfilePane> {
           ),
           const SizedBox(height: 12),
           Text(
-            'This profile is private. Follow each other to view the calendar.',
+            'This profile is private. Follow to see their calendar and events.',
             style: AppTextStyles.body(15, color: AppColors.mutedForeground, height: 1.4),
           ),
           if (widget.onFollow != null) ...[
@@ -851,6 +934,7 @@ class _ProfileHeader extends StatelessWidget implements PreferredSizeWidget {
     required this.onBack,
     this.onTitleTap,
     this.onSettings,
+    this.onMore,
   });
 
   final String username;
@@ -858,6 +942,7 @@ class _ProfileHeader extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onBack;
   final VoidCallback? onTitleTap;
   final VoidCallback? onSettings;
+  final VoidCallback? onMore;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -909,6 +994,16 @@ class _ProfileHeader extends StatelessWidget implements PreferredSizeWidget {
               onPressed: onSettings,
               icon: const Icon(
                 Icons.settings,
+                color: AppColors.background,
+                size: 24,
+              ),
+            )
+          else if (onMore != null)
+            IconButton(
+              tooltip: 'More options',
+              onPressed: onMore,
+              icon: const Icon(
+                Icons.more_vert,
                 color: AppColors.background,
                 size: 24,
               ),
@@ -1044,7 +1139,7 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
     // final badge = widget.user.badge;
     final username = widget.user.username;
     final privateLocked = !widget.isOwnProfile &&
-        !widget.user.isMutualFollow &&
+        !widget.user.isFollowing &&
         (widget.user.settings.isPrivateProfile || widget.lockCounts);
 
     return Container(

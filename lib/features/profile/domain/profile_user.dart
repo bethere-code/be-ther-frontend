@@ -36,10 +36,13 @@ class ProfileUser {
     required this.followingCount,
     required this.isOwnProfile,
     required this.isFollowing,
+    required this.isFollowedBy,
+    required this.isBlocked,
     required this.isMutualFollow,
     required this.canDM,
     required this.settings,
     this.badge,
+    this.usernameChangedAt,
   });
 
   final String id;
@@ -53,10 +56,19 @@ class ProfileUser {
   final int followingCount;
   final bool isOwnProfile;
   final bool isFollowing;
+  final bool isFollowedBy;
+  final bool isBlocked;
   final bool isMutualFollow;
   final bool canDM;
   final ProfileSettings settings;
   final String? badge;
+  final DateTime? usernameChangedAt;
+
+  bool get usernameEditLocked {
+    final at = usernameChangedAt;
+    if (at == null) return false;
+    return DateTime.now().difference(at) < const Duration(days: 7);
+  }
 
   factory ProfileUser.fromJson(Map<String, dynamic> json) {
     final settingsRaw = json['settings'];
@@ -72,6 +84,8 @@ class ProfileUser {
       followingCount: (json['followingCount'] as num?)?.toInt() ?? 0,
       isOwnProfile: json['isOwnProfile'] == true,
       isFollowing: json['isFollowing'] == true,
+      isFollowedBy: json['isFollowedBy'] == true,
+      isBlocked: json['isBlocked'] == true,
       isMutualFollow: json['isMutualFollow'] == true || json['canDM'] == true,
       canDM: json['canDM'] == true,
       settings: ProfileSettings.fromJson(
@@ -82,17 +96,21 @@ class ProfileUser {
                 : null,
       ),
       badge: json['badge'] as String?,
+      usernameChangedAt: DateTime.tryParse(json['usernameChangedAt']?.toString() ?? ''),
     );
   }
 
   ProfileUser copyWith({
     bool? isFollowing,
+    bool? isFollowedBy,
+    bool? isBlocked,
     bool? isMutualFollow,
     int? followersCount,
     String? avatarUrl,
     String? displayName,
     String? bio,
     ProfileSettings? settings,
+    DateTime? usernameChangedAt,
   }) {
     return ProfileUser(
       id: id,
@@ -106,10 +124,13 @@ class ProfileUser {
       followingCount: followingCount,
       isOwnProfile: isOwnProfile,
       isFollowing: isFollowing ?? this.isFollowing,
+      isFollowedBy: isFollowedBy ?? this.isFollowedBy,
+      isBlocked: isBlocked ?? this.isBlocked,
       isMutualFollow: isMutualFollow ?? this.isMutualFollow,
       canDM: canDM,
       settings: settings ?? this.settings,
       badge: badge,
+      usernameChangedAt: usernameChangedAt ?? this.usernameChangedAt,
     );
   }
 }

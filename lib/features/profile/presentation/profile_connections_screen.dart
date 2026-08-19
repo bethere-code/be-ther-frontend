@@ -114,8 +114,8 @@ class _ProfileConnectionsScreenState
     if (locked || privateError) {
       child = ProfilePrivateNotice(
         detail: isFollowers
-            ? 'Follow each other to view their followers.'
-            : 'Follow each other to view who they follow.',
+            ? 'Follow to see their followers.'
+            : 'Follow to see who they follow.',
       );
     } else if (waitingOnProfile) {
       child = const Center(

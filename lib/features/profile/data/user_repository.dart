@@ -7,6 +7,46 @@ class UserRepository {
 
   final Dio _dio;
 
+  Future<({bool available, bool own, String? reason})> checkUsernameAvailable(
+    String username,
+  ) async {
+    final data = await _getData(
+      '/api/v1/users/me/username/available?q=${Uri.encodeQueryComponent(username)}',
+      fallback: 'Failed to check username',
+    );
+    return (
+      available: data['available'] == true,
+      own: data['own'] == true,
+      reason: data['reason']?.toString(),
+    );
+  }
+
+  Future<Map<String, dynamic>> changeUsername(String username) async {
+    try {
+      final res = await _dio.patch<Map<String, dynamic>>(
+        '/api/v1/users/me/username',
+        data: {'username': username},
+      );
+      final body = res.data;
+      if (body == null || body['ok'] != true) {
+        throw ApiException(
+          _messageFromBody(body, 'Failed to change username'),
+          statusCode: res.statusCode,
+        );
+      }
+      final data = body['data'];
+      if (data is! Map<String, dynamic>) {
+        throw ApiException('Failed to change username', statusCode: res.statusCode);
+      }
+      return data;
+    } on DioException catch (e) {
+      throw ApiException(
+        _errorFromDio(e, fallback: 'Failed to change username'),
+        statusCode: e.response?.statusCode,
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> me() async {
     return _getData('/api/v1/users/me', fallback: 'Failed to load profile');
   }
@@ -157,6 +197,82 @@ class UserRepository {
         statusCode: e.response?.statusCode,
       );
     }
+  }
+
+  Future<void> removeFollower(String username) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/users/$username/remove-follower',
+      );
+      final body = res.data;
+      if (body == null || body['ok'] != true) {
+        throw ApiException(
+          _messageFromBody(body, 'Failed to remove follower'),
+          statusCode: res.statusCode,
+        );
+      }
+    } on DioException catch (e) {
+      throw ApiException(
+        _errorFromDio(e, fallback: 'Failed to remove follower'),
+        statusCode: e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> setBlocked(String username, {required bool blocked}) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/users/$username/block',
+        data: {'blocked': blocked},
+      );
+      final body = res.data;
+      if (body == null || body['ok'] != true) {
+        throw ApiException(
+          _messageFromBody(body, 'Failed to update block'),
+          statusCode: res.statusCode,
+        );
+      }
+    } on DioException catch (e) {
+      throw ApiException(
+        _errorFromDio(e, fallback: 'Failed to update block'),
+        statusCode: e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> reportUser({
+    required String username,
+    required String reason,
+    String details = '',
+  }) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/users/$username/reports',
+        data: {'reason': reason, 'details': details},
+      );
+      final body = res.data;
+      if (body == null || body['ok'] != true) {
+        throw ApiException(
+          _messageFromBody(body, 'Failed to submit report'),
+          statusCode: res.statusCode,
+        );
+      }
+    } on DioException catch (e) {
+      throw ApiException(
+        _errorFromDio(e, fallback: 'Failed to submit report'),
+        statusCode: e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> blockedUsers() async {
+    final data = await _getData(
+      '/api/v1/users/me/blocks',
+      fallback: 'Failed to load blocked accounts',
+    );
+    return (data['items'] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
   }
 
   Future<Map<String, dynamic>> _getData(String path, {required String fallback}) async {

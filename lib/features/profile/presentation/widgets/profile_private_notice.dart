@@ -8,7 +8,7 @@ import '../../domain/profile_user.dart';
 bool isPrivateProfileLocked(ProfileUser user) {
   return !user.isOwnProfile &&
       user.settings.isPrivateProfile &&
-      !user.isMutualFollow;
+      !user.isFollowing;
 }
 
 bool isPrivateProfileError(Object error) {
@@ -19,7 +19,7 @@ bool isPrivateProfileError(Object error) {
 class ProfilePrivateNotice extends StatelessWidget {
   const ProfilePrivateNotice({
     super.key,
-    this.detail = 'Follow each other to view the calendar.',
+    this.detail = 'Follow to see their calendar and events.',
   });
 
   final String detail;

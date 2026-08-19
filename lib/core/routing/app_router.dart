@@ -19,6 +19,7 @@ import '../../features/auth/presentation/auth_otp_route_extra.dart';
 import '../../features/auth/presentation/auth_otp_screen.dart';
 import '../../features/auth/presentation/auth_signup_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
+import '../../features/settings/presentation/blocked_users_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../analytics/analytics_tracker.dart';
 import '../network/api_client.dart';
@@ -294,6 +295,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: SettingsScreen.path,
         name: SettingsScreen.name,
         pageBuilder: (context, state) => _fadePage(state, const SettingsScreen()),
+      ),
+      GoRoute(
+        path: BlockedUsersScreen.path,
+        name: BlockedUsersScreen.name,
+        pageBuilder: (context, state) => _fadePage(state, const BlockedUsersScreen()),
       ),
     ],
   );

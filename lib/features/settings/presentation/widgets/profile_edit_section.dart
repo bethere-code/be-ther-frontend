@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -158,6 +160,42 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
     await _save({'bio': bio});
   }
 
+  static const _usernameCooldownToast =
+      'You cannot edit your username for 7 days after the last change';
+
+  Future<void> _editUsername(ProfileUser user) async {
+    if (user.usernameEditLocked) {
+      _snack(_usernameCooldownToast);
+      return;
+    }
+    final updated = await showGeneralDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Edit username',
+      barrierColor: AppColors.secondary.withValues(alpha: 0.45),
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (ctx, animation, secondary) {
+        return _UsernameEditDialog(current: user.username);
+      },
+      transitionBuilder: (ctx, animation, secondary, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
+    if (updated == null || !mounted) return;
+    refreshProfileCaches(ref, updated);
+    _snack('Username updated');
+  }
+
   @override
   Widget build(BuildContext context) {
     final me = ref.watch(profileMeProvider);
@@ -252,14 +290,39 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                     textAlign: TextAlign.center,
                   ),
                   if (username.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '@$username',
-                      style: AppTextStyles.body(
-                        14,
-                        color: AppColors.mutedForeground,
-                        weight: FontWeight.w600,
-                      ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '@$username',
+                            style: AppTextStyles.body(
+                              14,
+                              color: AppColors.mutedForeground,
+                              weight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: 'Edit username',
+                          onPressed: _saving ? null : () => _editUsername(user),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                            size: 18,
+                            color: AppColors.secondary,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],
@@ -281,7 +344,7 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
             ),
             const Divider(
               height: 1,
-              thickness: AppDimens.borderThick,
+              thickness: AppDimens.borderThin,
               color: AppColors.border,
             ),
             ListTile(
@@ -305,7 +368,7 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
             ),
             const Divider(
               height: 1,
-              thickness: AppDimens.borderThick,
+              thickness: AppDimens.borderThin,
               color: AppColors.border,
             ),
           ],
@@ -506,6 +569,264 @@ class _BioEditSheetState extends State<_BioEditSheet> {
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UsernameEditDialog extends ConsumerStatefulWidget {
+  const _UsernameEditDialog({required this.current});
+
+  final String current;
+
+  @override
+  ConsumerState<_UsernameEditDialog> createState() =>
+      _UsernameEditDialogState();
+}
+
+class _UsernameEditDialogState extends ConsumerState<_UsernameEditDialog> {
+  static const _min = 3;
+  static const _max = 20;
+
+  late final TextEditingController _controller;
+  late final FocusNode _focus;
+  Timer? _debounce;
+  int _requestId = 0;
+  bool _checking = false;
+  bool _saving = false;
+  bool _available = false;
+  String? _status;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.current);
+    _focus = FocusNode();
+    _available = true;
+    _status = 'This is your current username';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String raw) {
+    _debounce?.cancel();
+    final username = raw.trim().toLowerCase();
+    if (username == widget.current) {
+      setState(() {
+        _checking = false;
+        _available = true;
+        _status = 'This is your current username';
+      });
+      return;
+    }
+    if (username.length < _min) {
+      setState(() {
+        _checking = false;
+        _available = false;
+        _status = 'At least $_min characters';
+      });
+      return;
+    }
+    if (!RegExp(r'^[a-z0-9]+$').hasMatch(username)) {
+      setState(() {
+        _checking = false;
+        _available = false;
+        _status = 'Lowercase letters and digits only';
+      });
+      return;
+    }
+    setState(() {
+      _checking = true;
+      _available = false;
+      _status = 'Checking…';
+    });
+    _debounce = Timer(const Duration(milliseconds: 450), () async {
+      final id = ++_requestId;
+      try {
+        final result = await ref
+            .read(userRepositoryProvider)
+            .checkUsernameAvailable(username);
+        if (!mounted || id != _requestId) return;
+        setState(() {
+          _checking = false;
+          _available = result.available;
+          _status = result.available
+              ? 'Available'
+              : (result.reason ?? 'Username already exists');
+        });
+      } catch (_) {
+        if (!mounted || id != _requestId) return;
+        setState(() {
+          _checking = false;
+          _available = false;
+          _status = 'Could not check right now';
+        });
+      }
+    });
+  }
+
+  Future<void> _save() async {
+    final username = _controller.text.trim().toLowerCase();
+    if (username == widget.current) {
+      Navigator.pop(context);
+      return;
+    }
+    if (!_available || _checking || _saving) return;
+    setState(() => _saving = true);
+    try {
+      final user = await ref
+          .read(userRepositoryProvider)
+          .changeUsername(username);
+      if (!mounted) return;
+      Navigator.pop(context, user);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _status = e.toString();
+        _available = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canSave = !_saving && !_checking && _available;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: AlertDialog(
+            backgroundColor: AppColors.card,
+            shape: RoundedRectangleBorder(
+              side: const BorderSide(
+                color: AppColors.border,
+                width: AppDimens.borderThick,
+              ),
+              borderRadius: BorderRadius.zero,
+            ),
+            title: Text(
+              'USERNAME',
+              style: AppTextStyles.display(22, color: AppColors.secondary),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '3–20 lowercase letters and digits.',
+                  style: AppTextStyles.body(
+                    13,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _controller,
+                  focusNode: _focus,
+                  autofocus: true,
+                  maxLength: _max,
+                  enabled: !_saving,
+                  keyboardType: TextInputType.text,
+                  textInputAction: TextInputAction.done,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[a-z0-9]')),
+                    LengthLimitingTextInputFormatter(_max),
+                  ],
+                  decoration: InputDecoration(
+                    prefixText: '@',
+                    hintText: 'username',
+                    counterText: '',
+                    filled: true,
+                    fillColor: AppColors.background,
+                    focusedBorder: const OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(
+                        color: AppColors.ring,
+                        width: AppDimens.border,
+                      ),
+                    ),
+                    border: const OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(
+                        color: AppColors.border,
+                        width: AppDimens.border,
+                      ),
+                    ),
+                  ),
+                  onChanged: _onChanged,
+                  onSubmitted: (_) {
+                    if (canSave) unawaited(_save());
+                  },
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (_checking)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      Icon(
+                        _available
+                            ? Icons.check_circle_outline
+                            : Icons.info_outline,
+                        size: 16,
+                        color: _available
+                            ? AppColors.primary
+                            : AppColors.mutedForeground,
+                      ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _status ?? '',
+                        style: AppTextStyles.body(
+                          13,
+                          color: _available
+                              ? AppColors.secondary
+                              : AppColors.mutedForeground,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: _saving ? null : () => Navigator.pop(context),
+                child: const Text('CANCEL'),
+              ),
+              FilledButton(
+                onPressed: canSave ? _save : null,
+                child: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primaryForeground,
+                        ),
+                      )
+                    : const Text('SAVE'),
               ),
             ],
           ),

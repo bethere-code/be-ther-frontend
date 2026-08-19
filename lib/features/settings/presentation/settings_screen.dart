@@ -11,6 +11,7 @@ import '../../../core/utils/link_utils.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../launch/presentation/launch_screen.dart';
 import '../../profile/presentation/profile_providers.dart';
+import 'blocked_users_screen.dart';
 import 'widgets/profile_edit_section.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -94,7 +95,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 subtitle: Text(
                   _private
-                      ? 'People must follow each other to see your calendar and events'
+                      ? 'Only followers see your events in feed, explore, and on your profile'
                       : 'Anyone can view your profile and posts',
                   style: AppTextStyles.body(
                     13,
@@ -107,9 +108,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   await _save();
                 },
               ),
+              SizedBox(height: 6),
               const Divider(
-                height: 1,
-                thickness: AppDimens.borderThick,
+                height: 0.5,
+                thickness: AppDimens.borderThin,
                 color: AppColors.border,
               ),
               Padding(
@@ -190,10 +192,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const Divider(
                 height: 1,
-                thickness: AppDimens.borderThick,
+                thickness: AppDimens.borderThin,
                 color: AppColors.border,
               ),
               _sectionTitle('ACCOUNT'),
+              ListTile(
+                title: Text(
+                  'Blocked accounts',
+                  style: AppTextStyles.body(16, weight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  'People you blocked. Tap one to unblock.',
+                  style: AppTextStyles.body(
+                    13,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                  color: AppColors.mutedForeground,
+                ),
+                onTap: () => context.push(BlockedUsersScreen.path),
+              ),
+              // const Divider(
+              //   height: 1,
+              //   thickness: AppDimens.borderThin,
+              //   color: AppColors.border,
+              // ),
               ListTile(
                 title: Text(
                   'Log Out',
@@ -239,7 +264,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const Divider(
                 height: 1,
-                thickness: AppDimens.borderThick,
+                thickness: AppDimens.borderThin,
                 color: AppColors.border,
               ),
               _sectionTitle('SUPPORT'),

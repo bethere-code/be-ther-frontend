@@ -33,7 +33,7 @@ class ProfileEventsScreen extends ConsumerWidget {
     Widget child;
     if (locked || privateError) {
       child = const ProfilePrivateNotice(
-        detail: 'Follow each other to view their events.',
+        detail: 'Follow to see their events.',
       );
     } else if (waitingOnProfile) {
       child = const Center(

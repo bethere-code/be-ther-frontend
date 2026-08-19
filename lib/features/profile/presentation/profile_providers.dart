@@ -83,6 +83,15 @@ final profileConnectionsProvider =
   return raw.map(ProfileConnectionUser.fromJson).toList(growable: false);
 });
 
+final blockedUsersProvider = FutureProvider<List<ProfileConnectionUser>>((ref) async {
+  final token = ref.watch(authNotifierProvider.select((s) => s.accessToken));
+  if (token == null || token.isEmpty) {
+    throw StateError('Not authenticated');
+  }
+  final raw = await ref.watch(userRepositoryProvider).blockedUsers();
+  return raw.map(ProfileConnectionUser.fromJson).toList(growable: false);
+});
+
 void refreshProfileCaches(WidgetRef ref, Map<String, dynamic> user) {
   ref.read(authNotifierProvider.notifier).updateUser(user);
   ref.invalidate(profileMeProvider);
