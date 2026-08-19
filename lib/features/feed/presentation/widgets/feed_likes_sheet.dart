@@ -180,7 +180,7 @@ class _LikesSheetState extends ConsumerState<_LikesSheet> {
         child: ListView.builder(
           padding: const EdgeInsets.all(12),
           itemCount: 8,
-          itemBuilder: (_, __) => const Padding(
+          itemBuilder: (_, _) => const Padding(
             padding: EdgeInsets.symmetric(vertical: 10),
             child: Row(
               children: [

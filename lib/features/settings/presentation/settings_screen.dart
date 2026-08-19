@@ -87,26 +87,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             children: [
               _sectionTitle('PROFILE'),
               const ProfileEditSection(),
-              // SwitchListTile(
-              //   title: Text(
-              //     _private ? 'Private Profile' : 'Public Profile',
-              //     style: AppTextStyles.body(16, weight: FontWeight.w800),
-              //   ),
-              //   subtitle: Text(
-              //     _private
-              //         ? 'Only starred users can see your posts'
-              //         : 'Anyone can view your profile and posts',
-              //     style: AppTextStyles.body(
-              //       13,
-              //       color: AppColors.mutedForeground,
-              //     ),
-              //   ),
-              //   value: _private,
-              //   onChanged: (v) async {
-              //     setState(() => _private = v);
-              //     await _save();
-              //   },
-              // ),
+              SwitchListTile(
+                title: Text(
+                  _private ? 'Private Profile' : 'Public Profile',
+                  style: AppTextStyles.body(16, weight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  _private
+                      ? 'People must follow each other to see your calendar and events'
+                      : 'Anyone can view your profile and posts',
+                  style: AppTextStyles.body(
+                    13,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
+                value: _private,
+                onChanged: (v) async {
+                  setState(() => _private = v);
+                  await _save();
+                },
+              ),
               const Divider(
                 height: 1,
                 thickness: AppDimens.borderThick,

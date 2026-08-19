@@ -99,7 +99,7 @@ class _BottomBar extends ConsumerWidget {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
-        _horizontalPadding,
+        onProfile ? 0 : _horizontalPadding,
         _verticalPadding,
         _horizontalPadding,
         _verticalPadding + bottomInset,
@@ -131,12 +131,10 @@ class _BottomBar extends ConsumerWidget {
             )
           else
             AuthorAvatar(
-              avatarUrl: user?['avatarUrl'] as String? ??
-                  me.value?.avatarUrl ??
-                  '',
-              username: user?['username'] as String? ??
-                  me.value?.username ??
-                  '',
+              avatarUrl:
+                  user?['avatarUrl'] as String? ?? me.value?.avatarUrl ?? '',
+              username:
+                  user?['username'] as String? ?? me.value?.username ?? '',
               badge: badge,
               size: _leadingHeight,
               onTap: () => context.push(ProfileScreen.path),

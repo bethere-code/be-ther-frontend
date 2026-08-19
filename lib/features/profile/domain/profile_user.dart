@@ -36,6 +36,7 @@ class ProfileUser {
     required this.followingCount,
     required this.isOwnProfile,
     required this.isFollowing,
+    required this.isMutualFollow,
     required this.canDM,
     required this.settings,
     this.badge,
@@ -52,6 +53,7 @@ class ProfileUser {
   final int followingCount;
   final bool isOwnProfile;
   final bool isFollowing;
+  final bool isMutualFollow;
   final bool canDM;
   final ProfileSettings settings;
   final String? badge;
@@ -70,6 +72,7 @@ class ProfileUser {
       followingCount: (json['followingCount'] as num?)?.toInt() ?? 0,
       isOwnProfile: json['isOwnProfile'] == true,
       isFollowing: json['isFollowing'] == true,
+      isMutualFollow: json['isMutualFollow'] == true || json['canDM'] == true,
       canDM: json['canDM'] == true,
       settings: ProfileSettings.fromJson(
         settingsRaw is Map<String, dynamic>
@@ -84,6 +87,7 @@ class ProfileUser {
 
   ProfileUser copyWith({
     bool? isFollowing,
+    bool? isMutualFollow,
     int? followersCount,
     String? avatarUrl,
     String? displayName,
@@ -102,6 +106,7 @@ class ProfileUser {
       followingCount: followingCount,
       isOwnProfile: isOwnProfile,
       isFollowing: isFollowing ?? this.isFollowing,
+      isMutualFollow: isMutualFollow ?? this.isMutualFollow,
       canDM: canDM,
       settings: settings ?? this.settings,
       badge: badge,

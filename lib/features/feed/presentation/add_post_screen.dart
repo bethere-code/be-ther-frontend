@@ -32,8 +32,7 @@ Map<String, dynamic> _feedItemFromCreatedPost(
   Map<String, dynamic> created,
   Map<String, dynamic>? me,
 ) {
-  final id =
-      created['postId']?.toString() ?? created['_id']?.toString() ?? '';
+  final id = created['postId']?.toString() ?? created['_id']?.toString() ?? '';
   final author = me == null
       ? created['authorId']
       : <String, dynamic>{
@@ -62,8 +61,7 @@ Map<String, dynamic> _feedItemFromCreatedPost(
     'commentsCount': created['commentsCount'] ?? 0,
     'calendarCount': resolvedCalendarCount,
     'inCalendar': created['inCalendar'] ?? true,
-    'calendarStatus':
-        created['calendarStatus'] ?? created['status'] ?? 'going',
+    'calendarStatus': created['calendarStatus'] ?? created['status'] ?? 'going',
   };
 }
 
@@ -87,7 +85,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   final _tagInput = TextEditingController();
   final _sheetController = DraggableScrollableController();
 
-  bool _private = false;
+  final bool _private = false;
 
   /// false = Interested (default); true = Going / attending.
   bool _isGoing = false;
@@ -113,6 +111,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   final _taggedUsers = <String>[];
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
+
   /// Set when the user picks a past time so the field shows the right error
   /// after we clear the invalid selection.
   bool _pastTimeRejected = false;
@@ -440,7 +439,13 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   }
 
   bool _isDateTimeInPast(DateTime date, TimeOfDay time) {
-    final when = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final when = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
     return when.isBefore(DateTime.now());
   }
 
@@ -566,8 +571,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       _selectedDate = picked;
       _pastTimeRejected = false;
       // Drop a time that would land in the past on the newly chosen day.
-      if (_selectedTime != null &&
-          _isDateTimeInPast(picked, _selectedTime!)) {
+      if (_selectedTime != null && _isDateTimeInPast(picked, _selectedTime!)) {
         _selectedTime = null;
       }
     });
@@ -582,9 +586,9 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     if (!mounted) return;
 
     if (_selectedDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a date first')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Select a date first')));
       return;
     }
 
@@ -679,9 +683,9 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         'eventDetails': eventDetails,
       });
       final me = ref.read(authNotifierProvider).user;
-      ref.read(feedLocalInsertsProvider.notifier).prepend(
-            _feedItemFromCreatedPost(created, me),
-          );
+      ref
+          .read(feedLocalInsertsProvider.notifier)
+          .prepend(_feedItemFromCreatedPost(created, me));
       ref.invalidate(exploreEventsProvider);
       ref.invalidate(profileMeProvider);
       final username = me?['username']?.toString().trim() ?? '';

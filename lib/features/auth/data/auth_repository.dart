@@ -62,7 +62,7 @@ class AuthRepository {
       if (email != null) payload['email'] = email;
       print("checkSignupAvailability: $payload");
       final res = await _dio.post<Map<String, dynamic>>(
-        'v1/auth/signup/availability',
+        '/api/v1/auth/signup/availability',
         data: payload,
         // Live validation should fail fast and not block typing UX.
         options: Options(

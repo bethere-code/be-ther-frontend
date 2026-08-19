@@ -11,6 +11,7 @@ import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/author_avatar.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/routing/app_route_observer.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../explore/presentation/explore_providers.dart';
@@ -20,6 +21,7 @@ import 'profile_connections_screen.dart';
 import 'profile_events_screen.dart';
 import 'profile_providers.dart';
 import 'widgets/profile_event_sheet.dart';
+import 'widgets/profile_private_notice.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key, this.username});
@@ -260,6 +262,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     return user.settings.calendarView;
   }
 
+  String _profileErrorMessage(Object error) {
+    if (error is ApiException && error.message.trim().isNotEmpty) {
+      return error.message;
+    }
+    return error.toString().replaceFirst('Exception: ', '');
+  }
+
   Future<void> _setOwnCalendarView(String mode) async {
     try {
       final updated = await ref.read(userRepositoryProvider).patchMe({
@@ -382,31 +391,100 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
+  Future<({bool following, int followersCount})> _toggleFollow(
+    String username,
+  ) async {
+    final result = await ref.read(userRepositoryProvider).toggleFollow(username);
+    ref.invalidate(profileViewProvider(widget.username));
+    ref.invalidate(profileViewProvider(username));
+    ref.invalidate(profileCalendarProvider(username));
+    ref.invalidate(profileEventsProvider(username));
+    ref.invalidate(
+      profileConnectionsProvider((
+        username: username,
+        mode: ProfileConnectionsMode.followers,
+      )),
+    );
+    ref.invalidate(
+      profileConnectionsProvider((
+        username: username,
+        mode: ProfileConnectionsMode.following,
+      )),
+    );
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     final profileAsync = ref.watch(profileViewProvider(widget.username));
+    final routeUsername = widget.username ?? '';
 
     return profileAsync.when(
       skipLoadingOnReload: true,
       skipLoadingOnRefresh: true,
       loading: () => AppShell(
         activeTab: ShellTab.home,
-        child: const Center(child: CircularProgressIndicator()),
+        header: routeUsername.isEmpty
+            ? null
+            : _ProfileHeader(
+                username: routeUsername,
+                isOwnProfile: false,
+                onBack: () => context.pop(),
+              ),
+        child: const Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
       ),
-      error: (e, _) => AppShell(
-        activeTab: ShellTab.home,
-        child: Center(child: SelectableText('$e')),
-      ),
+      error: (e, _) {
+        final private = isPrivateProfileError(e);
+        return AppShell(
+          activeTab: ShellTab.home,
+          header: _ProfileHeader(
+            username: routeUsername,
+            isOwnProfile: widget.username == null,
+            onBack: () => context.pop(),
+          ),
+          child: private
+              ? _PrivateProfilePane(
+                  username: routeUsername,
+                  onFollow: routeUsername.isEmpty
+                      ? null
+                      : () async {
+                          await _toggleFollow(routeUsername);
+                        },
+                )
+              : _ProfileErrorPane(
+                  message: _profileErrorMessage(e),
+                  onRetry: () =>
+                      ref.invalidate(profileViewProvider(widget.username)),
+                ),
+        );
+      },
       data: (user) {
         final username = user.username;
         final isOwnProfile = user.isOwnProfile || widget.username == null;
-        // Always refresh authored-events + calendar for this visit (own or others).
-        _hydrateProfileLists(username);
-        final calendarAsync = ref.watch(profileCalendarProvider(username));
-        // Keep Events cache warm so the Events screen opens on fresh data.
-        ref.watch(profileEventsProvider(username));
-        // Rebuild calendar immediately when an event is deleted this session.
+        final locked = !isOwnProfile && isPrivateProfileLocked(user);
+        if (!locked) {
+          _hydrateProfileLists(username);
+        }
+        final calendarAsync = locked
+            ? const AsyncValue<List<Map<String, dynamic>>>.data([])
+            : ref.watch(profileCalendarProvider(username));
+        if (!locked) {
+          ref.watch(profileEventsProvider(username));
+        }
         ref.watch(deletedPostIdsProvider);
+
+        final calendarBlocked = calendarAsync.hasError &&
+            isPrivateProfileError(calendarAsync.error!);
+        final showPrivateCalendar = locked || calendarBlocked;
+
+        Widget profileInfo({bool lockCounts = false}) => _ProfileInfoSection(
+          user: user,
+          isOwnProfile: isOwnProfile,
+          lockCounts: lockCounts,
+          onToggleFollow: isOwnProfile ? null : () => _toggleFollow(username),
+        );
 
         return AppShell(
           activeTab: ShellTab.home,
@@ -419,7 +497,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 ? () => context.push(SettingsScreen.path)
                 : null,
           ),
-          child: calendarAsync.when(
+          child: showPrivateCalendar
+              ? ColoredBox(
+                  color: AppColors.background,
+                  child: Column(
+                    children: [
+                      profileInfo(lockCounts: true),
+                      const Expanded(child: ProfilePrivateNotice()),
+                    ],
+                  ),
+                )
+              : calendarAsync.when(
             skipLoadingOnReload: true,
             skipLoadingOnRefresh: true,
             data: (items) {
@@ -447,21 +535,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         child: SingleChildScrollView(
                           controller: _profileScrollController,
                           physics: const AlwaysScrollableScrollPhysics(),
-                          child: _ProfileInfoSection(
-                            user: user,
-                            isOwnProfile: isOwnProfile,
-                            onToggleFollow: () async {
-                              final result = await ref
-                                  .read(userRepositoryProvider)
-                                  .toggleFollow(username);
-                              // Force a fresh profile payload (isFollowing) on next visit.
-                              ref.invalidate(
-                                profileViewProvider(widget.username),
-                              );
-                              ref.invalidate(profileViewProvider(username));
-                              return result;
-                            },
-                          ),
+                          child: profileInfo(),
                         ),
                       ),
                     ),
@@ -506,12 +580,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
-                  SliverToBoxAdapter(
-                    child: _ProfileInfoSection(
-                      user: user,
-                      isOwnProfile: isOwnProfile,
-                    ),
-                  ),
+                  SliverToBoxAdapter(child: profileInfo()),
                   const SliverFillRemaining(
                     child: Center(child: CircularProgressIndicator()),
                   ),
@@ -523,18 +592,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
-                  SliverToBoxAdapter(
-                    child: _ProfileInfoSection(
-                      user: user,
-                      isOwnProfile: isOwnProfile,
-                    ),
-                  ),
+                  SliverToBoxAdapter(child: profileInfo()),
                   SliverFillRemaining(
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          '$e',
+                          _profileErrorMessage(e),
+                          textAlign: TextAlign.center,
                           style: AppTextStyles.body(
                             14,
                             color: AppColors.destructive,
@@ -549,6 +614,117 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           ),
         );
       },
+    );
+  }
+}
+
+class _ProfileErrorPane extends StatelessWidget {
+  const _ProfileErrorPane({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.background,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.person_off_outlined, size: 40, color: AppColors.secondary),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body(16, color: AppColors.secondary),
+              ),
+              const SizedBox(height: 20),
+              Material(
+                color: AppColors.primary,
+                child: InkWell(
+                  onTap: onRetry,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: Center(
+                      child: Text(
+                        'TRY AGAIN',
+                        style: AppTextStyles.display(
+                          15,
+                          color: AppColors.primaryForeground,
+                          letterSpacing: 0.06,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PrivateProfilePane extends StatefulWidget {
+  const _PrivateProfilePane({required this.username, this.onFollow});
+
+  final String username;
+  final Future<void> Function()? onFollow;
+
+  @override
+  State<_PrivateProfilePane> createState() => _PrivateProfilePaneState();
+}
+
+class _PrivateProfilePaneState extends State<_PrivateProfilePane> {
+  bool _busy = false;
+
+  Future<void> _follow() async {
+    final follow = widget.onFollow;
+    if (follow == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await follow();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final username = widget.username;
+    return ColoredBox(
+      color: AppColors.background,
+      child: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          Text(
+            username.isEmpty ? 'Private profile' : '@$username',
+            style: AppTextStyles.display(22, color: AppColors.secondary),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'This profile is private. Follow each other to view the calendar.',
+            style: AppTextStyles.body(15, color: AppColors.mutedForeground, height: 1.4),
+          ),
+          if (widget.onFollow != null) ...[
+            const SizedBox(height: 20),
+            _FollowButton(
+              isFollowing: false,
+              busy: _busy,
+              onPressed: _follow,
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -750,10 +926,12 @@ class _ProfileInfoSection extends ConsumerStatefulWidget {
     required this.user,
     required this.isOwnProfile,
     this.onToggleFollow,
+    this.lockCounts = false,
   });
 
   final ProfileUser user;
   final bool isOwnProfile;
+  final bool lockCounts;
   final Future<({bool following, int followersCount})> Function()?
   onToggleFollow;
 
@@ -865,6 +1043,9 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
     // Badges paused — multi-signal scoring later (activity, events, followers, …).
     // final badge = widget.user.badge;
     final username = widget.user.username;
+    final privateLocked = !widget.isOwnProfile &&
+        !widget.user.isMutualFollow &&
+        (widget.user.settings.isPrivateProfile || widget.lockCounts);
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -900,7 +1081,7 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
                     _Stat(
                       value: '$events',
                       label: 'EVENTS',
-                      onTap: username.isEmpty
+                      onTap: username.isEmpty || privateLocked
                           ? null
                           : () => context.push(
                               ProfileEventsScreen.pathFor(username),
@@ -910,7 +1091,9 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
                     _Stat(
                       value: '$_followersCount',
                       label: 'FOLLOWERS',
-                      onTap: username.isEmpty || _followersCount < 1
+                      onTap: username.isEmpty ||
+                              privateLocked ||
+                              _followersCount < 1
                           ? null
                           : () => context.push(
                               ProfileConnectionsScreen.followersPath(username),
@@ -920,7 +1103,7 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
                     _Stat(
                       value: '$following',
                       label: 'FOLLOWING',
-                      onTap: username.isEmpty || following < 1
+                      onTap: username.isEmpty || privateLocked || following < 1
                           ? null
                           : () => context.push(
                               ProfileConnectionsScreen.followingPath(username),

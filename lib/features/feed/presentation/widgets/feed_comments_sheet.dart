@@ -194,7 +194,10 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
     setState(() {
       _items[index] = comment.copyWith(
         liked: nextLiked,
-        likesCount: (comment.likesCount + (nextLiked ? 1 : -1)).clamp(0, 1 << 30),
+        likesCount: (comment.likesCount + (nextLiked ? 1 : -1)).clamp(
+          0,
+          1 << 30,
+        ),
       );
     });
     try {
@@ -361,8 +364,9 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                               hintText: 'Add a comment…',
                               counterText: '',
                               filled: true,
-                              fillColor:
-                                  AppColors.muted.withValues(alpha: 0.55),
+                              fillColor: AppColors.muted.withValues(
+                                alpha: 0.55,
+                              ),
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 14,
                                 vertical: 12,
@@ -643,7 +647,7 @@ class _CommentsShimmerList extends StatelessWidget {
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
         itemCount: 6,
-        itemBuilder: (_, __) => const Padding(
+        itemBuilder: (_, _) => const Padding(
           padding: EdgeInsets.symmetric(vertical: 10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -678,10 +682,6 @@ class _ShimmerBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      height: height,
-      color: AppColors.muted,
-    );
+    return Container(width: width, height: height, color: AppColors.muted);
   }
 }

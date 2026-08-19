@@ -5,12 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_colors.dart';
-import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/design/widgets/author_avatar.dart';
 import '../../../core/routing/app_route_observer.dart';
 import 'profile_providers.dart';
 import 'profile_screen.dart';
+import 'widgets/profile_private_notice.dart';
 import 'widgets/profile_subpage_scaffold.dart';
 
 export 'profile_providers.dart' show ProfileConnectionsMode;
@@ -96,15 +97,32 @@ class _ProfileConnectionsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final profile = ref.watch(profileViewProvider(widget.username));
+    final waitingOnProfile = !profile.hasValue && !profile.hasError;
+    final locked = profile.maybeWhen(
+      data: isPrivateProfileLocked,
+      orElse: () => false,
+    );
     final async = ref.watch(profileConnectionsProvider(_key));
+    final privateError = async.hasError && isPrivateProfileError(async.error!);
     final title = widget.mode == ProfileConnectionsMode.followers
         ? 'FOLLOWERS'
         : 'FOLLOWING';
+    final isFollowers = widget.mode == ProfileConnectionsMode.followers;
 
-    return ProfileSubpageScaffold(
-      title: title,
-      subtitle: '@${widget.username}',
-      child: async.when(
+    Widget child;
+    if (locked || privateError) {
+      child = ProfilePrivateNotice(
+        detail: isFollowers
+            ? 'Follow each other to view their followers.'
+            : 'Follow each other to view who they follow.',
+      );
+    } else if (waitingOnProfile) {
+      child = const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    } else {
+      child = async.when(
         skipLoadingOnReload: true,
         skipLoadingOnRefresh: true,
         loading: () => const Center(
@@ -117,7 +135,7 @@ class _ProfileConnectionsScreenState
               mainAxisSize: MainAxisSize.min,
               children: [
                 SelectableText(
-                  '$e',
+                  e is ApiException ? e.message : 'Could not load list',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.body(14, color: AppColors.foreground),
                 ),
@@ -138,10 +156,7 @@ class _ProfileConnectionsScreenState
                 widget.mode == ProfileConnectionsMode.followers
                     ? 'No followers yet'
                     : 'Not following anyone yet',
-                style: AppTextStyles.body(
-                  15,
-                  color: AppColors.mutedForeground,
-                ),
+                style: AppTextStyles.body(15, color: AppColors.mutedForeground),
               ),
             );
           }
@@ -160,8 +175,8 @@ class _ProfileConnectionsScreenState
                     onTap: user.username.isEmpty
                         ? null
                         : () => context.push(
-                              ProfileScreen.pathForUser(user.username),
-                            ),
+                            ProfileScreen.pathForUser(user.username),
+                          ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -169,10 +184,7 @@ class _ProfileConnectionsScreenState
                       ),
                       decoration: const BoxDecoration(
                         border: Border(
-                          bottom: BorderSide(
-                            color: AppColors.border,
-                            width: AppDimens.borderThick,
-                          ),
+                          bottom: BorderSide(color: AppColors.border, width: 1),
                         ),
                       ),
                       child: Row(
@@ -227,7 +239,13 @@ class _ProfileConnectionsScreenState
             ),
           );
         },
-      ),
+      );
+    }
+
+    return ProfileSubpageScaffold(
+      title: title,
+      subtitle: '@${widget.username}',
+      child: child,
     );
   }
 }

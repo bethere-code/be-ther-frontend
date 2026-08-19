@@ -57,8 +57,10 @@ Future<void> sharePostContent({
     buffer.write('\n\nTickets: $ticket');
   }
 
-  await Share.share(
-    buffer.toString(),
-    subject: title,
+  await SharePlus.instance.share(
+    ShareParams(
+      text: buffer.toString(),
+      subject: title,
+    ),
   );
 }

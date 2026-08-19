@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/network/api_exception.dart';
+
 class UserRepository {
   UserRepository(this._dio);
 
@@ -52,15 +54,21 @@ class UserRepository {
     try {
       final res = await _dio.patch<Map<String, dynamic>>('/api/v1/users/me', data: payload);
       if (res.data == null || res.data!['ok'] != true) {
-        throw Exception(res.data?['error']?.toString() ?? 'Update failed');
+        throw ApiException(
+          _messageFromBody(res.data, 'Update failed'),
+          statusCode: res.statusCode,
+        );
       }
       final data = res.data!['data'];
       if (data is! Map<String, dynamic>) {
-        throw Exception('Update failed');
+        throw ApiException('Update failed', statusCode: res.statusCode);
       }
       return data;
     } on DioException catch (e) {
-      throw Exception(_errorFromDio(e, fallback: 'Update failed'));
+      throw ApiException(
+        _errorFromDio(e, fallback: 'Update failed'),
+        statusCode: e.response?.statusCode,
+      );
     }
   }
 
@@ -75,7 +83,10 @@ class UserRepository {
       );
       final body = res.data;
       if (body == null || body['ok'] != true) {
-        throw Exception(body?['error']?.toString() ?? 'Upload failed');
+        throw ApiException(
+          _messageFromBody(body, 'Upload failed'),
+          statusCode: res.statusCode,
+        );
       }
       final data = body['data'];
       if (data is! Map<String, dynamic>) {
@@ -87,7 +98,10 @@ class UserRepository {
       }
       return url;
     } on DioException catch (e) {
-      throw Exception(_errorFromDio(e, fallback: 'Upload failed'));
+      throw ApiException(
+        _errorFromDio(e, fallback: 'Upload failed'),
+        statusCode: e.response?.statusCode,
+      );
     }
   }
 
@@ -105,10 +119,16 @@ class UserRepository {
         },
       );
       if (res.data == null || res.data!['ok'] != true) {
-        throw Exception(res.data?['error']?.toString() ?? 'Failed to sync permissions');
+        throw ApiException(
+          _messageFromBody(res.data, 'Failed to sync permissions'),
+          statusCode: res.statusCode,
+        );
       }
     } on DioException catch (e) {
-      throw Exception(_errorFromDio(e, fallback: 'Failed to sync permissions'));
+      throw ApiException(
+        _errorFromDio(e, fallback: 'Failed to sync permissions'),
+        statusCode: e.response?.statusCode,
+      );
     }
   }
 
@@ -118,7 +138,10 @@ class UserRepository {
       final res = await _dio.post<Map<String, dynamic>>('/api/v1/users/$username/follow');
       final body = res.data;
       if (body == null || body['ok'] != true) {
-        throw Exception(body?['error']?.toString() ?? 'Failed to update follow');
+        throw ApiException(
+          _messageFromBody(body, 'Failed to update follow'),
+          statusCode: res.statusCode,
+        );
       }
       final data = body['data'];
       if (data is Map) {
@@ -129,7 +152,10 @@ class UserRepository {
       }
       return (following: false, followersCount: 0);
     } on DioException catch (e) {
-      throw Exception(_errorFromDio(e, fallback: 'Failed to update follow'));
+      throw ApiException(
+        _errorFromDio(e, fallback: 'Failed to update follow'),
+        statusCode: e.response?.statusCode,
+      );
     }
   }
 
@@ -137,21 +163,38 @@ class UserRepository {
     try {
       final res = await _dio.get<Map<String, dynamic>>(path);
       final body = res.data;
-      if (body == null || body['ok'] != true) throw Exception(body?['error']?.toString() ?? fallback);
+      if (body == null || body['ok'] != true) {
+        throw ApiException(
+          _messageFromBody(body, fallback),
+          statusCode: res.statusCode,
+        );
+      }
       final data = body['data'];
-      if (data is! Map<String, dynamic>) throw Exception(fallback);
+      if (data is! Map<String, dynamic>) {
+        throw ApiException(fallback, statusCode: res.statusCode);
+      }
       return data;
     } on DioException catch (e) {
-      throw Exception(_errorFromDio(e, fallback: fallback));
+      throw ApiException(
+        _errorFromDio(e, fallback: fallback),
+        statusCode: e.response?.statusCode,
+      );
     }
   }
 
   String _errorFromDio(DioException e, {required String fallback}) {
-    final data = e.response?.data;
-    if (data is Map<String, dynamic>) {
-      final message = data['error']?.toString();
-      if (message != null && message.isNotEmpty) return message;
+    return _messageFromBody(e.response?.data, e.message ?? fallback);
+  }
+
+  String _messageFromBody(dynamic body, String fallback) {
+    if (body is Map) {
+      final error = body['error'];
+      if (error is Map && error['message'] != null) {
+        final message = error['message'].toString().trim();
+        if (message.isNotEmpty) return message;
+      }
+      if (error is String && error.trim().isNotEmpty) return error.trim();
     }
-    return e.message ?? fallback;
+    return fallback;
   }
 }
