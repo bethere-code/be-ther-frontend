@@ -15,7 +15,9 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.bether.app"
-    compileSdk = flutter.compileSdkVersion
+    // Plugins (secure storage, permissions) compile against 37.
+    // Flutter's default is still 36; android-37 is a junction to SDK folder android-37.0.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
