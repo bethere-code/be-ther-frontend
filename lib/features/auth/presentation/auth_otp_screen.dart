@@ -140,7 +140,10 @@ class _AuthOtpScreenState extends ConsumerState<AuthOtpScreen> {
       final tokens = widget.flow == AuthOtpFlow.signup
           ? await repo.verifySignupOtp(email: widget.identifier, code: code)
           : await repo.verifyLoginOtp(identifier: widget.identifier, code: code);
-      await ref.read(authNotifierProvider.notifier).applyTokens(tokens);
+      await ref.read(authNotifierProvider.notifier).applyTokens(
+        tokens,
+        authAction: widget.flow == AuthOtpFlow.signup ? 'signup' : 'login',
+      );
       if (!mounted) return;
       context.go(FeedScreen.path);
     } catch (e) {

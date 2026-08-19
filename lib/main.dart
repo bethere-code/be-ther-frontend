@@ -6,8 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'app.dart';
+import 'core/analytics/analytics_tracker.dart';
 import 'core/background_tasks/notification_syncer.dart';
+import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/presentation/auth_notifier.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,7 +44,13 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> with WidgetsBinding
     // Initialize notification syncer on app startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(notificationSyncerProvider).start();
+      _syncAnalyticsTracker();
     });
+  }
+
+  void _syncAnalyticsTracker() {
+    if (!ref.read(authNotifierProvider).isAuthenticated) return;
+    ref.read(analyticsTrackerProvider).start(ref.read(appRouterProvider));
   }
 
   @override
@@ -62,6 +71,11 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(authNotifierProvider.select((s) => s.isAuthenticated), (prev, next) {
+      if (next == true) {
+        ref.read(analyticsTrackerProvider).start(ref.read(appRouterProvider));
+      }
+    });
     return const BeTherApp();
   }
 }

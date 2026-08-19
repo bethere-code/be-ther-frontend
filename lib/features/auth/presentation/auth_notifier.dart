@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../../core/analytics/analytics_tracker.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/auth_repository.dart';
@@ -163,7 +166,7 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
-  Future<void> applyTokens(AuthTokens tokens) async {
+  Future<void> applyTokens(AuthTokens tokens, {String authAction = 'login'}) async {
     await _storage.write(
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -175,6 +178,7 @@ class AuthNotifier extends Notifier<AuthState> {
       user: tokens.user,
       isReady: true,
     );
+    unawaited(ref.read(analyticsTrackerProvider).onAuthenticated(authAction));
   }
 
   Future<bool> tryRefresh() async {
@@ -232,6 +236,9 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> logout() async {
+    try {
+      await ref.read(analyticsTrackerProvider).onLogout();
+    } catch (_) {}
     await GoogleSignIn.instance.signOut();
     await _storage.clear();
     state = const AuthState(isReady: true);

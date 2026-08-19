@@ -508,7 +508,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                                     .signInWithGoogle();
                                 await ref
                                     .read(authNotifierProvider.notifier)
-                                    .applyTokens(tokens);
+                                    .applyTokens(tokens, authAction: 'signup');
                                 if (!mounted) return;
                                 if (!context.mounted) return;
                                 context.go('/feed');

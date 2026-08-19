@@ -7,11 +7,11 @@ import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_images.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/routing/deep_link_listener.dart';
-import '../../../core/storage/onboarding_storage.dart';
+// import '../../../core/storage/onboarding_storage.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../feed/presentation/feed_screen.dart';
 import '../../launch/presentation/launch_screen.dart';
-import '../../onboarding/presentation/onboarding_screen.dart';
+// import '../../onboarding/presentation/onboarding_screen.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -33,7 +33,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     systemNavigationBarIconBrightness: Brightness.light,
   );
 
-  final _onboardingStorage = OnboardingStorage();
+  // final _onboardingStorage = OnboardingStorage();
   int _wordIndex = 0;
   int _zoomStep = 0;
 
@@ -87,14 +87,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       return;
     }
 
-    final seen = await _onboardingStorage.hasSeenOnboarding();
-    if (!mounted) return;
-    if (!seen) {
-      await _onboardingStorage.markSeen();
-      if (!mounted) return;
-      context.go(OnboardingScreen.path);
-      return;
-    }
+    // Onboarding is parked for now — go straight to launch/login.
+    // final seen = await _onboardingStorage.hasSeenOnboarding();
+    // if (!mounted) return;
+    // if (!seen) {
+    //   await _onboardingStorage.markSeen();
+    //   if (!mounted) return;
+    //   context.go(OnboardingScreen.path);
+    //   return;
+    // }
 
     context.go(LaunchScreen.path);
   }

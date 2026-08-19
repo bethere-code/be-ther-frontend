@@ -9,7 +9,7 @@ import '../../features/feed/presentation/feed_screen.dart';
 import '../../features/explore/presentation/explore_screen.dart';
 import '../../features/launch/presentation/launch_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
-import '../../features/onboarding/presentation/onboarding_screen.dart';
+// import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/profile/presentation/profile_connections_screen.dart';
 import '../../features/profile/presentation/profile_events_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
@@ -20,6 +20,7 @@ import '../../features/auth/presentation/auth_otp_screen.dart';
 import '../../features/auth/presentation/auth_signup_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../analytics/analytics_tracker.dart';
 import '../network/api_client.dart';
 import 'app_route_observer.dart';
 import 'deep_link_listener.dart';
@@ -73,7 +74,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     // before tokens load and redirect treats the user as signed out.
     initialLocation: SplashScreen.path,
     overridePlatformDefaultLocation: true,
-    observers: [appRouteObserver],
+    observers: [
+      appRouteObserver,
+      AnalyticsNavObserver(() => ref.read(analyticsTrackerProvider).onRouteChanged()),
+    ],
     refreshListenable: refresh,
     redirect: (context, state) {
       // Normalize share / platform deep links before auth gates.
@@ -100,7 +104,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (isSplash) return null;
 
       final public = loc == LaunchScreen.path ||
-          loc == OnboardingScreen.path ||
+          // loc == OnboardingScreen.path ||
           loc == AuthEmailScreen.path ||
           loc == AuthSignupScreen.path ||
           loc == AuthOtpScreen.path;
@@ -115,7 +119,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return LaunchScreen.path;
       }
       if (auth.isAuthenticated &&
-          (loc == LaunchScreen.path || loc.startsWith('/auth/') || loc == OnboardingScreen.path)) {
+          (loc == LaunchScreen.path || loc.startsWith('/auth/') /* || loc == OnboardingScreen.path */)) {
         final pending = ref.read(pendingDeepLinkProvider);
         if (pending != null && pending.isNotEmpty) {
           ref.read(pendingDeepLinkProvider.notifier).clearPending();
@@ -163,11 +167,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: LaunchScreen.name,
         pageBuilder: (context, state) => _fadePage(state, const LaunchScreen()),
       ),
-      GoRoute(
-        path: OnboardingScreen.path,
-        name: OnboardingScreen.name,
-        pageBuilder: (context, state) => _fadePage(state, const OnboardingScreen()),
-      ),
+      // GoRoute(
+      //   path: OnboardingScreen.path,
+      //   name: OnboardingScreen.name,
+      //   pageBuilder: (context, state) => _fadePage(state, const OnboardingScreen()),
+      // ),
       GoRoute(
         path: AuthEmailScreen.path,
         name: AuthEmailScreen.name,

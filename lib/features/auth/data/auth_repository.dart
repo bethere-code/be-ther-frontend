@@ -1,12 +1,22 @@
 import 'package:dio/dio.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../../core/analytics/device_snapshot.dart';
+import '../../../core/analytics/fcm_token.dart';
 import '../../../core/network/api_exception.dart';
 
 class AuthRepository {
   AuthRepository(this._dio);
 
   final Dio _dio;
+
+  Future<Map<String, dynamic>> _clientMeta() async {
+    final device = await collectDeviceSnapshot();
+    final body = <String, dynamic>{'device': device.toJson()};
+    final fcm = await currentFcmToken();
+    if (fcm != null && fcm.isNotEmpty) body['fcmToken'] = fcm;
+    return body;
+  }
 
   Future<LoginOtpRequestResult> requestLoginOtp(String identifier) async {
     try {
@@ -86,7 +96,7 @@ class AuthRepository {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
         '/api/v1/auth/login/otp/verify',
-        data: {'identifier': identifier, 'code': code},
+        data: {'identifier': identifier, 'code': code, ...await _clientMeta()},
       );
       final data = _unwrap(res);
       return AuthTokens.fromJson(data as Map<String, dynamic>);
@@ -102,7 +112,7 @@ class AuthRepository {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
         '/api/v1/auth/login/password',
-        data: {'identifier': identifier, 'password': password},
+        data: {'identifier': identifier, 'password': password, ...await _clientMeta()},
       );
       final data = _unwrap(res);
       return AuthTokens.fromJson(data as Map<String, dynamic>);
@@ -118,7 +128,7 @@ class AuthRepository {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
         '/api/v1/auth/signup/verify',
-        data: {'email': email, 'code': code},
+        data: {'email': email, 'code': code, ...await _clientMeta()},
       );
       final data = _unwrap(res);
       return AuthTokens.fromJson(data as Map<String, dynamic>);
@@ -141,7 +151,7 @@ class AuthRepository {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
         '/api/v1/auth/google',
-        data: {'idToken': idToken},
+        data: {'idToken': idToken, ...await _clientMeta()},
       );
       final data = _unwrap(res);
       return AuthTokens.fromJson(data as Map<String, dynamic>);
