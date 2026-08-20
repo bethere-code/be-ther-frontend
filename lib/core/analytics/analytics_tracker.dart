@@ -73,11 +73,18 @@ class AnalyticsTracker with WidgetsBindingObserver {
   }
 
   Future<void> recordAuth(String action) async {
+    Map<String, dynamic>? device;
+    try {
+      device = (await collectDeviceSnapshot()).toJson();
+    } catch (_) {
+      device = null;
+    }
     await _queue.enqueue({
       'eventId': newAnalyticsEventId(),
       'type': 'auth',
       'action': action,
       'at': DateTime.now().toUtc().toIso8601String(),
+      if (device != null) 'device': device,
     });
   }
 
