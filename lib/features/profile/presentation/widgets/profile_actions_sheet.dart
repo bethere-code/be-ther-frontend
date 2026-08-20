@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 enum _ReportReason { spam, harassment, impersonation, other }
 
@@ -278,9 +279,7 @@ class _ReportUserDialogState extends State<_ReportUserDialog> {
   void _submit() {
     final text = _details.text.trim();
     if (_reason == _ReportReason.other && text.length < 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please describe the issue (at least 3 characters)')),
-      );
+      AppToast.show(context, 'Please describe the issue (at least 3 characters)');
       return;
     }
     Navigator.pop(context, (reason: _apiReason, details: text));

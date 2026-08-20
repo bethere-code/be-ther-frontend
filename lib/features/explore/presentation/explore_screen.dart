@@ -10,6 +10,7 @@ import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../feed/presentation/feed_providers.dart';
 import '../../feed/presentation/feed_screen.dart';
+import '../../profile/presentation/block_session.dart';
 import '../../search/presentation/search_screen.dart';
 import 'explore_providers.dart';
 import 'widgets/explore_event_tile.dart';
@@ -46,6 +47,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
   Widget build(BuildContext context) {
     final events = ref.watch(exploreEventsProvider);
     final deletedIds = ref.watch(deletedPostIdsProvider);
+    final blockedUsernames = ref.watch(sessionBlockedUsernamesProvider);
 
     return PopScope(
       canPop: false,
@@ -112,7 +114,14 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                 child: events.when(
                   data: (items) {
                     final visible = items
-                        .where((e) => !deletedIds.contains(e.id))
+                        .where(
+                          (e) =>
+                              !deletedIds.contains(e.id) &&
+                              !isAuthorSessionBlocked(
+                                blockedUsernames,
+                                e.author?.username,
+                              ),
+                        )
                         .toList(growable: false);
                     if (visible.isEmpty) {
                       return Center(

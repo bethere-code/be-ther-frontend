@@ -127,8 +127,8 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
       _ageError = null;
     } else {
       final n = int.tryParse(ageText);
-      _ageError = (n == null || n < 1 || n > 120)
-          ? 'Age must be a number between 1 and 120'
+      _ageError = (n == null || n < 10 || n > 125)
+          ? 'Age must be between 10 and 125'
           : null;
     }
 
@@ -478,7 +478,19 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                     readOnly: _loading,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    onChanged: (_) => setState(() => _ageError = null),
+                    onChanged: (_) {
+                      final ageText = _age.text.trim();
+                      setState(() {
+                        if (ageText.isEmpty) {
+                          _ageError = null;
+                        } else {
+                          final n = int.tryParse(ageText);
+                          _ageError = (n == null || n < 10 || n > 125)
+                              ? 'Age must be between 10 and 125'
+                              : null;
+                        }
+                      });
+                    },
                     decoration: InputDecoration(
                       hintText: 'e.g. 24',
                       hintStyle: AppTextStyles.body(

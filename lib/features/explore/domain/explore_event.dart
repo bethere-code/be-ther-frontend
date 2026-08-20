@@ -18,24 +18,44 @@ class ExploreAuthor {
   final String? badge;
 
   factory ExploreAuthor.fromJson(Map<String, dynamic> json) {
-    final username = json['username'] as String? ?? '';
-    final displayName = (json['displayName'] as String?)?.trim();
+    final username = json['username']?.toString().trim() ?? '';
+    final displayName = json['displayName']?.toString().trim();
     return ExploreAuthor(
       id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
       username: username,
       displayName:
           (displayName != null && displayName.isNotEmpty) ? displayName : username,
-      avatarUrl: json['avatarUrl'] as String? ?? '',
-      badge: json['badge'] as String?,
+      avatarUrl: json['avatarUrl']?.toString() ?? '',
+      badge: json['badge']?.toString(),
     );
   }
 
   static ExploreAuthor? tryParse(dynamic raw) {
-    if (raw is Map<String, dynamic>) return ExploreAuthor.fromJson(raw);
+    if (raw is Map<String, dynamic>) {
+      final parsed = ExploreAuthor.fromJson(raw);
+      return parsed.username.isEmpty ? null : parsed;
+    }
     if (raw is Map) {
-      return ExploreAuthor.fromJson(Map<String, dynamic>.from(raw));
+      final parsed = ExploreAuthor.fromJson(Map<String, dynamic>.from(raw));
+      return parsed.username.isEmpty ? null : parsed;
     }
     return null;
+  }
+
+  static ExploreAuthor fromFeedAuthor({
+    required String id,
+    required String username,
+    required String displayName,
+    required String avatarUrl,
+    String? badge,
+  }) {
+    return ExploreAuthor(
+      id: id,
+      username: username,
+      displayName: displayName,
+      avatarUrl: avatarUrl,
+      badge: badge,
+    );
   }
 }
 
@@ -226,6 +246,7 @@ class ExploreEvent {
     int? likesCount,
     int? commentsCount,
     bool? liked,
+    ExploreAuthor? author,
   }) {
     return ExploreEvent(
       id: id,
@@ -242,7 +263,7 @@ class ExploreEvent {
       attendees: attendees,
       trending: trending,
       status: status,
-      author: author,
+      author: author ?? this.author,
       liked: liked ?? this.liked,
       bookmarked: bookmarked,
       inCalendar: inCalendar ?? this.inCalendar,

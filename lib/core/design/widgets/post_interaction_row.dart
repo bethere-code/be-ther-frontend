@@ -8,6 +8,7 @@ import '../../../features/feed/presentation/widgets/feed_likes_sheet.dart';
 import '../../utils/link_utils.dart';
 import '../app_colors.dart';
 import '../app_text_styles.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 class PostInteractionRow extends ConsumerStatefulWidget {
   const PostInteractionRow({
@@ -114,9 +115,7 @@ class _PostInteractionRowState extends ConsumerState<PostInteractionRow>
         _liked = prevLiked;
         _likesCount = prevCount;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not update like')),
-      );
+      AppToast.show(context, 'Could not update like');
     } finally {
       if (mounted) setState(() => _likeBusy = false);
     }
@@ -207,12 +206,9 @@ class _PostInteractionRowState extends ConsumerState<PostInteractionRow>
                     );
                   } catch (e) {
                     if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          e.toString().replaceFirst('Exception: ', ''),
-                        ),
-                      ),
+                    AppToast.show(
+                      context,
+                      e.toString().replaceFirst('Exception: ', ''),
                     );
                   }
                 },

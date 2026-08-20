@@ -11,6 +11,7 @@ import '../../../core/design/widgets/app_shell.dart';
 import '../../explore/domain/explore_event.dart';
 import '../../explore/presentation/widgets/explore_event_tile.dart';
 import '../../feed/presentation/feed_providers.dart';
+import '../../profile/presentation/block_session.dart';
 import '../domain/search_post.dart';
 import 'search_providers.dart';
 
@@ -210,6 +211,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   List<ExploreEvent> _displayItems(SearchPage page) {
     final deleted = ref.read(deletedPostIdsProvider);
+    final blocked = ref.read(sessionBlockedUsernamesProvider);
     List<ExploreEvent> raw;
     if (_skip == 0) {
       raw = page.items;
@@ -218,9 +220,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     } else {
       raw = List<ExploreEvent>.unmodifiable(_results);
     }
-    if (deleted.isEmpty) return raw;
+    if (deleted.isEmpty && blocked.isEmpty) return raw;
     return raw
-        .where((e) => !deleted.contains(e.id))
+        .where(
+          (e) =>
+              !deleted.contains(e.id) &&
+              !isAuthorSessionBlocked(blocked, e.author?.username),
+        )
         .toList(growable: false);
   }
 
@@ -233,6 +239,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final params = (query: _activeQuery, skip: _skip);
     final asyncResults = ref.watch(searchResultsProvider(params));
     ref.watch(deletedPostIdsProvider);
+    ref.watch(sessionBlockedUsernamesProvider);
     final genAtWatch = _generation;
 
     return AppShell(

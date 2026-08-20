@@ -40,7 +40,10 @@ class AuthorAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: AppColors.muted,
-        border: Border.all(color: borderColor, width: AppDimens.border),
+        border: Border.all(
+          color: borderColor,
+          width: AppDimens.borderThinThick,
+        ),
       ),
       child: ClipOval(
         child: SizedBox.expand(
@@ -61,9 +64,9 @@ class AuthorAvatar extends StatelessWidget {
           (username.isEmpty
               ? null
               : () => context.push(
-                    ProfileScreen.pathForUser(username),
-                    extra: heroTag,
-                  ));
+                  ProfileScreen.pathForUser(username),
+                  extra: heroTag,
+                ));
       if (handler != null) {
         child = Material(
           color: Colors.transparent,

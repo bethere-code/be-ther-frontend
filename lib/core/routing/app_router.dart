@@ -27,7 +27,8 @@ import 'app_route_observer.dart';
 import 'deep_link_listener.dart';
 import 'deep_link_utils.dart';
 
-final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+/// Root navigator for [GoRouter] (sheets / overlays that need the app root).
+final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
 CustomTransitionPage<void> _fadePage(GoRouterState state, Widget child) {
   return CustomTransitionPage<void>(
@@ -69,7 +70,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   final refresh = ref.watch(goRouterRefreshProvider);
 
   return GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     // Always start on splash. Platform deep links are handled by
     // [DeepLinkListener] after auth hydrate — otherwise `/e/...` opens
     // before tokens load and redirect treats the user as signed out.

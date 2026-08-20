@@ -11,9 +11,11 @@ import '../../explore/domain/explore_event.dart';
 import '../../explore/presentation/widgets/explore_event_sheet.dart';
 import '../../feed/presentation/calendar_status_store.dart';
 import '../../feed/presentation/feed_providers.dart';
+import '../../profile/presentation/profile_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
 import 'notifications_providers.dart';
 import 'widgets/notification_list_tile.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
@@ -28,6 +30,7 @@ class NotificationsScreen extends ConsumerStatefulWidget {
 
 class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   final _scrollController = ScrollController();
+  String? _busyNotificationId;
 
   @override
   void initState() {
@@ -60,6 +63,36 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     }
   }
 
+  Future<void> _respondFollowRequest({
+    required Map<String, dynamic> n,
+    required String action,
+  }) async {
+    final id = n['_id']?.toString() ?? '';
+    final actor = n['actorUserId'] is Map<String, dynamic>
+        ? n['actorUserId'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final username = (actor['username'] as String?)?.trim() ?? '';
+    if (username.isEmpty || _busyNotificationId != null) return;
+
+    setState(() => _busyNotificationId = id);
+    try {
+      await ref.read(notificationsRepositoryProvider).respondFollowRequest(
+            username: username,
+            action: action,
+          );
+      if (!mounted) return;
+      ref.invalidate(notificationsProvider);
+      ref.invalidate(unreadNotificationCountProvider);
+      ref.invalidate(profileViewProvider(null));
+      ref.invalidate(profileViewProvider(username));
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _busyNotificationId = null);
+    }
+  }
+
   Future<void> _openNotification({
     required BuildContext context,
     required Map<String, dynamic> n,
@@ -75,7 +108,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
     if (!context.mounted) return;
 
-    final isFollow = type == 'follow' || type == 'star';
+    final isFollow =
+        type == 'follow' || type == 'star' || type == 'follow_request';
     if (isFollow && username.isNotEmpty) {
       context.push(ProfileScreen.pathForUser(username));
       return;
@@ -93,11 +127,11 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
           final fresh =
               await ref.read(postsRepositoryProvider).fetchPost(postId);
           payload = {
-            ...fresh,
-            'postId': fresh['postId'] ?? fresh['_id'] ?? postId,
+            ...fresh.toJson(),
+            'postId': fresh.id,
           };
-          final status = fresh['calendarStatus'] as String?;
-          final inCal = fresh['inCalendar'] as bool? ?? false;
+          final status = fresh.calendarStatus;
+          final inCal = fresh.inCalendar;
           ref.read(calendarStatusStoreProvider.notifier).syncFromApi(
                 postId,
                 status ?? (inCal ? 'going' : null),
@@ -222,9 +256,18 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                 itemCount: items.length,
                 itemBuilder: (context, i) {
                   final n = items[i];
+                  final nId = n['_id']?.toString() ?? '';
+                  final type = n['type'] as String? ?? '';
                   return NotificationListTile(
                     notification: n,
                     onOpen: () => _openNotification(context: context, n: n),
+                    actionsBusy: _busyNotificationId == nId,
+                    onAcceptFollowRequest: type == 'follow_request'
+                        ? () => _respondFollowRequest(n: n, action: 'accept')
+                        : null,
+                    onRejectFollowRequest: type == 'follow_request'
+                        ? () => _respondFollowRequest(n: n, action: 'reject')
+                        : null,
                   );
                 },
               ),

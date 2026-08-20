@@ -12,8 +12,8 @@ class SearchPage {
   factory SearchPage.fromJson(Map<String, dynamic> data) {
     final raw = data['items'] as List<dynamic>? ?? const [];
     final items = raw
-        .whereType<Map<String, dynamic>>()
-        .map(ExploreEvent.fromJson)
+        .whereType<Map>()
+        .map((e) => ExploreEvent.fromJson(Map<String, dynamic>.from(e)))
         .toList(growable: false);
     final nextSkipRaw = data['nextSkip'];
     final nextSkip =

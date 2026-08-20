@@ -6,11 +6,10 @@ import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/author_avatar.dart';
 import '../../../core/network/api_exception.dart';
-import '../../explore/presentation/explore_providers.dart';
-import '../../feed/presentation/feed_providers.dart';
-import '../../profile/domain/profile_user.dart';
+import '../../profile/presentation/block_session.dart';
 import '../../profile/presentation/profile_providers.dart';
 import '../../profile/presentation/widgets/profile_subpage_scaffold.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 class BlockedUsersScreen extends ConsumerWidget {
   const BlockedUsersScreen({super.key});
@@ -279,19 +278,11 @@ Future<void> _confirmUnblock(
   if (ok != true || !context.mounted) return;
 
   try {
-    await ref.read(userRepositoryProvider).setBlocked(user.username, blocked: false);
-    ref.invalidate(blockedUsersProvider);
-    ref.invalidate(profileViewProvider(user.username));
-    ref.invalidate(feedProvider);
-    ref.invalidate(exploreEventsProvider);
+    await unblockUserOptimistic(ref, user.username);
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label unblocked')),
-    );
+    AppToast.show(context, '$label unblocked');
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(e.toString())),
-    );
+    AppToast.show(context, e.toString());
   }
 }

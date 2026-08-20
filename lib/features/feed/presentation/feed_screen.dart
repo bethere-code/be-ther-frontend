@@ -14,8 +14,10 @@ import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
 import '../../../core/routing/app_route_observer.dart';
 import '../../../core/utils/popup_menu_utils.dart';
+import '../../profile/presentation/block_session.dart';
 import '../../profile/presentation/profile_providers.dart';
 import '../data/posts_repository.dart';
+import '../domain/feed_post.dart';
 import 'add_post_screen.dart';
 import 'feed_providers.dart';
 import 'widgets/feed_permissions_coordinator.dart';
@@ -34,7 +36,7 @@ class FeedScreen extends ConsumerStatefulWidget {
 class _FeedScreenState extends ConsumerState<FeedScreen>
     with RouteAware, WidgetsBindingObserver {
   late ScrollController _scrollController;
-  final List<Map<String, dynamic>> _allItems = [];
+  final List<FeedPost> _allItems = [];
   int? _nextSkip;
   bool _isLoadingMore = false;
   bool _hasBootstrapped = false;
@@ -167,11 +169,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     }
   }
 
-  String _itemId(Map<String, dynamic> item) =>
-      item['_id']?.toString() ??
-      item['postId']?.toString() ??
-      item['id']?.toString() ??
-      '';
+  String _itemId(FeedPost item) => item.id;
 
   void _applyFirstPage(FeedPage page) {
     _allItems
@@ -181,16 +179,20 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     _hasBootstrapped = true;
   }
 
-  List<Map<String, dynamic>> _mergeVisibleItems({
-    required List<Map<String, dynamic>> sourceItems,
-    required List<Map<String, dynamic>> localInserts,
+  List<FeedPost> _mergeVisibleItems({
+    required List<FeedPost> sourceItems,
+    required List<FeedPost> localInserts,
     required Set<String> deletedIds,
+    required Set<String> blockedUsernames,
   }) {
     final seen = <String>{};
-    final merged = <Map<String, dynamic>>[];
+    final merged = <FeedPost>[];
 
-    void addAll(Iterable<Map<String, dynamic>> items) {
+    void addAll(Iterable<FeedPost> items) {
       for (final item in items) {
+        if (isAuthorSessionBlocked(blockedUsernames, item.author.username)) {
+          continue;
+        }
         final id = _itemId(item);
         if (id.isNotEmpty) {
           if (deletedIds.contains(id) || !seen.add(id)) continue;
@@ -259,6 +261,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   Widget build(BuildContext context) {
     final feed = ref.watch(feedProvider);
     final deletedIds = ref.watch(deletedPostIdsProvider);
+    final blockedUsernames = ref.watch(sessionBlockedUsernamesProvider);
     final localInserts = ref.watch(feedLocalInsertsProvider);
 
     // First page only — never reset scroll by re-applying while paginating.
@@ -269,7 +272,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       });
     });
 
-    ref.listen<List<Map<String, dynamic>>>(feedLocalInsertsProvider, (
+    ref.listen<List<FeedPost>>(feedLocalInsertsProvider, (
       prev,
       next,
     ) {
@@ -345,6 +348,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                 sourceItems: sourceItems,
                 localInserts: localInserts,
                 deletedIds: deletedIds,
+                blockedUsernames: blockedUsernames,
               );
 
               if (!_hasBootstrapped) {
@@ -391,7 +395,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                     final card = RepaintBoundary(
                       child: FeedPostCard(
                         key: ValueKey(_itemId(item)),
-                        item: item,
+                        post: item,
                       ),
                     );
                     if (index < localInserts.length &&
@@ -417,6 +421,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                 sourceItems: const [],
                 localInserts: localInserts,
                 deletedIds: deletedIds,
+                blockedUsernames: blockedUsernames,
               );
               return RefreshIndicator(
                 onRefresh: _refresh,
@@ -429,7 +434,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                     return RepaintBoundary(
                       child: FeedPostCard(
                         key: ValueKey(_itemId(item)),
-                        item: item,
+                        post: item,
                       ),
                     );
                   },

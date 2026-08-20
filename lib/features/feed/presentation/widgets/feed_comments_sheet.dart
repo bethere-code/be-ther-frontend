@@ -12,6 +12,7 @@ import '../../../auth/presentation/auth_notifier.dart';
 import '../../../profile/presentation/profile_screen.dart';
 import '../../domain/comment.dart';
 import '../feed_providers.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 Future<void> showFeedCommentsSheet({
   required BuildContext context,
@@ -180,9 +181,7 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _sending = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -255,9 +254,7 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
       _emitCount();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
     }
   }
 

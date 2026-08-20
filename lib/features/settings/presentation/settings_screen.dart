@@ -14,6 +14,7 @@ import '../../launch/presentation/launch_screen.dart';
 import '../../profile/presentation/profile_providers.dart';
 import 'blocked_users_screen.dart';
 import 'widgets/profile_edit_section.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 Future<String>? _appVersionFuture;
 
@@ -350,9 +351,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ref.invalidate(profileViewProvider(null));
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save settings')),
-        );
+        AppToast.show(context, 'Could not save settings');
       }
     }
   }

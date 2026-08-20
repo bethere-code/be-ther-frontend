@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../domain/comment.dart';
+import '../domain/feed_post.dart';
 
 class PostsRepository {
   PostsRepository(this._dio);
@@ -11,7 +12,10 @@ class PostsRepository {
     try {
       final res = await _dio.get<Map<String, dynamic>>('/api/v1/posts/feed', queryParameters: {'skip': skip});
       final data = _extractData(res.data, fallbackMessage: 'Failed to load feed');
-      final items = (data['items'] as List<dynamic>? ?? []).whereType<Map<String, dynamic>>().toList();
+      final items = (data['items'] as List<dynamic>? ?? [])
+          .whereType<Map>()
+          .map((e) => FeedPost.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
       final nextSkipRaw = data['nextSkip'];
       final nextSkip = nextSkipRaw is int ? nextSkipRaw : int.tryParse('$nextSkipRaw');
       return FeedPage(items: items, nextSkip: nextSkip);
@@ -20,15 +24,15 @@ class PostsRepository {
     }
   }
 
-  Future<Map<String, dynamic>> fetchPost(String postId) async {
+  Future<FeedPost> fetchPost(String postId) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>('/api/v1/posts/$postId');
       final data = _extractData(res.data, fallbackMessage: 'Failed to load event');
       final post = data['post'];
-      if (post is! Map<String, dynamic>) {
+      if (post is! Map) {
         throw Exception('Failed to load event');
       }
-      return post;
+      return FeedPost.fromJson(Map<String, dynamic>.from(post));
     } on DioException catch (e) {
       throw Exception(_apiMessage(e, fallback: 'Failed to load event'));
     }
@@ -418,7 +422,7 @@ class PostsRepository {
 class FeedPage {
   FeedPage({required this.items, required this.nextSkip});
 
-  final List<Map<String, dynamic>> items;
+  final List<FeedPost> items;
   final int? nextSkip;
 }
 

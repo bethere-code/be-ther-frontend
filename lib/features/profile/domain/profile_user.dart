@@ -36,6 +36,7 @@ class ProfileUser {
     required this.followingCount,
     required this.isOwnProfile,
     required this.isFollowing,
+    this.followRequestPending = false,
     required this.isFollowedBy,
     required this.isBlocked,
     required this.isMutualFollow,
@@ -56,6 +57,8 @@ class ProfileUser {
   final int followingCount;
   final bool isOwnProfile;
   final bool isFollowing;
+  /// True when viewer sent a follow request to a private profile (not accepted yet).
+  final bool followRequestPending;
   final bool isFollowedBy;
   final bool isBlocked;
   final bool isMutualFollow;
@@ -84,6 +87,7 @@ class ProfileUser {
       followingCount: (json['followingCount'] as num?)?.toInt() ?? 0,
       isOwnProfile: json['isOwnProfile'] == true,
       isFollowing: json['isFollowing'] == true,
+      followRequestPending: json['followRequestPending'] == true,
       isFollowedBy: json['isFollowedBy'] == true,
       isBlocked: json['isBlocked'] == true,
       isMutualFollow: json['isMutualFollow'] == true || json['canDM'] == true,
@@ -102,6 +106,7 @@ class ProfileUser {
 
   ProfileUser copyWith({
     bool? isFollowing,
+    bool? followRequestPending,
     bool? isFollowedBy,
     bool? isBlocked,
     bool? isMutualFollow,
@@ -124,6 +129,7 @@ class ProfileUser {
       followingCount: followingCount,
       isOwnProfile: isOwnProfile,
       isFollowing: isFollowing ?? this.isFollowing,
+      followRequestPending: followRequestPending ?? this.followRequestPending,
       isFollowedBy: isFollowedBy ?? this.isFollowedBy,
       isBlocked: isBlocked ?? this.isBlocked,
       isMutualFollow: isMutualFollow ?? this.isMutualFollow,

@@ -3,6 +3,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/share_config.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 Future<void> openExternalUrl(BuildContext context, String? rawUrl) async {
   final url = rawUrl?.trim() ?? '';
@@ -11,17 +12,13 @@ Future<void> openExternalUrl(BuildContext context, String? rawUrl) async {
   final uri = Uri.tryParse(url);
   if (uri == null || !uri.hasScheme) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Invalid link')),
-    );
+    AppToast.show(context, 'Invalid link');
     return;
   }
 
   final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
   if (!launched && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Could not open link')),
-    );
+    AppToast.show(context, 'Could not open link');
   }
 }
 

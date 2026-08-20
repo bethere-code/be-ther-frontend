@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
 import '../data/posts_repository.dart';
+import '../domain/feed_post.dart';
 
 final postsRepositoryProvider = Provider<PostsRepository>((ref) {
   return PostsRepository(ref.watch(apiClientProvider));
@@ -30,28 +31,21 @@ class DeletedPostIdsNotifier extends Notifier<Set<String>> {
 
 /// Newly created posts shown at the top of the feed until the next API refresh.
 final feedLocalInsertsProvider =
-    NotifierProvider<FeedLocalInsertsNotifier, List<Map<String, dynamic>>>(
+    NotifierProvider<FeedLocalInsertsNotifier, List<FeedPost>>(
   FeedLocalInsertsNotifier.new,
 );
 
-class FeedLocalInsertsNotifier extends Notifier<List<Map<String, dynamic>>> {
+class FeedLocalInsertsNotifier extends Notifier<List<FeedPost>> {
   @override
-  List<Map<String, dynamic>> build() => const [];
+  List<FeedPost> build() => const [];
 
-  void prepend(Map<String, dynamic> post) {
-    final id = post['_id']?.toString() ?? post['postId']?.toString() ?? '';
+  void prepend(FeedPost post) {
+    final id = post.id;
     if (id.isEmpty) {
       state = [post, ...state];
       return;
     }
-    state = [
-      post,
-      ...state.where((p) {
-        final existing =
-            p['_id']?.toString() ?? p['postId']?.toString() ?? '';
-        return existing != id;
-      }),
-    ];
+    state = [post, ...state.where((p) => p.id != id)];
   }
 
   void clear() {
@@ -71,7 +65,7 @@ final feedPageProvider = FutureProvider.family<FeedPage, int>((ref, skip) async 
 });
 
 final sharedPostProvider =
-    FutureProvider.family<Map<String, dynamic>, String>((ref, postId) async {
+    FutureProvider.family<FeedPost, String>((ref, postId) async {
   final repo = ref.watch(postsRepositoryProvider);
   return repo.fetchPost(postId);
 });

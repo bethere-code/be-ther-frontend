@@ -122,7 +122,7 @@ class SharedEventScreen extends ConsumerWidget {
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
                   FeedPostCard(
-                    item: item,
+                    post: item,
                     recordFeedImpression: false,
                     onInteractionChanged: () {
                       ref.invalidate(sharedPostProvider(postId));

@@ -23,8 +23,8 @@ class ExploreRepository {
       }
       final items = data['items'] as List<dynamic>? ?? [];
       return items
-          .whereType<Map<String, dynamic>>()
-          .map(ExploreEvent.fromJson)
+          .whereType<Map>()
+          .map((e) => ExploreEvent.fromJson(Map<String, dynamic>.from(e)))
           .toList(growable: false);
     } on DioException catch (e) {
       final data = e.response?.data;

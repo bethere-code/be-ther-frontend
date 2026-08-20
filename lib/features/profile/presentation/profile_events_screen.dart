@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/network/api_exception.dart';
+import '../../feed/domain/feed_post.dart';
 import '../../feed/presentation/widgets/feed_post_card.dart';
 import 'profile_providers.dart';
 import 'widgets/profile_private_notice.dart';
@@ -91,7 +92,7 @@ class ProfileEventsScreen extends ConsumerWidget {
                     itemCount: items.length,
                     itemBuilder: (context, i) {
                       return FeedPostCard(
-                        item: items[i],
+                        post: FeedPost.fromJson(items[i]),
                         recordFeedImpression: false,
                       );
                     },

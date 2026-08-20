@@ -17,12 +17,14 @@ import '../../auth/presentation/auth_notifier.dart';
 import '../../explore/presentation/explore_providers.dart';
 import '../../feed/presentation/feed_providers.dart';
 import '../../settings/presentation/settings_screen.dart';
+import 'block_session.dart';
 import 'profile_connections_screen.dart';
 import 'profile_events_screen.dart';
 import 'profile_providers.dart';
 import 'widgets/profile_actions_sheet.dart';
 import 'widgets/profile_event_sheet.dart';
 import 'widgets/profile_private_notice.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key, this.username});
@@ -231,10 +233,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     List<Map<String, dynamic>> items,
   ) {
     final deleted = ref.read(deletedPostIdsProvider);
+    final blocked = ref.read(sessionBlockedUsernamesProvider);
     final map = <String, ProfileCalendarEvent>{};
     for (final item in items) {
       final event = ProfileCalendarEvent.fromJson(item);
       if (deleted.contains(event.postId)) continue;
+      if (isAuthorSessionBlocked(blocked, event.author?.username)) continue;
       final key = DateFormat('yyyy-MM-dd').format(event.date);
       map.putIfAbsent(key, () => event);
     }
@@ -245,10 +249,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     List<Map<String, dynamic>> items,
   ) {
     final deleted = ref.read(deletedPostIdsProvider);
+    final blocked = ref.read(sessionBlockedUsernamesProvider);
     final events =
         items
             .map(ProfileCalendarEvent.fromJson)
-            .where((e) => !deleted.contains(e.postId))
+            .where(
+              (e) =>
+                  !deleted.contains(e.postId) &&
+                  !isAuthorSessionBlocked(blocked, e.author?.username),
+            )
             .toList()
           ..sort((a, b) {
             final byDate = a.date.compareTo(b.date);
@@ -280,9 +289,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       ref.invalidate(profileViewProvider(widget.username));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -392,7 +399,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Future<({bool following, int followersCount})> _toggleFollow(
+  Future<({bool following, bool requested, int followersCount})> _toggleFollow(
     String username,
   ) async {
     final result = await ref.read(userRepositoryProvider).toggleFollow(username);
@@ -433,44 +440,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           await ref.read(userRepositoryProvider).removeFollower(username);
           _refreshAfterProfileSocial(username);
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Follower removed')),
-          );
+          AppToast.show(context, 'Follower removed');
         } catch (e) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-          );
+          AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
         }
       },
       onBlock: () async {
         try {
-          await ref.read(userRepositoryProvider).setBlocked(username, blocked: true);
+          await blockUserOptimistic(ref, username);
           _refreshAfterProfileSocial(username);
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User blocked')),
-          );
+          AppToast.show(context, 'User blocked');
         } catch (e) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-          );
+          AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
         }
       },
       onUnblock: () async {
         try {
-          await ref.read(userRepositoryProvider).setBlocked(username, blocked: false);
+          await unblockUserOptimistic(ref, username);
           _refreshAfterProfileSocial(username);
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User unblocked')),
-          );
+          AppToast.show(context, 'User unblocked');
         } catch (e) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-          );
+          AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
         }
       },
       onReport: (reason, details) async {
@@ -481,14 +476,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 details: details,
               );
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Report sent. The team will review it.')),
-          );
+          AppToast.show(context, 'Report sent. The team will review it.');
         } catch (e) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-          );
+          AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
         }
       },
     );
@@ -554,6 +545,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           ref.watch(profileEventsProvider(username));
         }
         ref.watch(deletedPostIdsProvider);
+        ref.watch(sessionBlockedUsernamesProvider);
 
         final calendarBlocked = calendarAsync.hasError &&
             isPrivateProfileError(calendarAsync.error!);
@@ -773,9 +765,7 @@ class _PrivateProfilePaneState extends State<_PrivateProfilePane> {
       await follow();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1027,7 +1017,7 @@ class _ProfileInfoSection extends ConsumerStatefulWidget {
   final ProfileUser user;
   final bool isOwnProfile;
   final bool lockCounts;
-  final Future<({bool following, int followersCount})> Function()?
+  final Future<({bool following, bool requested, int followersCount})> Function()?
   onToggleFollow;
 
   @override
@@ -1038,6 +1028,7 @@ class _ProfileInfoSection extends ConsumerStatefulWidget {
 class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
   bool _followBusy = false;
   late bool _isFollowing;
+  late bool _followRequestPending;
   late int _followersCount;
 
   @override
@@ -1053,6 +1044,7 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
     if (_followBusy) return;
     if (oldWidget.user.id != widget.user.id ||
         oldWidget.user.isFollowing != widget.user.isFollowing ||
+        oldWidget.user.followRequestPending != widget.user.followRequestPending ||
         oldWidget.user.followersCount != widget.user.followersCount) {
       setState(() => _readFollowState(widget.user));
     }
@@ -1060,6 +1052,7 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
 
   void _readFollowState(ProfileUser user) {
     _isFollowing = user.isFollowing;
+    _followRequestPending = user.followRequestPending;
     _followersCount = user.followersCount;
   }
 
@@ -1068,6 +1061,7 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
     if (toggle == null || _followBusy) return;
 
     final wasFollowing = _isFollowing;
+    final wasRequested = _followRequestPending;
     if (wasFollowing) {
       final username = widget.user.username.trim();
       final label = username.isNotEmpty ? '@$username' : 'this user';
@@ -1098,14 +1092,23 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
     }
 
     final previousCount = _followersCount;
+    final isPrivate = widget.user.settings.isPrivateProfile;
 
-    // Optimistic UI — count moves immediately with the button.
+    // Optimistic UI — private requests do not change follower count.
     setState(() {
       _followBusy = true;
-      _isFollowing = !wasFollowing;
-      _followersCount = wasFollowing
-          ? (previousCount - 1).clamp(0, 1 << 30)
-          : previousCount + 1;
+      if (wasFollowing) {
+        _isFollowing = false;
+        _followRequestPending = false;
+        _followersCount = (previousCount - 1).clamp(0, 1 << 30);
+      } else if (wasRequested) {
+        _followRequestPending = false;
+      } else if (isPrivate) {
+        _followRequestPending = true;
+      } else {
+        _isFollowing = true;
+        _followersCount = previousCount + 1;
+      }
     });
 
     try {
@@ -1113,6 +1116,7 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
       if (!mounted) return;
       setState(() {
         _isFollowing = result.following;
+        _followRequestPending = result.requested;
         _followersCount = result.followersCount;
         _followBusy = false;
       });
@@ -1120,10 +1124,11 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
       if (!mounted) return;
       setState(() {
         _isFollowing = wasFollowing;
+        _followRequestPending = wasRequested;
         _followersCount = previousCount;
         _followBusy = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      AppToast.show(context, '$e');
     }
   }
 
@@ -1266,6 +1271,7 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
             const SizedBox(height: 16),
             _FollowButton(
               isFollowing: _isFollowing,
+              requested: _followRequestPending,
               busy: _followBusy,
               onPressed: _handleToggleFollow,
             ),
@@ -1276,25 +1282,38 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
   }
 }
 
-/// Follow = coral fill. Following = navy fill (same weight, clearly different).
+/// Follow = coral. Requested = cream/muted. Following = navy.
 class _FollowButton extends StatelessWidget {
   const _FollowButton({
     required this.isFollowing,
+    this.requested = false,
     required this.busy,
     required this.onPressed,
   });
 
   final bool isFollowing;
+  final bool requested;
   final bool busy;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final bg = isFollowing ? AppColors.secondary : AppColors.primary;
-    final fg = isFollowing
-        ? AppColors.secondaryForeground
-        : AppColors.primaryForeground;
-    final label = isFollowing ? 'FOLLOWING' : 'FOLLOW';
+    final Color bg;
+    final Color fg;
+    final String label;
+    if (isFollowing) {
+      bg = AppColors.secondary;
+      fg = AppColors.secondaryForeground;
+      label = 'FOLLOWING';
+    } else if (requested) {
+      bg = AppColors.muted;
+      fg = AppColors.secondary;
+      label = 'REQUESTED';
+    } else {
+      bg = AppColors.primary;
+      fg = AppColors.primaryForeground;
+      label = 'FOLLOW';
+    }
 
     return Material(
       color: Colors.transparent,
@@ -1302,9 +1321,8 @@ class _FollowButton extends StatelessWidget {
         onTap: busy ? null : onPressed,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 14),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             color: bg,
             border: Border.all(
@@ -1319,34 +1337,20 @@ class _FollowButton extends StatelessWidget {
               ),
             ],
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (busy)
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: fg),
-                )
-              else ...[
-                Icon(
-                  isFollowing
-                      ? Icons.check_circle_outline
-                      : Icons.person_add_alt_1,
-                  size: 18,
-                  color: fg,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: AppTextStyles.display(
-                    15,
-                    color: fg,
-                    letterSpacing: 0.06,
+          child: Center(
+            child: busy
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: fg,
+                    ),
+                  )
+                : Text(
+                    label,
+                    style: AppTextStyles.display(16, color: fg),
                   ),
-                ),
-              ],
-            ],
           ),
         ),
       ),

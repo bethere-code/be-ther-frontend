@@ -6,8 +6,8 @@ import '../../../../core/background_tasks/event_view_recorder.dart';
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
-import '../../../../core/design/widgets/author_avatar.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../../core/design/widgets/event_sheet_creator_row.dart';
 import '../../../../core/design/widgets/expandable_caption.dart';
 import '../../../../core/utils/link_utils.dart';
 import '../../../auth/presentation/auth_notifier.dart';
@@ -17,9 +17,11 @@ import '../../../feed/presentation/widgets/calendar_rsvp_sheet.dart';
 import '../../../feed/presentation/widgets/feed_attendees_sheet.dart';
 import '../../../feed/presentation/widgets/feed_comments_sheet.dart';
 import '../../../feed/presentation/widgets/feed_likes_sheet.dart';
+import '../../../feed/presentation/widgets/feed_post_more_menu.dart';
 import '../../../profile/presentation/profile_providers.dart';
 import '../../../profile/presentation/profile_screen.dart';
 import '../../domain/explore_event.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 String exploreEventHeroTag(String postId) => 'explore-event-image-$postId';
 
@@ -49,17 +51,19 @@ class _ExploreEventSheet extends ConsumerStatefulWidget {
 }
 
 class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
+  late ExploreEvent _event;
   late bool _inCalendar;
   String? _calendarStatus;
   bool _calendarBusy = false;
   late int _likesCount;
   late int _commentsCount;
 
-  ExploreEvent get event => widget.event;
+  ExploreEvent get event => _event;
 
   @override
   void initState() {
     super.initState();
+    _event = widget.event;
     _likesCount = event.likesCount;
     _commentsCount = event.commentsCount;
     _syncCalendarStatus();
@@ -71,7 +75,34 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
       final me = ref.read(authNotifierProvider).user;
       if (_isMine(me)) return;
       ref.read(eventViewRecorderProvider).enqueue(event.postId);
+      _hydrateAuthorIfNeeded();
     });
+  }
+
+  /// List payloads sometimes omit a populated author; pull it from the post API.
+  Future<void> _hydrateAuthorIfNeeded() async {
+    final existing = _event.author;
+    if (existing != null && existing.username.trim().isNotEmpty) return;
+    final postId = _event.postId;
+    if (postId.isEmpty) return;
+    try {
+      final post = await ref.read(postsRepositoryProvider).fetchPost(postId);
+      final username = post.author.username.trim();
+      if (!mounted || username.isEmpty) return;
+      setState(() {
+        _event = _event.copyWith(
+          author: ExploreAuthor.fromFeedAuthor(
+            id: post.author.id,
+            username: username,
+            displayName: post.author.displayName,
+            avatarUrl: post.author.avatarUrl,
+            badge: post.author.badge,
+          ),
+        );
+      });
+    } catch (_) {
+      // Keep sheet usable without creator row.
+    }
   }
 
   void _syncCalendarStatus({bool notify = false}) {
@@ -205,9 +236,7 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-        );
+        AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _calendarBusy = false);
@@ -240,9 +269,9 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
     final place = event.placeLabel;
     final dateLabel = event.formattedDateOnly;
     final timeLabel = event.formattedTime;
-    final headerLabel = !isMine && (author?.username.isNotEmpty ?? false)
-        ? '@${author!.username}'
-        : 'EVENT DETAILS';
+    final showCreator = !isMine &&
+        author != null &&
+        author.username.trim().isNotEmpty;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -294,16 +323,29 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          headerLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.display(
-                            20,
-                            color: AppColors.primary,
-                            letterSpacing: 0.05,
-                          ),
-                        ),
+                        child: showCreator
+                            ? EventSheetCreatorHeader(
+                                avatarUrl: author.avatarUrl,
+                                username: author.username,
+                                badge: author.badge,
+                                onTap: _openCreatorProfile,
+                              )
+                            : Text(
+                                'EVENT DETAILS',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.display(
+                                  20,
+                                  color: AppColors.primary,
+                                  letterSpacing: 0.05,
+                                ),
+                              ),
+                      ),
+                      FeedPostMoreMenu(
+                        postId: event.postId,
+                        isPast: event.isPast,
+                        isOwnPost: isMine,
+                        authorUsername: event.author?.username ?? '',
                       ),
                       IconButton(
                         visualDensity: VisualDensity.compact,
@@ -484,73 +526,6 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                       ],
                     ),
                   ),
-                  if (!isMine &&
-                      author != null &&
-                      author.username.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Material(
-                      color: AppColors.card,
-                      child: InkWell(
-                        onTap: _openCreatorProfile,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: AppColors.border,
-                              width: AppDimens.borderThin,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              AuthorAvatar(
-                                avatarUrl: author.avatarUrl,
-                                username: author.username,
-                                badge: author.badge,
-                                size: 44,
-                                interactive: false,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      author.displayName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppTextStyles.body(
-                                        15,
-                                        weight: FontWeight.w700,
-                                        color: AppColors.foreground,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '@${author.username}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppTextStyles.body(
-                                        13,
-                                        weight: FontWeight.w600,
-                                        color: AppColors.mutedForeground,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(
-                                Icons.chevron_right,
-                                color: AppColors.mutedForeground,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -633,15 +608,9 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                                   );
                                 } catch (e) {
                                   if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        e.toString().replaceFirst(
-                                          'Exception: ',
-                                          '',
-                                        ),
-                                      ),
-                                    ),
+                                  AppToast.show(
+                                    context,
+                                    e.toString().replaceFirst('Exception: ', ''),
                                   );
                                 }
                               },

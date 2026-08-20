@@ -12,22 +12,18 @@ class PostMoreMenuIcon extends StatelessWidget {
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: AppColors.secondary,
+        color: AppColors.secondaryForeground,
         shape: BoxShape.circle,
         border: Border.all(color: AppColors.background, width: 2),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x40000000),
-            blurRadius: 6,
+            color: AppColors.secondaryForeground,
+            blurRadius: 4,
             offset: Offset(0, 2),
           ),
         ],
       ),
-      child: const Icon(
-        Icons.more_vert,
-        color: AppColors.secondaryForeground,
-        size: 22,
-      ),
+      child: const Icon(Icons.more_vert, color: AppColors.secondary, size: 22),
     );
   }
 }

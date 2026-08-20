@@ -172,8 +172,10 @@ class UserRepository {
     }
   }
 
-  /// Toggle follow. Returns whether you now follow them + their follower count.
-  Future<({bool following, int followersCount})> toggleFollow(String username) async {
+  /// Toggle follow / request. Private targets may return [requested] instead of following.
+  Future<({bool following, bool requested, int followersCount})> toggleFollow(
+    String username,
+  ) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>('/api/v1/users/$username/follow');
       final body = res.data;
@@ -187,13 +189,46 @@ class UserRepository {
       if (data is Map) {
         return (
           following: data['following'] == true,
+          requested: data['requested'] == true,
           followersCount: (data['followersCount'] as num?)?.toInt() ?? 0,
         );
       }
-      return (following: false, followersCount: 0);
+      return (following: false, requested: false, followersCount: 0);
     } on DioException catch (e) {
       throw ApiException(
         _errorFromDio(e, fallback: 'Failed to update follow'),
+        statusCode: e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<({bool accepted, int followersCount})> respondFollowRequest({
+    required String username,
+    required String action,
+  }) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/users/$username/follow-request',
+        data: {'action': action},
+      );
+      final body = res.data;
+      if (body == null || body['ok'] != true) {
+        throw ApiException(
+          _messageFromBody(body, 'Failed to update follow request'),
+          statusCode: res.statusCode,
+        );
+      }
+      final data = body['data'];
+      if (data is Map) {
+        return (
+          accepted: data['accepted'] == true,
+          followersCount: (data['followersCount'] as num?)?.toInt() ?? 0,
+        );
+      }
+      return (accepted: false, followersCount: 0);
+    } on DioException catch (e) {
+      throw ApiException(
+        _errorFromDio(e, fallback: 'Failed to update follow request'),
         statusCode: e.response?.statusCode,
       );
     }

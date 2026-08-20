@@ -25,10 +25,12 @@ import '../../explore/presentation/explore_providers.dart';
 import '../../profile/presentation/profile_providers.dart';
 import '../data/places_repository.dart';
 import '../data/posts_repository.dart';
+import '../domain/feed_post.dart';
 import 'feed_providers.dart';
 import 'widgets/event_place_field.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
-Map<String, dynamic> _feedItemFromCreatedPost(
+FeedPost _feedItemFromCreatedPost(
   Map<String, dynamic> created,
   Map<String, dynamic>? me,
 ) {
@@ -50,7 +52,7 @@ Map<String, dynamic> _feedItemFromCreatedPost(
       ? calendarCount.toInt()
       : (inCalendar ? 1 : 0);
 
-  return <String, dynamic>{
+  return FeedPost.fromJson(<String, dynamic>{
     ...created,
     '_id': id,
     'postId': id,
@@ -62,7 +64,7 @@ Map<String, dynamic> _feedItemFromCreatedPost(
     'calendarCount': resolvedCalendarCount,
     'inCalendar': created['inCalendar'] ?? true,
     'calendarStatus': created['calendarStatus'] ?? created['status'] ?? 'going',
-  };
+  });
 }
 
 class AddPostScreen extends ConsumerStatefulWidget {
@@ -268,11 +270,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not load photo. Please try again.'),
-        ),
-      );
+      AppToast.show(context, 'Could not load photo. Please try again.');
     }
   }
 
@@ -586,9 +584,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     if (!mounted) return;
 
     if (_selectedDate == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Select a date first')));
+      AppToast.show(context, 'Select a date first');
       return;
     }
 
@@ -699,14 +695,10 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       final message = PostsRepository(
         ref.read(apiClientProvider),
       ).apiMessage(e, fallback: 'Failed to post event');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      AppToast.show(context, message);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
     } finally {
       for (final file in [compressedFile, defaultCoverFile]) {
         if (file == null) continue;

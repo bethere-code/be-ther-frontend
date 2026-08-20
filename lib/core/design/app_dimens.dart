@@ -7,6 +7,7 @@ abstract final class AppDimens {
   static const double borderThinnest = 1;
   static const double borderThin = 2;
   static const double border = 3;
+  static const double borderThinThick = 2.5;
   static const double borderThick = 4;
 
   /// Right rail footprint: 60px control + 8px padding on each side.

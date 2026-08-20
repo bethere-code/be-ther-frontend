@@ -16,10 +16,16 @@ class NotificationListTile extends StatelessWidget {
     super.key,
     required this.notification,
     required this.onOpen,
+    this.onAcceptFollowRequest,
+    this.onRejectFollowRequest,
+    this.actionsBusy = false,
   });
 
   final Map<String, dynamic> notification;
   final VoidCallback onOpen;
+  final VoidCallback? onAcceptFollowRequest;
+  final VoidCallback? onRejectFollowRequest;
+  final bool actionsBusy;
 
   static String messageForType(String type) {
     switch (type) {
@@ -27,6 +33,8 @@ class NotificationListTile extends StatelessWidget {
         return ' added your event to their wishlist';
       case 'calendar':
         return ' added your event to their calendar';
+      case 'follow_request':
+        return ' requested to follow you';
       case 'follow':
       case 'star': // legacy
       default:
@@ -77,6 +85,7 @@ class NotificationListTile extends StatelessWidget {
     final eventDate = _formatEventDate(post);
     final eventTime = _formatEventTime(post);
     final hasEvent = (type == 'wishlist' || type == 'calendar') && post != null;
+    final isFollowRequest = type == 'follow_request';
     final createdAt = DateTime.tryParse(
       notification['createdAt']?.toString() ?? '',
     );
@@ -167,6 +176,28 @@ class NotificationListTile extends StatelessWidget {
                         onTap: onOpen,
                       ),
                     ],
+                    if (isFollowRequest) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          _FollowRequestAction(
+                            icon: Icons.check,
+                            label: 'Accept',
+                            filled: true,
+                            busy: actionsBusy,
+                            onPressed: onAcceptFollowRequest,
+                          ),
+                          const SizedBox(width: 10),
+                          _FollowRequestAction(
+                            icon: Icons.close,
+                            label: 'Reject',
+                            filled: false,
+                            busy: actionsBusy,
+                            onPressed: onRejectFollowRequest,
+                          ),
+                        ],
+                      ),
+                    ],
                     // Profile link only for event notifications (not follows).
                     if (hasEvent && username.isNotEmpty) ...[
                       const SizedBox(height: 8),
@@ -185,6 +216,55 @@ class NotificationListTile extends StatelessWidget {
                     ],
                   ],
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FollowRequestAction extends StatelessWidget {
+  const _FollowRequestAction({
+    required this.icon,
+    required this.label,
+    required this.filled,
+    required this.busy,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool filled;
+  final bool busy;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = filled ? AppColors.primary : AppColors.card;
+    final fg = filled ? AppColors.primaryForeground : AppColors.secondary;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: busy ? null : onPressed,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: bg,
+            border: Border.all(
+              color: AppColors.border,
+              width: AppDimens.border,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: fg),
+              const SizedBox(width: 6),
+              Text(
+                label.toUpperCase(),
+                style: AppTextStyles.display(13, color: fg),
               ),
             ],
           ),

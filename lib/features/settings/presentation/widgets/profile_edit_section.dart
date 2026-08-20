@@ -13,6 +13,7 @@ import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/author_avatar.dart';
 import '../../../../core/media/photo_picker.dart';
 import '../../../profile/presentation/profile_providers.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 class ProfileEditSection extends ConsumerStatefulWidget {
   const ProfileEditSection({super.key});
@@ -26,7 +27,7 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
 
   void _snack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    AppToast.show(context, msg);
   }
 
   Future<void> _save(Map<String, dynamic> patch) async {

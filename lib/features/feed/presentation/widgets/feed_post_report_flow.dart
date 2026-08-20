@@ -5,6 +5,7 @@ import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../feed_providers.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 enum FeedPostReportType { eventCancelled, spam, bug }
 
@@ -36,9 +37,10 @@ Future<void> handleFeedPostReport({
     case FeedPostReportType.spam:
       await _showOptionalDetailsDialog(
         context: context,
-        title: 'REPORT AS SPAM?',
-        message: 'Only report if this post is misleading or unwanted. Add details if helpful.',
-        confirmLabel: 'REPORT SPAM',
+        title: 'REPORT EVENT?',
+        message:
+            'Only report if this event is misleading or unwanted. Add details if helpful.',
+        confirmLabel: 'REPORT',
         onSubmit: (details) => _submit(context, ref, postId, type, details),
       );
     case FeedPostReportType.bug:
@@ -63,15 +65,13 @@ Future<void> _submit(
     if (type == FeedPostReportType.bug) return;
     final message = switch (type) {
       FeedPostReportType.eventCancelled => 'Thanks — cancellation reported',
-      FeedPostReportType.spam => 'Thanks — spam report submitted',
+      FeedPostReportType.spam => 'Thanks — report submitted',
       FeedPostReportType.bug => '',
     };
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    AppToast.show(context, message);
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-    );
+    AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
   }
 }
 
@@ -235,9 +235,7 @@ class _BugReportDialogState extends State<_BugReportDialog> {
 
   void _submit() {
     if (_controller.text.trim().length < 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please describe the bug (at least 3 characters)')),
-      );
+      AppToast.show(context, 'Please describe the bug (at least 3 characters)');
       return;
     }
     Navigator.pop(context, _controller.text.trim());

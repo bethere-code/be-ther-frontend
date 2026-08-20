@@ -13,6 +13,7 @@ import '../../../feed/presentation/widgets/calendar_rsvp_sheet.dart';
 import '../../../profile/presentation/profile_providers.dart';
 import '../../domain/explore_event.dart';
 import 'explore_event_sheet.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 /// Shared layout constants for explore / search event tiles.
 abstract final class ExploreEventTileLayout {
@@ -142,9 +143,7 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-        );
+        AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _calendarBusy = false);

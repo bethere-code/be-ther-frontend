@@ -6,8 +6,8 @@ import 'package:intl/intl.dart';
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
-import '../../../../core/design/widgets/author_avatar.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../../core/design/widgets/event_sheet_creator_row.dart';
 import '../../../../core/design/widgets/expandable_caption.dart';
 import '../../../../core/design/widgets/post_more_menu_button.dart';
 import '../../../../core/utils/event_date_utils.dart';
@@ -20,9 +20,11 @@ import '../../../feed/presentation/widgets/calendar_rsvp_sheet.dart';
 import '../../../feed/presentation/widgets/feed_attendees_sheet.dart';
 import '../../../feed/presentation/widgets/feed_comments_sheet.dart';
 import '../../../feed/presentation/widgets/feed_likes_sheet.dart';
+import '../../../feed/presentation/widgets/feed_post_more_menu.dart';
 import '../../../notifications/presentation/notifications_providers.dart';
 import '../../../profile/presentation/profile_providers.dart';
 import '../../../profile/presentation/profile_screen.dart';
+import 'package:be_ther/core/ui/app_toast.dart';
 
 class ProfileCalendarEvent {
   const ProfileCalendarEvent({
@@ -156,6 +158,7 @@ class ProfileCalendarEvent {
     String? calendarStatus,
     int? likesCount,
     int? commentsCount,
+    ExploreAuthor? author,
   }) {
     return ProfileCalendarEvent(
       postId: postId,
@@ -173,7 +176,7 @@ class ProfileCalendarEvent {
       viewCount: viewCount,
       likesCount: likesCount ?? this.likesCount,
       commentsCount: commentsCount ?? this.commentsCount,
-      author: author,
+      author: author ?? this.author,
       bookmarked: bookmarked ?? this.bookmarked,
       source: source,
       isAuthoredByMe: isAuthoredByMe,
@@ -232,8 +235,7 @@ class _ProfileEventSheet extends ConsumerStatefulWidget {
 }
 
 class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
-  final _sheetMessengerKey = GlobalKey<ScaffoldMessengerState>();
-
+  late ProfileCalendarEvent _event;
   late bool _inCalendar;
   String? _calendarStatus;
   bool _busy = false;
@@ -247,11 +249,12 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   bool _goingLoading = false;
   bool _goingLoaded = false;
 
-  ProfileCalendarEvent get event => widget.event;
+  ProfileCalendarEvent get event => _event;
 
   @override
   void initState() {
     super.initState();
+    _event = widget.event;
     _likesCount = event.likesCount;
     _commentsCount = event.commentsCount;
     _hiddenOnProfile = event.hiddenOnProfile;
@@ -265,8 +268,32 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
       // Re-fetch viewer RSVP so we never show the profile owner's status.
       if (!event.isAuthoredByMe && event.postId.isNotEmpty) {
         _refreshViewerCalendarStatus();
+        _hydrateAuthorIfNeeded();
       }
     });
+  }
+
+  Future<void> _hydrateAuthorIfNeeded() async {
+    final existing = _event.author;
+    if (existing != null && existing.username.trim().isNotEmpty) return;
+    final postId = _event.postId;
+    if (postId.isEmpty) return;
+    try {
+      final post = await ref.read(postsRepositoryProvider).fetchPost(postId);
+      final username = post.author.username.trim();
+      if (!mounted || username.isEmpty) return;
+      setState(() {
+        _event = _event.copyWith(
+          author: ExploreAuthor.fromFeedAuthor(
+            id: post.author.id,
+            username: username,
+            displayName: post.author.displayName,
+            avatarUrl: post.author.avatarUrl,
+            badge: post.author.badge,
+          ),
+        );
+      });
+    } catch (_) {}
   }
 
   void _syncCalendarFromViewer() {
@@ -287,8 +314,8 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
       final post = await ref
           .read(postsRepositoryProvider)
           .fetchPost(event.postId);
-      final status = post['calendarStatus'] as String?;
-      final inCal = post['inCalendar'] as bool? ?? false;
+      final status = post.calendarStatus;
+      final inCal = post.inCalendar;
       final resolved = status ?? (inCal ? 'going' : null);
       ref
           .read(calendarStatusStoreProvider.notifier)
@@ -350,8 +377,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
       }
       if (!mounted) return;
       setState(() => _hiddenOnProfile = hide);
-      // Toast before calendar refresh — invalidate can briefly drop the parent
-      // Scaffold and crash ScaffoldMessenger if we snackbar afterward.
+      // Toast before calendar refresh so the user still sees feedback.
       _toast(
         hide
             ? 'Hidden from your public profile'
@@ -368,13 +394,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
 
   void _toast(String message) {
     if (!mounted) return;
-    // Use the sheet-local ScaffoldMessenger (see build) so we never depend on
-    // the profile Scaffold, which can briefly unmount during calendar refresh.
-    final messenger = _sheetMessengerKey.currentState;
-    if (messenger == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    AppToast.show(context, message);
   }
 
   void _openLikes() {
@@ -399,17 +419,11 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
     );
   }
 
-  /// Owner differs from the profile calendar we're browsing.
-  bool get _showOwnerRow {
+  /// Show creator when this event is not authored by the signed-in user.
+  bool get _showCreatorRow {
+    if (event.isAuthoredByMe) return false;
     final author = event.author;
-    if (author == null || author.username.isEmpty) return false;
-    return author.username.toLowerCase() !=
-        widget.profileUsername.toLowerCase();
-  }
-
-  String get _headerLabel {
-    if (_showOwnerRow) return '@${event.author!.username}';
-    return 'EVENT DETAILS';
+    return author != null && author.username.trim().isNotEmpty;
   }
 
   Future<void> _toggleCalendar() async {
@@ -456,9 +470,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
       if (cleared && mounted) Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -496,9 +508,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
       widget.onCalendarChanged();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -538,9 +548,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
       widget.onCalendarChanged();
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.maybeOf(navigator.context)
-          ?..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(success)));
+        AppToast.show(navigator.context, success);
       });
     } catch (e) {
       if (!mounted) return;
@@ -606,14 +614,10 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
       if (!mounted) return;
       widget.onCalendarChanged();
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Removed from your calendar')),
-      );
+      AppToast.show(context, 'Removed from your calendar');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -645,20 +649,18 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
         ? fullLocation
         : (place.isEmpty ? null : place);
 
-    return ScaffoldMessenger(
-      key: _sheetMessengerKey,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => Navigator.of(context).maybePop(),
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: GestureDetector(
-              // Keep sheet content taps from dismissing the modal.
-              onTap: () {},
-              child: Material(
-                color: AppColors.background,
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.of(context).maybePop(),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: GestureDetector(
+            // Keep sheet content taps from dismissing the modal.
+            onTap: () {},
+            child: Material(
+              color: AppColors.background,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     maxHeight: MediaQuery.sizeOf(context).height * 0.9,
@@ -699,16 +701,23 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                           Row(
                             children: [
                               Expanded(
-                                child: Text(
-                                  _headerLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.display(
-                                    20,
-                                    color: AppColors.primary,
-                                    letterSpacing: 0.05,
-                                  ),
-                                ),
+                                child: _showCreatorRow && author != null
+                                    ? EventSheetCreatorHeader(
+                                        avatarUrl: author.avatarUrl,
+                                        username: author.username,
+                                        badge: author.badge,
+                                        onTap: _openOwnerProfile,
+                                      )
+                                    : Text(
+                                        'EVENT DETAILS',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: AppTextStyles.display(
+                                          20,
+                                          color: AppColors.primary,
+                                          letterSpacing: 0.05,
+                                        ),
+                                      ),
                               ),
                               if (widget.isOwnProfile)
                                 PopupMenuButton<String>(
@@ -779,7 +788,14 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                                       ),
                                   ],
                                 )
-                              else
+                              else ...[
+                                FeedPostMoreMenu(
+                                  postId: event.postId,
+                                  isPast: event.isPast,
+                                  isOwnPost: event.isAuthoredByMe,
+                                  authorUsername:
+                                      event.author?.username ?? '',
+                                ),
                                 IconButton(
                                   visualDensity: VisualDensity.compact,
                                   onPressed: () => Navigator.pop(context),
@@ -789,6 +805,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                                     size: 26,
                                   ),
                                 ),
+                              ],
                             ],
                           ),
                           if (event.imageUrl.isNotEmpty) ...[
@@ -1035,73 +1052,6 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                               ],
                             ),
                           ),
-                          if (_showOwnerRow && author != null) ...[
-                            const SizedBox(height: 16),
-                            Material(
-                              color: AppColors.card,
-                              child: InkWell(
-                                onTap: _openOwnerProfile,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: AppColors.border,
-                                      width: AppDimens.borderThin,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      AuthorAvatar(
-                                        avatarUrl: author.avatarUrl,
-                                        username: author.username,
-                                        badge: author.badge,
-                                        size: 44,
-                                        interactive: false,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              author.displayName,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: AppTextStyles.body(
-                                                15,
-                                                weight: FontWeight.w700,
-                                                color: AppColors.foreground,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              '@${author.username}',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: AppTextStyles.body(
-                                                13,
-                                                weight: FontWeight.w600,
-                                                color:
-                                                    AppColors.mutedForeground,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const Icon(
-                                        Icons.chevron_right,
-                                        color: AppColors.mutedForeground,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
                           const SizedBox(height: 8),
                           Row(
                             children: [
@@ -1187,16 +1137,11 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                                           );
                                         } catch (e) {
                                           if (!context.mounted) return;
-                                          ScaffoldMessenger.of(
+                                          AppToast.show(
                                             context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                e.toString().replaceFirst(
-                                                  'Exception: ',
-                                                  '',
-                                                ),
-                                              ),
+                                            e.toString().replaceFirst(
+                                              'Exception: ',
+                                              '',
                                             ),
                                           );
                                         }
@@ -1214,7 +1159,6 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
             ),
           ),
         ),
-      ),
     );
   }
 }

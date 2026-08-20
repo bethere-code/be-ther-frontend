@@ -12,12 +12,11 @@ import '../../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../../core/design/widgets/expandable_caption.dart';
 import '../../../../core/design/widgets/post_interaction_row.dart';
 import '../../../../core/design/widgets/pressable.dart';
-import '../../../../core/utils/event_date_utils.dart';
-import '../../../../core/utils/post_author.dart';
 import '../../../../core/utils/time_utils.dart';
 import '../../../auth/presentation/auth_notifier.dart';
 import '../../../profile/presentation/profile_providers.dart';
 import '../../../profile/presentation/profile_screen.dart';
+import '../../domain/feed_post.dart';
 import '../calendar_status_store.dart';
 import '../feed_providers.dart';
 import 'calendar_rsvp_sheet.dart';
@@ -28,12 +27,12 @@ import 'feed_post_more_menu.dart';
 class FeedPostCard extends ConsumerStatefulWidget {
   const FeedPostCard({
     super.key,
-    required this.item,
+    required this.post,
     this.recordFeedImpression = true,
     this.onInteractionChanged,
   });
 
-  final Map<String, dynamic> item;
+  final FeedPost post;
   final bool recordFeedImpression;
   final VoidCallback? onInteractionChanged;
 
@@ -49,6 +48,8 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
   String? _calendarError;
   bool _feedViewScheduled = false;
 
+  FeedPost get post => widget.post;
+
   @override
   void initState() {
     super.initState();
@@ -62,14 +63,12 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
   @override
   void didUpdateWidget(covariant FeedPostCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.item['inCalendar'] != widget.item['inCalendar'] ||
-        oldWidget.item['calendarCount'] != widget.item['calendarCount'] ||
-        oldWidget.item['calendarStatus'] != widget.item['calendarStatus']) {
+    if (oldWidget.post.inCalendar != post.inCalendar ||
+        oldWidget.post.calendarCount != post.calendarCount ||
+        oldWidget.post.calendarStatus != post.calendarStatus) {
       _syncFromItem();
     }
-    final oldId = oldWidget.item['_id']?.toString() ?? '';
-    final newId = widget.item['_id']?.toString() ?? '';
-    if (oldId != newId) {
+    if (oldWidget.post.id != post.id) {
       _feedViewScheduled = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -79,32 +78,26 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
   }
 
   void _syncFromItem() {
-    final postId = widget.item['_id']?.toString() ?? '';
-    final apiStatus = widget.item['calendarStatus'] as String?;
-    final postStatus = widget.item['status'] as String?;
     final fromStore = resolveViewerCalendarStatus(
       store: ref.read(calendarStatusStoreProvider.notifier),
-      postId: postId,
-      apiCalendarStatus: apiStatus,
-      inCalendar: widget.item['inCalendar'] as bool? ?? false,
+      postId: post.id,
+      apiCalendarStatus: post.calendarStatus,
+      inCalendar: post.inCalendar,
       isMine: _isOwnPost,
-      postStatus: postStatus,
+      postStatus: post.status,
     );
     _calendarStatus = fromStore;
     _inCalendar = _isOwnPost || _calendarStatus != null;
-    _attendeesCount = (widget.item['calendarCount'] as num?)?.toInt() ?? 0;
+    _attendeesCount = post.calendarCount;
   }
 
-  /// Feed counts an impression without opening a details sheet.
-  /// Explore/search only count on sheet open; [EventViewRecorder] dedupes both.
   void _scheduleFeedImpression() {
     if (!widget.recordFeedImpression) return;
     if (_feedViewScheduled || _isOwnPost) return;
-    final postId = widget.item['_id']?.toString() ?? '';
+    final postId = post.id;
     if (postId.isEmpty) return;
     _feedViewScheduled = true;
 
-    // Slight delay so feed pagination / scroll requests stay ahead of views.
     Future<void>.delayed(const Duration(milliseconds: 300), () {
       if (!mounted) return;
       ref.read(eventViewRecorderProvider).enqueue(postId);
@@ -116,10 +109,8 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
     if (me == null) return false;
     final myId = me['_id']?.toString() ?? me['id']?.toString() ?? '';
     final myUsername = (me['username'] as String?)?.trim() ?? '';
-    final author = readPostAuthor(widget.item);
-    final authorId =
-        author['_id']?.toString() ?? author['id']?.toString() ?? '';
-    final authorUsername = (author['username'] as String?)?.trim() ?? '';
+    final authorId = post.author.id;
+    final authorUsername = post.author.username.trim();
     if (myId.isNotEmpty && authorId.isNotEmpty && myId == authorId) {
       return true;
     }
@@ -216,53 +207,38 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
 
   @override
   Widget build(BuildContext context) {
-    final item = widget.item;
-    final id = item['_id']?.toString() ?? '';
+    final id = post.id;
     final store = ref.watch(calendarStatusStoreProvider);
-    final apiFallback =
-        (item['calendarStatus'] as String?) ??
+    final apiFallback = post.calendarStatus ??
         (_isOwnPost
-            ? ((item['status'] as String?) == 'interested'
-                  ? 'interested'
-                  : 'going')
-            : ((item['inCalendar'] as bool? ?? false) ? 'going' : null));
+            ? (post.status == 'interested' ? 'interested' : 'going')
+            : (post.inCalendar ? 'going' : null));
     final effectiveStatus = store.containsKey(id)
         ? store[id]
         : (_calendarStatus ?? apiFallback);
     final effectiveInCalendar = _isOwnPost ? true : effectiveStatus != null;
 
-    final author = readPostAuthor(item);
-    final name =
-        author['displayName'] as String? ??
-        author['username'] as String? ??
-        'User';
-    final username = author['username'] as String? ?? '';
-    final avatar = author['avatarUrl'] as String? ?? '';
-    final badge = postAuthorBadge(item);
-    final liked = item['liked'] as bool? ?? false;
-    final location = item['location'] as String? ?? '';
-    final imageUrl = item['imageUrl'] as String? ?? '';
-    final caption = item['caption'] as String? ?? '';
-    final likes = item['likesCount'] as int? ?? 0;
-    final comments = item['commentsCount'] as int? ?? 0;
-    final details = item['eventDetails'] as Map<String, dynamic>?;
-    final ticketUrl = details?['ticketUrl'] as String?;
-    final isPast = EventDateUtils.isPostPast(item);
-    final createdAt = item['createdAt'] as String?;
-    final timestamp = createdAt != null
-        ? DateTime.parse(createdAt)
-        : DateTime.now();
-    final relativeTime = getRelativeTime(timestamp);
+    final name = post.author.displayName;
+    final username = post.author.username;
+    final avatar = post.author.avatarUrl;
+    final badge = post.author.badge;
+    final liked = post.liked;
+    final location = post.location;
+    final imageUrl = post.imageUrl;
+    final caption = post.caption;
+    final likes = post.likesCount;
+    final comments = post.commentsCount;
+    final details = post.eventDetails;
+    final ticketUrl = details.ticketUrl;
+    final isPast = post.isPast;
+    final relativeTime = getRelativeTime(post.createdAt);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 0),
       decoration: const BoxDecoration(
         color: AppColors.card,
         border: Border(
-          bottom: BorderSide(
-            color: AppColors.border,
-            width: AppDimens.borderThick,
-          ),
+          bottom: BorderSide(color: AppColors.border, width: AppDimens.border),
         ),
       ),
       child: Column(
@@ -315,6 +291,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                   postId: id,
                   isPast: isPast,
                   isOwnPost: _isOwnPost,
+                  authorUsername: username,
                 ),
                 // Container(
                 //   padding: const EdgeInsets.symmetric(
@@ -361,39 +338,39 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                   fit: StackFit.expand,
                   children: [
                     BeTherNetworkImage(url: imageUrl, fit: BoxFit.cover),
-                // Positioned(
-                //   top: 12,
-                //   right: 12,
-                //   child: Container(
-                //     padding: const EdgeInsets.symmetric(
-                //       horizontal: 10,
-                //       vertical: 8,
-                //     ),
-                //     color: AppColors.secondary.withValues(alpha: 0.9),
-                //     child: Row(
-                //       children: [
-                //         const Icon(
-                //           Icons.place,
-                //           color: AppColors.background,
-                //           size: 16,
-                //         ),
-                //         const SizedBox(width: 6),
-                //         Text(
-                //           country,
-                //           style: AppTextStyles.display(
-                //             12,
-                //             color: AppColors.background,
-                //             letterSpacing: 0.05,
-                //           ),
-                //         ),
-                //       ],
-                //     ),
-                //   ),
-                // ),
-              ],
-            ),
-          ),
-          )
+                    // Positioned(
+                    //   top: 12,
+                    //   right: 12,
+                    //   child: Container(
+                    //     padding: const EdgeInsets.symmetric(
+                    //       horizontal: 10,
+                    //       vertical: 8,
+                    //     ),
+                    //     color: AppColors.secondary.withValues(alpha: 0.9),
+                    //     child: Row(
+                    //       children: [
+                    //         const Icon(
+                    //           Icons.place,
+                    //           color: AppColors.background,
+                    //           size: 16,
+                    //         ),
+                    //         const SizedBox(width: 6),
+                    //         Text(
+                    //           country,
+                    //           style: AppTextStyles.display(
+                    //             12,
+                    //             color: AppColors.background,
+                    //             letterSpacing: 0.05,
+                    //           ),
+                    //         ),
+                    //       ],
+                    //     ),
+                    //   ),
+                    // ),
+                  ],
+                ),
+              ),
+            )
           else
             AspectRatio(
               aspectRatio: 21 / 9,
@@ -420,7 +397,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                   ),
                 )
               : const SizedBox.shrink(),
-          if (details != null && details.isNotEmpty)
+          if (!details.isEmpty)
             _EventDetails(
               details,
               isPast: isPast,
@@ -475,7 +452,7 @@ class _EventDetails extends StatelessWidget {
     this.onAttendeesTap,
   });
 
-  final Map<String, dynamic> details;
+  final FeedEventDetails details;
   final bool isPast;
   final String? calendarStatus;
   final bool inCalendar;
@@ -531,19 +508,14 @@ class _EventDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateRaw = details['date'] as String?;
-    final time = details['time'] as String?;
-    final venue = details['venue'] as String?;
-    final eventLocation = details['eventLocation'] is Map<String, dynamic>
-        ? details['eventLocation'] as Map<String, dynamic>
-        : null;
-    final formattedAddress =
-        (eventLocation?['formattedAddress'] as String?)?.trim();
+    final dateRaw = details.date;
+    final time = details.time;
+    final venue = details.venue;
+    final formattedAddress = details.eventLocation.formattedAddress.trim();
     final displayDate = _formatDisplayDate(dateRaw);
     final displayTime = _formatDisplayTime(time);
-    final displayVenue = (formattedAddress != null && formattedAddress.isNotEmpty)
-        ? formattedAddress
-        : venue?.trim();
+    final displayVenue =
+        formattedAddress.isNotEmpty ? formattedAddress : venue?.trim();
     final hasDateTime =
         displayDate != null || (displayTime != null && displayTime.isNotEmpty);
     final hasVenue = displayVenue != null && displayVenue.isNotEmpty;
@@ -736,4 +708,3 @@ class _EventDetailMeta extends StatelessWidget {
     );
   }
 }
-
