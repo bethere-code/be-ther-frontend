@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_colors.dart';
-import '../../../core/design/app_images.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/routing/deep_link_listener.dart';
 // import '../../../core/storage/onboarding_storage.dart';
@@ -106,42 +105,26 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       value: _overlayStyle,
       child: Scaffold(
         backgroundColor: AppColors.secondary,
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            Opacity(
-              opacity: 0.2,
-              child: Image.asset(AppImages.bgSecondaryFull, fit: BoxFit.cover),
-            ),
-            Center(
-              child: SizedBox(
-                height: 256,
-                child: AnimatedScale(
-                  duration: const Duration(milliseconds: 900),
-                  curve: const Cubic(0.6, 0.05, 0.01, 0.9),
-                  scale: 1 + (_zoomStep * 0.14),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // if (_wordIndex == 0)
-                      //   Image.asset(
-                      //     AppImages.beatherLogo,
-                      //     height: 300,
-                      //     fit: BoxFit.contain,
-                      //   )
-                      // else
-                      for (
-                        var i = (_wordIndex - 1).clamp(0, _wordIndex);
-                        i <= _wordIndex;
-                        i++
-                      )
-                        _WordLayer(word: _words[i], depth: _wordIndex - i),
-                    ],
-                  ),
-                ),
+        body: Center(
+          child: SizedBox(
+            height: 256,
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 900),
+              curve: const Cubic(0.6, 0.05, 0.01, 0.9),
+              scale: 1 + (_zoomStep * 0.14),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  for (
+                    var i = (_wordIndex - 1).clamp(0, _wordIndex);
+                    i <= _wordIndex;
+                    i++
+                  )
+                    _WordLayer(word: _words[i], depth: _wordIndex - i),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

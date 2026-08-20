@@ -2,7 +2,6 @@
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_colors.dart';
-import '../../../core/design/app_images.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/be_ther_buttons.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
@@ -21,13 +20,11 @@ class OnboardingScreen extends StatefulWidget {
 class _SlideData {
   const _SlideData({
     required this.remoteUrl,
-    this.localAsset,
     required this.title,
     required this.subtitle,
   });
 
   final String remoteUrl;
-  final String? localAsset;
   final String title;
   final String subtitle;
 }
@@ -37,7 +34,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _SlideData(
       remoteUrl:
           'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80',
-      localAsset: AppImages.onboardingDiscoverFull,
       title: 'DISCOVER',
       subtitle: 'Where your friends are going',
     ),
@@ -91,13 +87,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                if (s.localAsset != null)
-                                  Image.asset(s.localAsset!, fit: BoxFit.cover)
-                                else
-                                  BeTherNetworkImage(
-                                    url: s.remoteUrl,
-                                    fit: BoxFit.cover,
-                                  ),
+                                BeTherNetworkImage(
+                                  url: s.remoteUrl,
+                                  fit: BoxFit.cover,
+                                ),
                                 Container(
                                   decoration: BoxDecoration(
                                     border: Border.all(
