@@ -11,7 +11,7 @@ class AuthRepository {
   final Dio _dio;
 
   Future<Map<String, dynamic>> _clientMeta() async {
-    final device = await collectDeviceSnapshot();
+    final device = await collectDeviceSnapshot(includeLocationIfAllowed: true);
     final body = <String, dynamic>{'device': device.toJson()};
     final fcm = await currentFcmToken();
     if (fcm != null && fcm.isNotEmpty) body['fcmToken'] = fcm;

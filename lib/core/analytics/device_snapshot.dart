@@ -2,7 +2,26 @@ import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+
+class DeviceLocation {
+  const DeviceLocation({
+    required this.lat,
+    required this.lng,
+    this.accuracyM,
+  });
+
+  final double lat;
+  final double lng;
+  final double? accuracyM;
+
+  Map<String, dynamic> toJson() => {
+        'lat': lat,
+        'lng': lng,
+        if (accuracyM != null) 'accuracyM': accuracyM,
+      };
+}
 
 class DeviceSnapshot {
   const DeviceSnapshot({
@@ -12,6 +31,7 @@ class DeviceSnapshot {
     required this.appVersion,
     required this.appBuild,
     required this.deviceId,
+    this.location,
   });
 
   final String platform;
@@ -20,6 +40,7 @@ class DeviceSnapshot {
   final String appVersion;
   final String appBuild;
   final String deviceId;
+  final DeviceLocation? location;
 
   Map<String, dynamic> toJson() => {
         'platform': platform,
@@ -28,10 +49,42 @@ class DeviceSnapshot {
         'appVersion': appVersion,
         'appBuild': appBuild,
         'deviceId': deviceId,
+        if (location != null) 'location': location!.toJson(),
       };
 }
 
-Future<DeviceSnapshot> collectDeviceSnapshot() async {
+/// Reads GPS only if the OS already granted location — never prompts.
+Future<DeviceLocation?> readLocationIfAllowed() async {
+  if (kIsWeb) return null;
+  if (!(Platform.isAndroid || Platform.isIOS)) return null;
+  try {
+    if (!await Geolocator.isLocationServiceEnabled()) return null;
+    final permission = await Geolocator.checkPermission();
+    if (permission != LocationPermission.whileInUse &&
+        permission != LocationPermission.always) {
+      return null;
+    }
+    final pos = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.low,
+        timeLimit: Duration(seconds: 3),
+      ),
+    );
+    return DeviceLocation(
+      lat: pos.latitude,
+      lng: pos.longitude,
+      accuracyM: pos.accuracy.isFinite ? pos.accuracy : null,
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Device/app identity. Pass [includeLocationIfAllowed] only on auth
+/// (login / signup / logout) — not on routine API or analytics flushes.
+Future<DeviceSnapshot> collectDeviceSnapshot({
+  bool includeLocationIfAllowed = false,
+}) async {
   final pkg = await PackageInfo.fromPlatform();
   final plugin = DeviceInfoPlugin();
   var model = '';
@@ -58,13 +111,18 @@ Future<DeviceSnapshot> collectDeviceSnapshot() async {
     deviceId = info.identifierForVendor ?? '';
   }
 
-  final snap = DeviceSnapshot(
+  DeviceLocation? location;
+  if (includeLocationIfAllowed) {
+    location = await readLocationIfAllowed();
+  }
+
+  return DeviceSnapshot(
     platform: platform,
     model: model,
     os: os,
     appVersion: pkg.version,
     appBuild: pkg.buildNumber,
     deviceId: deviceId,
+    location: location,
   );
-  return snap;
 }

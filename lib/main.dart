@@ -8,6 +8,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'app.dart';
 import 'core/analytics/analytics_tracker.dart';
 import 'core/background_tasks/notification_syncer.dart';
+import 'core/network/connectivity_controller.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/auth_notifier.dart';
@@ -44,6 +45,8 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> with WidgetsBinding
     // Initialize notification syncer on app startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(notificationSyncerProvider).start();
+      // Kick connectivity watch early (also watched by OfflineBarrier).
+      ref.read(connectivityProvider);
       _syncAnalyticsTracker();
     });
   }
@@ -66,6 +69,8 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> with WidgetsBinding
     if (state == AppLifecycleState.resumed) {
       // Immediately sync notifications when app resumes from background
       ref.read(notificationSyncerProvider).syncNow();
+      // Re-probe: OS may have restored network while we were suspended.
+      ref.read(connectivityProvider.notifier).checkNow();
     }
   }
 

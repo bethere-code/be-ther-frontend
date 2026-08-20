@@ -75,7 +75,8 @@ class AnalyticsTracker with WidgetsBindingObserver {
   Future<void> recordAuth(String action) async {
     Map<String, dynamic>? device;
     try {
-      device = (await collectDeviceSnapshot()).toJson();
+      device = (await collectDeviceSnapshot(includeLocationIfAllowed: true))
+          .toJson();
     } catch (_) {
       device = null;
     }
