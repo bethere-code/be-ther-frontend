@@ -79,10 +79,12 @@ class ExploreEvent {
     this.ticketUrl,
     this.caption,
     this.author,
+    this.authorUserId = '',
     this.liked = false,
     this.bookmarked = false,
     this.likesCount = 0,
     this.commentsCount = 0,
+    this.editedAt,
   });
 
   final String id;
@@ -101,6 +103,8 @@ class ExploreEvent {
   final bool trending;
   final String status;
   final ExploreAuthor? author;
+  /// Post author id when list payloads only include a raw id string.
+  final String authorUserId;
   final bool liked;
   final bool bookmarked;
   final bool inCalendar;
@@ -108,6 +112,9 @@ class ExploreEvent {
   final bool isPast;
   final int likesCount;
   final int commentsCount;
+  final DateTime? editedAt;
+
+  bool get isEdited => editedAt != null;
 
   String get postId => id;
 
@@ -218,6 +225,7 @@ class ExploreEvent {
       trending: json['trending'] as bool? ?? likesCount >= 5,
       status: json['status'] as String? ?? '',
       author: ExploreAuthor.tryParse(json['authorId'] ?? json['author']),
+      authorUserId: _parseAuthorUserId(json),
       liked: json['liked'] as bool? ?? false,
       bookmarked: json['bookmarked'] as bool? ?? false,
       inCalendar: json['inCalendar'] as bool? ?? false,
@@ -226,6 +234,7 @@ class ExploreEvent {
       isPast: isPast,
       likesCount: likesCount,
       commentsCount: commentsCount,
+      editedAt: _parseEditedAt(json['editedAt']),
     );
   }
 
@@ -247,6 +256,7 @@ class ExploreEvent {
     int? commentsCount,
     bool? liked,
     ExploreAuthor? author,
+    DateTime? editedAt,
   }) {
     return ExploreEvent(
       id: id,
@@ -264,6 +274,7 @@ class ExploreEvent {
       trending: trending,
       status: status,
       author: author ?? this.author,
+      authorUserId: authorUserId,
       liked: liked ?? this.liked,
       bookmarked: bookmarked,
       inCalendar: inCalendar ?? this.inCalendar,
@@ -271,13 +282,29 @@ class ExploreEvent {
       isPast: isPast,
       likesCount: likesCount ?? this.likesCount,
       commentsCount: commentsCount ?? this.commentsCount,
+      editedAt: editedAt ?? this.editedAt,
     );
+  }
+
+  static DateTime? _parseEditedAt(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
   }
 
   static String? _nullableTrim(String? value) {
     final t = value?.trim();
     if (t == null || t.isEmpty) return null;
     return t;
+  }
+
+  static String _parseAuthorUserId(Map<String, dynamic> json) {
+    final raw = json['authorId'] ?? json['author'];
+    if (raw is String) return raw.trim();
+    if (raw is Map) {
+      return (raw['_id'] ?? raw['id'])?.toString().trim() ?? '';
+    }
+    return '';
   }
 
   static String? _formatDate(String? raw) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/widgets/event_edited_badge.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
@@ -248,7 +249,11 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
                         if (dateLabel != null ||
                             (timeLabel != null && timeLabel.isNotEmpty)) ...[
                           const SizedBox(height: 8),
-                          _DateTimeRow(date: dateLabel, time: timeLabel),
+                          _DateTimeRow(
+                            date: dateLabel,
+                            time: timeLabel,
+                            showEdited: event.isEdited,
+                          ),
                         ],
                         const SizedBox(height: 8),
                         if (event.showAttendees || event.hasTicketUrl) ...[
@@ -382,10 +387,15 @@ class _TicketCircleButton extends StatelessWidget {
 }
 
 class _DateTimeRow extends StatelessWidget {
-  const _DateTimeRow({this.date, this.time});
+  const _DateTimeRow({
+    this.date,
+    this.time,
+    this.showEdited = false,
+  });
 
   final String? date;
   final String? time;
+  final bool showEdited;
 
   static final TextStyle _metaStyle = AppTextStyles.body(
     11,
@@ -433,7 +443,7 @@ class _DateTimeRow extends StatelessWidget {
                 color: AppColors.mutedForeground,
               ),
               const SizedBox(width: 4),
-              Expanded(
+              Flexible(
                 child: Text(
                   time!,
                   maxLines: 1,
@@ -441,6 +451,10 @@ class _DateTimeRow extends StatelessWidget {
                   style: _metaStyle,
                 ),
               ),
+              if (showEdited) ...[
+                const SizedBox(width: 8),
+                const EventEditedBadge(),
+              ],
             ],
           ),
       ],

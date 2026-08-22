@@ -2,72 +2,248 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/presentation/auth_notifier.dart';
 import '../../explore/presentation/explore_providers.dart';
+import '../../feed/domain/feed_post.dart';
+import '../../feed/presentation/calendar_status_store.dart';
 import '../../feed/presentation/feed_providers.dart';
 import 'profile_providers.dart';
 
-/// Usernames blocked this session (lowercase) — hide their posts immediately
-/// while feed / explore / calendar caches catch up from the API.
-final sessionBlockedUsernamesProvider =
-    NotifierProvider<SessionBlockedUsernamesNotifier, Set<String>>(
-  SessionBlockedUsernamesNotifier.new,
+/// Authors blocked this session — hide their content immediately (optimistic).
+///
+/// Pattern: tombstone by author identity (id + username) + purge known post IDs
+/// from local caches; API sync afterward; rollback tombstones on failure.
+class SessionBlockedAuthors {
+  const SessionBlockedAuthors({
+    this.usernames = const {},
+    this.userIds = const {},
+  });
+
+  /// Lowercased usernames.
+  final Set<String> usernames;
+
+  /// Author user ids.
+  final Set<String> userIds;
+
+  bool get isEmpty => usernames.isEmpty && userIds.isEmpty;
+}
+
+final sessionBlockedAuthorsProvider =
+    NotifierProvider<SessionBlockedAuthorsNotifier, SessionBlockedAuthors>(
+  SessionBlockedAuthorsNotifier.new,
 );
 
-class SessionBlockedUsernamesNotifier extends Notifier<Set<String>> {
+class SessionBlockedAuthorsNotifier extends Notifier<SessionBlockedAuthors> {
   @override
-  Set<String> build() => const {};
+  SessionBlockedAuthors build() => const SessionBlockedAuthors();
 
-  void block(String username) {
-    final u = username.trim().toLowerCase();
-    if (u.isEmpty || state.contains(u)) return;
-    state = {...state, u};
+  void block({String? username, String? userId}) {
+    final u = username?.trim().toLowerCase() ?? '';
+    final id = userId?.trim() ?? '';
+    if (u.isEmpty && id.isEmpty) return;
+    final alreadyUser = u.isEmpty || state.usernames.contains(u);
+    final alreadyId = id.isEmpty || state.userIds.contains(id);
+    if (alreadyUser && alreadyId) return;
+    state = SessionBlockedAuthors(
+      usernames: u.isEmpty ? state.usernames : {...state.usernames, u},
+      userIds: id.isEmpty ? state.userIds : {...state.userIds, id},
+    );
   }
 
-  void unblock(String username) {
-    final u = username.trim().toLowerCase();
-    if (u.isEmpty || !state.contains(u)) return;
-    final next = {...state}..remove(u);
-    state = next;
+  void unblock({String? username, String? userId}) {
+    final u = username?.trim().toLowerCase() ?? '';
+    final id = userId?.trim() ?? '';
+    if (u.isEmpty && id.isEmpty) return;
+    state = SessionBlockedAuthors(
+      usernames: u.isEmpty
+          ? state.usernames
+          : ({...state.usernames}..remove(u)),
+      userIds: id.isEmpty ? state.userIds : ({...state.userIds}..remove(id)),
+    );
   }
-
-  bool contains(String username) =>
-      state.contains(username.trim().toLowerCase());
 }
 
-bool isAuthorSessionBlocked(Set<String> blocked, String? username) {
+bool isAuthorSessionBlocked(
+  SessionBlockedAuthors blocked, {
+  String? username,
+  String? userId,
+}) {
+  if (blocked.isEmpty) return false;
+  final id = userId?.trim() ?? '';
+  if (id.isNotEmpty && blocked.userIds.contains(id)) return true;
   final u = username?.trim().toLowerCase() ?? '';
-  return u.isNotEmpty && blocked.contains(u);
+  return u.isNotEmpty && blocked.usernames.contains(u);
 }
 
-/// Optimistic block: hide posts now, then persist. Rolls back the hide on API failure.
-Future<void> blockUserOptimistic(WidgetRef ref, String username) async {
-  final u = username.trim();
-  if (u.isEmpty) throw Exception('Missing username');
+bool _matchesAuthor({
+  required String blockedUsername,
+  required String blockedUserId,
+  String? username,
+  String? userId,
+}) {
+  return isAuthorSessionBlocked(
+    SessionBlockedAuthors(
+      usernames: blockedUsername.isEmpty ? const {} : {blockedUsername},
+      userIds: blockedUserId.isEmpty ? const {} : {blockedUserId},
+    ),
+    username: username,
+    userId: userId,
+  );
+}
 
-  final session = ref.read(sessionBlockedUsernamesProvider.notifier);
-  session.block(u);
+/// Optimistic block: purge local caches now, persist, soft-refresh. Rollback on fail.
+Future<void> blockUserOptimistic(
+  WidgetRef ref, {
+  required String username,
+  String? authorId,
+  String? triggerPostId,
+}) async {
+  final u = username.trim();
+  final id = authorId?.trim() ?? '';
+  if (u.isEmpty && id.isEmpty) throw Exception('Missing user');
+
+  final session = ref.read(sessionBlockedAuthorsProvider.notifier);
+  session.block(username: u, userId: id);
+
+  final purged = _purgeLocalAuthorContent(
+    ref,
+    username: u.toLowerCase(),
+    userId: id,
+    triggerPostId: triggerPostId,
+  );
 
   try {
+    // API block is by username.
+    if (u.isEmpty) throw Exception('Missing username');
     await ref.read(userRepositoryProvider).setBlocked(u, blocked: true);
     _invalidateAfterBlockChange(ref, u);
   } catch (_) {
-    session.unblock(u);
+    session.unblock(username: u, userId: id);
+    _restorePurged(ref, purged);
     rethrow;
   }
 }
 
-Future<void> unblockUserOptimistic(WidgetRef ref, String username) async {
+Future<void> unblockUserOptimistic(
+  WidgetRef ref, {
+  required String username,
+  String? authorId,
+}) async {
   final u = username.trim();
+  final id = authorId?.trim() ?? '';
   if (u.isEmpty) throw Exception('Missing username');
 
-  final session = ref.read(sessionBlockedUsernamesProvider.notifier);
-  session.unblock(u);
+  final session = ref.read(sessionBlockedAuthorsProvider.notifier);
+  session.unblock(username: u, userId: id);
 
   try {
     await ref.read(userRepositoryProvider).setBlocked(u, blocked: false);
     _invalidateAfterBlockChange(ref, u);
   } catch (_) {
-    session.block(u);
+    session.block(username: u, userId: id);
     rethrow;
+  }
+}
+
+class _PurgeSnapshot {
+  _PurgeSnapshot({
+    required this.postIds,
+    required this.calendarBefore,
+    required this.localInsertsBefore,
+  });
+
+  final Set<String> postIds;
+  final Map<String, String?> calendarBefore;
+  final List<FeedPost> localInsertsBefore;
+}
+
+_PurgeSnapshot _purgeLocalAuthorContent(
+  WidgetRef ref, {
+  required String username,
+  required String userId,
+  String? triggerPostId,
+}) {
+  final postIds = <String>{};
+  final trigger = triggerPostId?.trim() ?? '';
+  if (trigger.isNotEmpty) postIds.add(trigger);
+
+  final feed = ref.read(feedProvider).asData?.value;
+  if (feed != null) {
+    for (final post in feed.items) {
+      if (_matchesAuthor(
+        blockedUsername: username,
+        blockedUserId: userId,
+        username: post.author.username,
+        userId: post.author.id,
+      )) {
+        final pid = post.id.trim();
+        if (pid.isNotEmpty) postIds.add(pid);
+      }
+    }
+  }
+
+  final inserts = ref.read(feedLocalInsertsProvider);
+  for (final post in inserts) {
+    if (_matchesAuthor(
+      blockedUsername: username,
+      blockedUserId: userId,
+      username: post.author.username,
+      userId: post.author.id,
+    )) {
+      final pid = post.id.trim();
+      if (pid.isNotEmpty) postIds.add(pid);
+    }
+  }
+
+  final explore = ref.read(exploreEventsProvider).asData?.value;
+  if (explore != null) {
+    for (final event in explore) {
+      if (_matchesAuthor(
+        blockedUsername: username,
+        blockedUserId: userId,
+        username: event.author?.username,
+        userId: event.author?.id,
+      )) {
+        final pid = event.id.trim();
+        if (pid.isNotEmpty) postIds.add(pid);
+      }
+    }
+  }
+
+  final calendar = ref.read(calendarStatusStoreProvider.notifier);
+  final calendarBefore = <String, String?>{};
+  final calState = ref.read(calendarStatusStoreProvider);
+  for (final postId in postIds) {
+    if (calState.containsKey(postId)) {
+      calendarBefore[postId] = calState[postId];
+    }
+    calendar.setStatus(postId, null);
+  }
+
+  final localBefore = List<FeedPost>.of(inserts);
+  ref.read(feedLocalInsertsProvider.notifier).removeWhere(
+        (p) => _matchesAuthor(
+          blockedUsername: username,
+          blockedUserId: userId,
+          username: p.author.username,
+          userId: p.author.id,
+        ),
+      );
+
+  ref.read(deletedPostIdsProvider.notifier).markDeletedMany(postIds);
+
+  return _PurgeSnapshot(
+    postIds: postIds,
+    calendarBefore: calendarBefore,
+    localInsertsBefore: localBefore,
+  );
+}
+
+void _restorePurged(WidgetRef ref, _PurgeSnapshot purged) {
+  ref.read(deletedPostIdsProvider.notifier).restoreMany(purged.postIds);
+  final calendar = ref.read(calendarStatusStoreProvider.notifier);
+  purged.calendarBefore.forEach(calendar.setStatus);
+  final inserts = ref.read(feedLocalInsertsProvider.notifier);
+  for (final post in purged.localInsertsBefore.reversed) {
+    inserts.prepend(post);
   }
 }
 

@@ -16,6 +16,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
+import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../core/design/widgets/be_ther_buttons.dart';
 import '../../../core/media/default_event_image.dart';
 import '../../../core/media/ticket_link_preview.dart';
@@ -25,6 +26,7 @@ import '../../explore/presentation/explore_providers.dart';
 import '../../profile/presentation/profile_providers.dart';
 import '../data/places_repository.dart';
 import '../data/posts_repository.dart';
+import '../domain/edited_post_overlay.dart';
 import '../domain/feed_post.dart';
 import 'feed_providers.dart';
 import 'widgets/event_place_field.dart';
@@ -68,13 +70,33 @@ FeedPost _feedItemFromCreatedPost(
 }
 
 class AddPostScreen extends ConsumerStatefulWidget {
-  const AddPostScreen({super.key});
+  const AddPostScreen({super.key, this.editPostId});
 
   static const path = '/add';
   static const name = 'add';
 
+  final String? editPostId;
+
+  bool get isEditing => editPostId != null && editPostId!.trim().isNotEmpty;
+
   @override
   ConsumerState<AddPostScreen> createState() => _AddPostScreenState();
+}
+
+/// Opens the add/edit sheet. Set [closeParent] when launching from a modal sheet.
+Future<void> openEditPostScreen(
+  BuildContext context,
+  String postId, {
+  bool closeParent = false,
+}) async {
+  if (postId.trim().isEmpty) return;
+  if (closeParent) {
+    Navigator.of(context).maybePop();
+  }
+  if (!context.mounted) return;
+  await GoRouter.of(context).push(
+    '${AddPostScreen.path}?edit=${Uri.encodeComponent(postId.trim())}',
+  );
 }
 
 class _AddPostScreenState extends ConsumerState<AddPostScreen> {
@@ -118,6 +140,13 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   /// after we clear the invalid selection.
   bool _pastTimeRejected = false;
 
+  String? _existingImageUrl;
+  bool _usesDefaultCover = false;
+  bool _editLoading = false;
+  FeedPost? _editingPost;
+
+  bool get _isEditing => widget.isEditing;
+
   static const _fieldEventName = 'eventName';
   static const _fieldDescription = 'description';
   static const _fieldDate = 'date';
@@ -129,8 +158,76 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   void initState() {
     super.initState();
     _ticket.addListener(_onTicketTextChanged);
-    // If permission was already granted elsewhere in the app, capture poster GPS.
     unawaited(_tryCaptureUserLatLng());
+    if (_isEditing) {
+      unawaited(_loadForEdit());
+    }
+  }
+
+  Future<void> _loadForEdit() async {
+    final postId = widget.editPostId?.trim();
+    if (postId == null || postId.isEmpty) return;
+    setState(() => _editLoading = true);
+    try {
+      final post = await ref.read(postsRepositoryProvider).fetchPost(postId);
+      if (!mounted) return;
+      _editingPost = post;
+      final details = post.eventDetails;
+      _eventName.text = post.location;
+      _description.text = post.caption;
+      _existingImageUrl = post.imageUrl;
+      _usesDefaultCover = post.usesDefaultCover;
+      _isGoing = post.status == 'going';
+      _ticket.text = details.ticketUrl ?? '';
+
+      final dateRaw = details.date?.trim();
+      if (dateRaw != null && dateRaw.isNotEmpty) {
+        _selectedDate = DateTime.tryParse(dateRaw.length >= 10 ? dateRaw.substring(0, 10) : dateRaw);
+      }
+      _selectedTime = _parseTimeFromApi(details.time);
+
+      final loc = details.eventLocation;
+      if (!loc.isEmpty) {
+        _selectedPlace = StructuredPlace(
+          placeId: loc.placeId,
+          name: loc.name.isNotEmpty ? loc.name : (details.venue ?? post.location),
+          formattedAddress: loc.formattedAddress,
+          locality: '',
+          street: '',
+          area: '',
+          city: '',
+          district: '',
+          state: '',
+          country: '',
+          postalCode: '',
+          lat: loc.lat ?? 0,
+          lng: loc.lng ?? 0,
+        );
+      }
+
+      if (!_usesDefaultCover && post.imageUrl.trim().isNotEmpty) {
+        _imagePath = post.imageUrl;
+      }
+
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.show(context, e.toString().replaceFirst('Exception: ', ''));
+      _popRoute();
+    } finally {
+      if (mounted) setState(() => _editLoading = false);
+    }
+  }
+
+  TimeOfDay? _parseTimeFromApi(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final match = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(raw.trim());
+    if (match == null) return null;
+    final hour = int.tryParse(match.group(1)!);
+    final minute = int.tryParse(match.group(2)!);
+    if (hour == null || minute == null) return null;
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return TimeOfDay(hour: hour, minute: minute);
   }
 
   @override
@@ -277,6 +374,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   void _clearEventPhoto() {
     setState(() {
       _imagePath = null;
+      _existingImageUrl = null;
+      _usesDefaultCover = false;
       _imageFromTicketLink = false;
       _ticketPreviewMessage = null;
     });
@@ -629,13 +728,12 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   }
 
   Future<void> _post() async {
-    if (_busy) return;
+    if (_busy || _editLoading) return;
     _unfocus();
     setState(() => _attemptedSubmit = true);
 
     if (_hasValidationErrors()) return;
 
-    // Last chance to attach poster coordinates if permission already exists.
     await _tryCaptureUserLatLng();
     if (!mounted) return;
 
@@ -645,18 +743,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     File? compressedFile;
     File? defaultCoverFile;
     try {
-      final String imagePath;
-      if (_imagePath != null && await File(_imagePath!).exists()) {
-        imagePath = _imagePath!;
-      } else {
-        defaultCoverFile = await buildDefaultEventCoverFile();
-        imagePath = defaultCoverFile.path;
-      }
-
-      compressedFile = await _compressPhoto(imagePath);
       final dio = ref.read(apiClientProvider);
       final posts = PostsRepository(dio);
-      final url = await posts.uploadImage(compressedFile.path);
       final place = _selectedPlace!;
       final eventDetails = <String, dynamic>{
         'type': 'event',
@@ -668,15 +756,86 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         if (_userLatLng != null)
           'userLocation': {'lat': _userLatLng!.lat, 'lng': _userLatLng!.lng},
       };
-      final created = await posts.createPost({
+
+      String imageUrl;
+      var usesDefaultCover = _usesDefaultCover;
+      final pickedLocal = _imagePath != null && !_imagePath!.startsWith('http');
+      if (pickedLocal && await File(_imagePath!).exists()) {
+        compressedFile = await _compressPhoto(_imagePath!);
+        imageUrl = await posts.uploadImage(compressedFile.path);
+        usesDefaultCover = false;
+      } else if (_isEditing && _existingImageUrl != null && _existingImageUrl!.isNotEmpty) {
+        imageUrl = _existingImageUrl!;
+      } else {
+        defaultCoverFile = await buildDefaultEventCoverFile();
+        compressedFile = await _compressPhoto(defaultCoverFile.path);
+        imageUrl = await posts.uploadImage(compressedFile.path);
+        usesDefaultCover = true;
+      }
+
+      final payload = <String, dynamic>{
         'location': _eventName.text.trim(),
         'status': _isGoing ? 'going' : 'interested',
-        'imageUrl': url,
+        'imageUrl': imageUrl,
         'caption': _description.text.trim(),
+        'usesDefaultCover': usesDefaultCover,
+        'eventDetails': eventDetails,
+      };
+
+      if (_isEditing) {
+        final postId = widget.editPostId!.trim();
+        final base = _editingPost;
+        if (base != null) {
+          final optimistic = buildEditedFeedPost(
+            base: base,
+            location: _eventName.text.trim(),
+            caption: _description.text.trim(),
+            imageUrl: imageUrl,
+            usesDefaultCover: usesDefaultCover,
+            status: _isGoing ? 'going' : 'interested',
+            place: StructuredPlaceFields(
+              placeId: place.placeId,
+              name: place.name,
+              formattedAddress: place.formattedAddress,
+              lat: place.lat,
+              lng: place.lng,
+            ),
+            date: _formatDateForApi(),
+            time: _formatTimeForApi(),
+            ticketUrl: ticketUrl,
+          );
+          ref.read(editedPostsProvider.notifier).apply(optimistic);
+        }
+
+        try {
+          final updatedRaw = await posts.updatePost(postId, payload);
+          final updated = FeedPost.fromJson(updatedRaw);
+          ref.read(editedPostsProvider.notifier).apply(updated);
+        } catch (e) {
+          ref.read(editedPostsProvider.notifier).revert(postId);
+          rethrow;
+        }
+
+        ref.invalidate(feedProvider);
+        ref.invalidate(exploreEventsProvider);
+        ref.invalidate(profileMeProvider);
+        final me = ref.read(authNotifierProvider).user;
+        final username = me?['username']?.toString().trim() ?? '';
+        if (username.isNotEmpty) {
+          ref.invalidate(profileEventsProvider(username));
+          ref.invalidate(profileCalendarProvider(username));
+        }
+        if (!mounted) return;
+        AppToast.show(context, 'Event updated');
+        _popRoute();
+        return;
+      }
+
+      final created = await posts.createPost({
+        ...payload,
         'isPrivate': _private,
         'addToCalendar': true,
         if (_taggedUsers.isNotEmpty) 'taggedUsernames': _taggedUsers,
-        'eventDetails': eventDetails,
       });
       final me = ref.read(authNotifierProvider).user;
       ref
@@ -776,7 +935,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                               ),
                               Expanded(
                                 child: Text(
-                                  'NEW POST',
+                                  _isEditing ? 'EDIT EVENT' : 'NEW POST',
                                   textAlign: TextAlign.center,
                                   style: AppTextStyles.display(
                                     28,
@@ -1084,6 +1243,11 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                                     ),
                                                   ],
                                                 )
+                                              : _imagePath!.startsWith('http')
+                                              ? BeTherNetworkImage(
+                                                  url: _imagePath!,
+                                                  fit: BoxFit.cover,
+                                                )
                                               : Image.file(
                                                   File(_imagePath!),
                                                   fit: BoxFit.cover,
@@ -1156,8 +1320,10 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                               ),
                             ),
                             child: BeTherPrimaryButton(
-                              label: _busy ? 'POSTING…' : 'POST EVENT',
-                              enabled: !_busy,
+                              label: _busy
+                                  ? (_isEditing ? 'UPDATING…' : 'POSTING…')
+                                  : (_isEditing ? 'UPDATE EVENT' : 'POST EVENT'),
+                              enabled: !_busy && !_editLoading,
                               onPressed: _post,
                             ),
                           ),
@@ -1168,6 +1334,15 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                 },
               ),
             ),
+            if (_editLoading)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: AppColors.background.withValues(alpha: 0.88),
+                  child: const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

@@ -285,7 +285,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AddPostScreen.path,
         name: AddPostScreen.name,
-        pageBuilder: (context, state) => _sheetPage(state, const AddPostScreen()),
+        pageBuilder: (context, state) {
+          final editPostId = state.uri.queryParameters['edit'];
+          return _sheetPage(
+            state,
+            AddPostScreen(editPostId: editPostId),
+          );
+        },
       ),
       GoRoute(
         path: SearchScreen.path,

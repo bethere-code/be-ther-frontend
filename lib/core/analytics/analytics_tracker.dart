@@ -41,7 +41,10 @@ class AnalyticsTracker with WidgetsBindingObserver {
     _running = true;
     _router = router;
     WidgetsBinding.instance.addObserver(this);
-    _timer = Timer.periodic(_flushEvery, (_) => unawaited(flush(trigger: 'periodic')));
+    _timer = Timer.periodic(
+      _flushEvery,
+      (_) => unawaited(flush(trigger: 'periodic')),
+    );
     onRouteChanged();
     unawaited(flush(trigger: 'launch'));
   }
@@ -75,8 +78,9 @@ class AnalyticsTracker with WidgetsBindingObserver {
   Future<void> recordAuth(String action) async {
     Map<String, dynamic>? device;
     try {
-      device = (await collectDeviceSnapshot(includeLocationIfAllowed: true))
-          .toJson();
+      device = (await collectDeviceSnapshot(
+        includeLocationIfAllowed: true,
+      )).toJson();
     } catch (_) {
       device = null;
     }
@@ -85,7 +89,7 @@ class AnalyticsTracker with WidgetsBindingObserver {
       'type': 'auth',
       'action': action,
       'at': DateTime.now().toUtc().toIso8601String(),
-      if (device != null) 'device': device,
+      'device': ?device,
     });
   }
 
@@ -237,8 +241,10 @@ class AnalyticsNavObserver extends NavigatorObserver {
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => _tick();
 
   @override
-  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) => _tick();
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) =>
+      _tick();
 
   @override
-  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) => _tick();
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _tick();
 }

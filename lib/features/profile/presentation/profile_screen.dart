@@ -16,6 +16,7 @@ import '../../../core/routing/app_route_observer.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../explore/presentation/explore_providers.dart';
 import '../../feed/presentation/feed_providers.dart';
+import '../../search/presentation/search_providers.dart';
 import '../../settings/presentation/settings_screen.dart';
 import 'block_session.dart';
 import 'profile_connections_screen.dart';
@@ -233,12 +234,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     List<Map<String, dynamic>> items,
   ) {
     final deleted = ref.read(deletedPostIdsProvider);
-    final blocked = ref.read(sessionBlockedUsernamesProvider);
+    final blocked = ref.read(sessionBlockedAuthorsProvider);
+    final editedPosts = ref.read(editedPostsProvider);
     final map = <String, ProfileCalendarEvent>{};
     for (final item in items) {
-      final event = ProfileCalendarEvent.fromJson(item);
+      var event = ProfileCalendarEvent.fromJson(item);
+      event = overlayEditedProfileCalendarEvent(event, editedPosts);
       if (deleted.contains(event.postId)) continue;
-      if (isAuthorSessionBlocked(blocked, event.author?.username)) continue;
+      if (isAuthorSessionBlocked(
+        blocked,
+        username: event.author?.username,
+        userId: event.author?.id,
+      )) {
+        continue;
+      }
       final key = DateFormat('yyyy-MM-dd').format(event.date);
       map.putIfAbsent(key, () => event);
     }
@@ -249,14 +258,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     List<Map<String, dynamic>> items,
   ) {
     final deleted = ref.read(deletedPostIdsProvider);
-    final blocked = ref.read(sessionBlockedUsernamesProvider);
+    final blocked = ref.read(sessionBlockedAuthorsProvider);
+    final editedPosts = ref.read(editedPostsProvider);
     final events =
         items
             .map(ProfileCalendarEvent.fromJson)
+            .map((e) => overlayEditedProfileCalendarEvent(e, editedPosts))
             .where(
               (e) =>
                   !deleted.contains(e.postId) &&
-                  !isAuthorSessionBlocked(blocked, e.author?.username),
+                  !isAuthorSessionBlocked(
+                    blocked,
+                    username: e.author?.username,
+                    userId: e.author?.id,
+                  ),
             )
             .toList()
           ..sort((a, b) {
@@ -391,6 +406,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         ref.invalidate(profileEventsProvider(username));
         ref.invalidate(feedProvider);
         ref.invalidate(exploreEventsProvider);
+        ref.invalidate(searchResultsProvider);
         if (isOwnProfile) {
           ref.invalidate(profileViewProvider(widget.username));
           ref.invalidate(profileMeProvider);
@@ -448,7 +464,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       },
       onBlock: () async {
         try {
-          await blockUserOptimistic(ref, username);
+          await blockUserOptimistic(ref, username: username);
           _refreshAfterProfileSocial(username);
           if (!mounted) return;
           AppToast.show(context, 'User blocked');
@@ -459,7 +475,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       },
       onUnblock: () async {
         try {
-          await unblockUserOptimistic(ref, username);
+          await unblockUserOptimistic(ref, username: username);
           _refreshAfterProfileSocial(username);
           if (!mounted) return;
           AppToast.show(context, 'User unblocked');
@@ -545,7 +561,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           ref.watch(profileEventsProvider(username));
         }
         ref.watch(deletedPostIdsProvider);
-        ref.watch(sessionBlockedUsernamesProvider);
+        ref.watch(sessionBlockedAuthorsProvider);
+        ref.watch(editedPostsProvider);
 
         final calendarBlocked = calendarAsync.hasError &&
             isPrivateProfileError(calendarAsync.error!);

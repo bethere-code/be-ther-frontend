@@ -319,6 +319,25 @@ class PostsRepository {
     }
   }
 
+  Future<Map<String, dynamic>> updatePost(
+    String postId,
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final res = await _dio.patch<Map<String, dynamic>>(
+        '/api/v1/posts/$postId',
+        data: payload,
+      );
+      final data = _extractData(res.data, fallbackMessage: 'Failed to update event');
+      final post = data['post'];
+      if (post is Map<String, dynamic>) return post;
+      if (post is Map) return Map<String, dynamic>.from(post);
+      return data;
+    } on DioException catch (e) {
+      throw Exception(_apiMessage(e, fallback: 'Failed to update event'));
+    }
+  }
+
   String _readPostId(Map<String, dynamic> data) {
     final raw = data['postId'] ?? data['id'] ?? data['_id'];
     if (raw is String) return raw;

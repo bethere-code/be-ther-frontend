@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +9,7 @@ import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../../core/design/widgets/event_edited_badge.dart';
 import '../../../../core/design/widgets/event_sheet_creator_row.dart';
 import '../../../../core/design/widgets/expandable_caption.dart';
 import '../../../../core/utils/link_utils.dart';
@@ -52,6 +55,8 @@ class _ExploreEventSheet extends ConsumerStatefulWidget {
 
 class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
   late ExploreEvent _event;
+  ExploreAuthor? _author;
+  bool _authorLoading = false;
   late bool _inCalendar;
   String? _calendarStatus;
   bool _calendarBusy = false;
@@ -60,54 +65,51 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
 
   ExploreEvent get event => _event;
 
+  ExploreAuthor? get _resolvedAuthor => _author ?? event.author;
+
   @override
   void initState() {
     super.initState();
     _event = widget.event;
+    _author = widget.event.author;
     _likesCount = event.likesCount;
     _commentsCount = event.commentsCount;
     _syncCalendarStatus();
-    // Explore + search: count only when this details sheet opens.
-    // If the same post was already seen in the feed this session, enqueue is a no-op.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || event.postId.isEmpty) return;
       _syncCalendarStatus(notify: true);
+      unawaited(_loadAuthor());
       final me = ref.read(authNotifierProvider).user;
-      if (_isMine(me)) return;
-      ref.read(eventViewRecorderProvider).enqueue(event.postId);
-      _hydrateAuthorIfNeeded();
+      if (!_isOwnEvent(me)) {
+        ref.read(eventViewRecorderProvider).enqueue(event.postId);
+      }
     });
   }
 
-  /// List payloads sometimes omit a populated author; pull it from the post API.
-  Future<void> _hydrateAuthorIfNeeded() async {
-    final existing = _event.author;
+  Future<void> _loadAuthor() async {
+    if (_authorLoading) return;
+    final existing = _resolvedAuthor;
     if (existing != null && existing.username.trim().isNotEmpty) return;
-    final postId = _event.postId;
-    if (postId.isEmpty) return;
+    setState(() => _authorLoading = true);
     try {
-      final post = await ref.read(postsRepositoryProvider).fetchPost(postId);
-      final username = post.author.username.trim();
-      if (!mounted || username.isEmpty) return;
+      final resolved = await resolveEventSheetAuthor(
+        ref: ref,
+        postId: event.postId,
+        existing: existing,
+      );
+      if (!mounted || resolved == null) return;
       setState(() {
-        _event = _event.copyWith(
-          author: ExploreAuthor.fromFeedAuthor(
-            id: post.author.id,
-            username: username,
-            displayName: post.author.displayName,
-            avatarUrl: post.author.avatarUrl,
-            badge: post.author.badge,
-          ),
-        );
+        _author = resolved;
+        _event = _event.copyWith(author: resolved);
       });
-    } catch (_) {
-      // Keep sheet usable without creator row.
+    } finally {
+      if (mounted) setState(() => _authorLoading = false);
     }
   }
 
   void _syncCalendarStatus({bool notify = false}) {
     final me = ref.read(authNotifierProvider).user;
-    final isMine = _isMine(me);
+    final isMine = _isOwnEvent(me);
     final resolved = resolveViewerCalendarStatus(
       store: ref.read(calendarStatusStoreProvider.notifier),
       postId: event.postId,
@@ -130,18 +132,13 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
     }
   }
 
-  bool _isMine(Map<String, dynamic>? me) {
-    final author = event.author;
-    if (me == null || author == null) return false;
-    final myId = me['_id']?.toString() ?? me['id']?.toString() ?? '';
-    if (myId.isNotEmpty && author.id.isNotEmpty && myId == author.id) {
-      return true;
-    }
-    final myUsername = (me['username'] as String?)?.trim() ?? '';
-    final authorUsername = author.username.trim();
-    return myUsername.isNotEmpty &&
-        authorUsername.isNotEmpty &&
-        myUsername.toLowerCase() == authorUsername.toLowerCase();
+  bool _isOwnEvent(Map<String, dynamic>? me) {
+    final myId = me?['_id']?.toString() ?? me?['id']?.toString() ?? '';
+    return isOwnEventByAuthorIds(
+      myUserId: myId,
+      eventAuthorUserId: event.authorUserId,
+      resolvedAuthor: _resolvedAuthor,
+    );
   }
 
   void _openLikes() {
@@ -178,7 +175,7 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
   Future<void> _handleCalendarTap() async {
     if (event.postId.isEmpty || _calendarBusy || event.isPast) return;
     final me = ref.read(authNotifierProvider).user;
-    final isMine = _isMine(me);
+    final isMine = _isOwnEvent(me);
     final current = resolveViewerCalendarStatus(
       store: ref.read(calendarStatusStoreProvider.notifier),
       postId: event.postId,
@@ -254,7 +251,7 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
   @override
   Widget build(BuildContext context) {
     final me = ref.watch(authNotifierProvider).user;
-    final isMine = _isMine(me);
+    final isOwnEvent = _isOwnEvent(me);
     // Keep button in sync if feed/explore updated RSVP while this sheet is open.
     ref.watch(calendarStatusStoreProvider);
     final effectiveStatus = resolveViewerCalendarStatus(
@@ -262,16 +259,15 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
       postId: event.postId,
       apiCalendarStatus: event.calendarStatus ?? _calendarStatus,
       inCalendar: event.inCalendar || _inCalendar,
-      isMine: isMine,
+      isMine: isOwnEvent,
       postStatus: event.status,
     );
-    final author = event.author;
+    final author = _resolvedAuthor;
     final place = event.placeLabel;
     final dateLabel = event.formattedDateOnly;
     final timeLabel = event.formattedTime;
-    final showCreator = !isMine &&
-        author != null &&
-        author.username.trim().isNotEmpty;
+    final showCreator =
+        !isOwnEvent && author != null && author.username.trim().isNotEmpty;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -344,8 +340,10 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                       FeedPostMoreMenu(
                         postId: event.postId,
                         isPast: event.isPast,
-                        isOwnPost: isMine,
-                        authorUsername: event.author?.username ?? '',
+                        isOwnPost: isOwnEvent,
+                        authorUsername: author?.username ?? '',
+                        authorId: author?.id ?? event.authorUserId,
+                        closeParentOnEdit: true,
                       ),
                       IconButton(
                         visualDensity: VisualDensity.compact,
@@ -443,19 +441,9 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                               _MetaChip(
                                 icon: Icons.access_time,
                                 label: timeLabel,
-                              ),
-                            if (event.showAttendees)
-                              Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  onTap: _openAttendees,
-                                  child: _MetaChip(
-                                    icon: Icons.person_outline,
-                                    label: event.attendees == 1
-                                        ? '1 Person'
-                                        : '${event.attendees} People',
-                                  ),
-                                ),
+                                trailing: event.isEdited
+                                    ? const EventEditedBadge()
+                                    : null,
                               ),
                           ],
                         ),
@@ -465,6 +453,21 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                             icon: Icons.place_outlined,
                             label: place,
                             expanded: true,
+                          ),
+                        ],
+                        if (event.showAttendees) ...[
+                          const SizedBox(height: 10),
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _openAttendees,
+                              child: _MetaChip(
+                                icon: Icons.person_outline,
+                                label: event.attendees == 1
+                                    ? '1 Person'
+                                    : '${event.attendees} People',
+                              ),
+                            ),
                           ),
                         ],
                         const SizedBox(height: 12),
@@ -635,11 +638,13 @@ class _MetaChip extends StatelessWidget {
     required this.icon,
     required this.label,
     this.expanded = false,
+    this.trailing,
   });
 
   final IconData icon;
   final String label;
   final bool expanded;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -660,6 +665,10 @@ class _MetaChip extends StatelessWidget {
             ),
           ),
         ),
+        if (trailing != null) ...[
+          const SizedBox(width: 8),
+          trailing!,
+        ],
       ],
     );
   }

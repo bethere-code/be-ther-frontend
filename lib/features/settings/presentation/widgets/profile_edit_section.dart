@@ -584,6 +584,17 @@ class _BioEditSheetState extends State<_BioEditSheet> {
   }
 }
 
+class _LowercaseAlphanumericUsernameFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final t = newValue.text.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    return newValue.copyWith(text: t, composing: TextRange.empty);
+  }
+}
+
 class _UsernameEditDialog extends ConsumerStatefulWidget {
   const _UsernameEditDialog({required this.current});
 
@@ -771,11 +782,12 @@ class _UsernameEditDialogState extends ConsumerState<_UsernameEditDialog> {
                       maxLength: _max,
                       enabled: !_saving,
                       keyboardType: TextInputType.text,
+                      textCapitalization: TextCapitalization.none,
                       textInputAction: TextInputAction.done,
                       autocorrect: false,
                       enableSuggestions: false,
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[a-z0-9]')),
+                        _LowercaseAlphanumericUsernameFormatter(),
                         LengthLimitingTextInputFormatter(_max),
                       ],
                       decoration: InputDecoration(

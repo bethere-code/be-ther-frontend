@@ -17,6 +17,7 @@ import '../../../core/utils/popup_menu_utils.dart';
 import '../../profile/presentation/block_session.dart';
 import '../../profile/presentation/profile_providers.dart';
 import '../data/posts_repository.dart';
+import '../domain/edited_post_overlay.dart';
 import '../domain/feed_post.dart';
 import 'add_post_screen.dart';
 import 'feed_providers.dart';
@@ -183,21 +184,31 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     required List<FeedPost> sourceItems,
     required List<FeedPost> localInserts,
     required Set<String> deletedIds,
-    required Set<String> blockedUsernames,
+    required Set<String> discoveryHiddenIds,
+    required SessionBlockedAuthors blockedUsernames,
+    required Map<String, FeedPost> editedPosts,
   }) {
     final seen = <String>{};
     final merged = <FeedPost>[];
 
     void addAll(Iterable<FeedPost> items) {
       for (final item in items) {
-        if (isAuthorSessionBlocked(blockedUsernames, item.author.username)) {
+        if (isAuthorSessionBlocked(
+          blockedUsernames,
+          username: item.author.username,
+          userId: item.author.id,
+        )) {
           continue;
         }
         final id = _itemId(item);
         if (id.isNotEmpty) {
-          if (deletedIds.contains(id) || !seen.add(id)) continue;
+          if (deletedIds.contains(id) ||
+              discoveryHiddenIds.contains(id) ||
+              !seen.add(id)) {
+            continue;
+          }
         }
-        merged.add(item);
+        merged.add(overlayEditedFeedPost(item, editedPosts));
       }
     }
 
@@ -251,6 +262,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       // Clear optimistic inserts only after API data arrives so the new
       // event does not disappear during the round-trip.
       ref.read(feedLocalInsertsProvider.notifier).clear();
+      ref.read(editedPostsProvider.notifier).clear();
       setState(() => _applyFirstPage(page));
     } finally {
       _isRefreshing = false;
@@ -261,8 +273,26 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
   Widget build(BuildContext context) {
     final feed = ref.watch(feedProvider);
     final deletedIds = ref.watch(deletedPostIdsProvider);
-    final blockedUsernames = ref.watch(sessionBlockedUsernamesProvider);
+    final discoveryHiddenIds = ref.watch(discoveryHiddenPostIdsProvider);
+    final blockedAuthors = ref.watch(sessionBlockedAuthorsProvider);
     final localInserts = ref.watch(feedLocalInsertsProvider);
+    final editedPosts = ref.watch(editedPostsProvider);
+
+    ref.listen<SessionBlockedAuthors>(sessionBlockedAuthorsProvider, (
+      prev,
+      next,
+    ) {
+      if (!mounted || !_hasBootstrapped || next.isEmpty) return;
+      final before = _allItems.length;
+      _allItems.removeWhere(
+        (p) => isAuthorSessionBlocked(
+          next,
+          username: p.author.username,
+          userId: p.author.id,
+        ),
+      );
+      if (_allItems.length != before) setState(() {});
+    });
 
     // First page only — never reset scroll by re-applying while paginating.
     ref.listen<AsyncValue<FeedPage>>(feedProvider, (prev, next) {
@@ -348,7 +378,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                 sourceItems: sourceItems,
                 localInserts: localInserts,
                 deletedIds: deletedIds,
-                blockedUsernames: blockedUsernames,
+                discoveryHiddenIds: discoveryHiddenIds,
+                blockedUsernames: blockedAuthors,
+                editedPosts: editedPosts,
               );
 
               if (!_hasBootstrapped) {
@@ -421,7 +453,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                 sourceItems: const [],
                 localInserts: localInserts,
                 deletedIds: deletedIds,
-                blockedUsernames: blockedUsernames,
+                discoveryHiddenIds: discoveryHiddenIds,
+                blockedUsernames: blockedAuthors,
+                editedPosts: editedPosts,
               );
               return RefreshIndicator(
                 onRefresh: _refresh,

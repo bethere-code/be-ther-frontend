@@ -478,6 +478,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                     readOnly: _loading,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    maxLength: 3,
                     onChanged: (_) {
                       final ageText = _age.text.trim();
                       setState(() {

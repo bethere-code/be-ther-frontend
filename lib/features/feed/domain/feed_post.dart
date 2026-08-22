@@ -43,18 +43,28 @@ class FeedEventPlace {
     this.formattedAddress = '',
     this.placeId = '',
     this.name = '',
+    this.lat,
+    this.lng,
   });
 
   final String formattedAddress;
   final String placeId;
   final String name;
+  final double? lat;
+  final double? lng;
 
   factory FeedEventPlace.fromJson(Map<String, dynamic>? json) {
     if (json == null) return const FeedEventPlace();
+    double? numOf(dynamic v) {
+      if (v is num) return v.toDouble();
+      return double.tryParse('$v');
+    }
     return FeedEventPlace(
       formattedAddress: (json['formattedAddress'] as String?)?.trim() ?? '',
       placeId: json['placeId']?.toString() ?? '',
       name: (json['name'] as String?)?.trim() ?? '',
+      lat: numOf(json['lat']),
+      lng: numOf(json['lng']),
     );
   }
 
@@ -119,6 +129,8 @@ class FeedPost {
     this.status,
     this.eventDetails = const FeedEventDetails(),
     this.isEventPastApi,
+    this.editedAt,
+    this.usesDefaultCover = false,
   });
 
   final String id;
@@ -137,6 +149,10 @@ class FeedPost {
   final FeedEventDetails eventDetails;
   final DateTime createdAt;
   final bool? isEventPastApi;
+  final DateTime? editedAt;
+  final bool usesDefaultCover;
+
+  bool get isEdited => editedAt != null;
 
   bool get isPast {
     final date = eventDetails.date;
@@ -156,7 +172,7 @@ class FeedPost {
         json['id']?.toString() ??
         '';
 
-    final authorRaw = json['authorId'];
+    final authorRaw = json['authorId'] ?? json['author'];
     final author = authorRaw is Map<String, dynamic>
         ? FeedPostAuthor.fromJson(authorRaw)
         : authorRaw is Map
@@ -200,7 +216,15 @@ class FeedPost {
       eventDetails: details,
       createdAt: createdAt,
       isEventPastApi: json['isEventPast'] is bool ? json['isEventPast'] as bool : null,
+      editedAt: _parseEditedAt(json['editedAt']),
+      usesDefaultCover: json['usesDefaultCover'] as bool? ?? false,
     );
+  }
+
+  static DateTime? _parseEditedAt(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
   }
 
   FeedPost copyWith({
@@ -229,6 +253,8 @@ class FeedPost {
       eventDetails: eventDetails,
       createdAt: createdAt,
       isEventPastApi: isEventPastApi,
+      editedAt: editedAt,
+      usesDefaultCover: usesDefaultCover,
     );
   }
 
@@ -247,6 +273,8 @@ class FeedPost {
         if (calendarStatus != null) 'calendarStatus': calendarStatus,
         if (status != null) 'status': status,
         if (isEventPastApi != null) 'isEventPast': isEventPastApi,
+        if (editedAt != null) 'editedAt': editedAt!.toIso8601String(),
+        'usesDefaultCover': usesDefaultCover,
         'createdAt': createdAt.toIso8601String(),
         'authorId': {
           '_id': author.id,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,13 +9,16 @@ import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
+import '../../../../core/design/widgets/event_edited_badge.dart';
 import '../../../../core/design/widgets/event_sheet_creator_row.dart';
 import '../../../../core/design/widgets/expandable_caption.dart';
 import '../../../../core/design/widgets/post_more_menu_button.dart';
 import '../../../../core/utils/event_date_utils.dart';
 import '../../../../core/utils/link_utils.dart';
 import '../../../explore/domain/explore_event.dart';
+import '../../../feed/domain/feed_post.dart';
 import '../../../explore/presentation/explore_providers.dart';
+import '../../../feed/presentation/add_post_screen.dart';
 import '../../../feed/presentation/calendar_status_store.dart';
 import '../../../feed/presentation/feed_providers.dart';
 import '../../../feed/presentation/widgets/calendar_rsvp_sheet.dart';
@@ -51,6 +56,7 @@ class ProfileCalendarEvent {
     this.calendarStatus,
     this.hiddenOnProfile = false,
     this.caption,
+    this.editedAt,
   });
 
   final String postId;
@@ -78,6 +84,9 @@ class ProfileCalendarEvent {
   final String? calendarStatus;
   final bool hiddenOnProfile;
   final String? caption;
+  final DateTime? editedAt;
+
+  bool get isEdited => editedAt != null;
 
   String get title => location;
 
@@ -149,7 +158,14 @@ class ProfileCalendarEvent {
       caption: (json['caption'] as String?)?.trim().isNotEmpty == true
           ? (json['caption'] as String).trim()
           : null,
+      editedAt: _parseEditedAt(json['editedAt']),
     );
+  }
+
+  static DateTime? _parseEditedAt(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
   }
 
   ProfileCalendarEvent copyWith({
@@ -191,6 +207,51 @@ class ProfileCalendarEvent {
       EventDateUtils.isEventPastFromDateTime(date, timeRaw: time);
 
   bool get canMarkNotGoing => !isPast && inCalendar && !isAuthoredByMe;
+}
+
+ProfileCalendarEvent overlayEditedProfileCalendarEvent(
+  ProfileCalendarEvent event,
+  Map<String, FeedPost> edits,
+) {
+  final edit = edits[event.postId];
+  if (edit == null) return event;
+  final details = edit.eventDetails;
+  final loc = details.eventLocation;
+  final dateRaw = details.date?.trim();
+  var date = event.date;
+  if (dateRaw != null && dateRaw.length >= 10) {
+    date = DateTime.tryParse(dateRaw.substring(0, 10)) ?? event.date;
+  }
+  return ProfileCalendarEvent(
+    postId: event.postId,
+    date: date,
+    location: edit.location,
+    imageUrl: edit.imageUrl,
+    status: edit.status ?? event.status,
+    venue: (details.venue?.trim().isNotEmpty == true)
+        ? details.venue!.trim()
+        : (loc.name.isNotEmpty ? loc.name : event.venue),
+    ticketUrl: details.ticketUrl ?? event.ticketUrl,
+    time: details.time ?? event.time,
+    country: event.country,
+    place: loc.name.isNotEmpty ? loc.name : event.place,
+    address: loc.formattedAddress.isNotEmpty
+        ? loc.formattedAddress
+        : event.address,
+    calendarCount: event.calendarCount,
+    viewCount: event.viewCount,
+    likesCount: event.likesCount,
+    commentsCount: event.commentsCount,
+    author: event.author,
+    bookmarked: event.bookmarked,
+    source: event.source,
+    isAuthoredByMe: event.isAuthoredByMe,
+    inCalendar: event.inCalendar,
+    calendarStatus: edit.calendarStatus ?? event.calendarStatus,
+    hiddenOnProfile: event.hiddenOnProfile,
+    caption: edit.caption.isNotEmpty ? edit.caption : event.caption,
+    editedAt: edit.editedAt ?? DateTime.now(),
+  );
 }
 
 Future<void> showProfileEventSheet({
@@ -236,6 +297,8 @@ class _ProfileEventSheet extends ConsumerStatefulWidget {
 
 class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   late ProfileCalendarEvent _event;
+  ExploreAuthor? _author;
+  bool _authorLoading = false;
   late bool _inCalendar;
   String? _calendarStatus;
   bool _busy = false;
@@ -251,10 +314,13 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
 
   ProfileCalendarEvent get event => _event;
 
+  ExploreAuthor? get _resolvedAuthor => _author ?? event.author;
+
   @override
   void initState() {
     super.initState();
     _event = widget.event;
+    _author = widget.event.author;
     _likesCount = event.likesCount;
     _commentsCount = event.commentsCount;
     _hiddenOnProfile = event.hiddenOnProfile;
@@ -268,32 +334,32 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
       // Re-fetch viewer RSVP so we never show the profile owner's status.
       if (!event.isAuthoredByMe && event.postId.isNotEmpty) {
         _refreshViewerCalendarStatus();
-        _hydrateAuthorIfNeeded();
+      }
+      if (!event.isAuthoredByMe) {
+        unawaited(_loadAuthor());
       }
     });
   }
 
-  Future<void> _hydrateAuthorIfNeeded() async {
-    final existing = _event.author;
+  Future<void> _loadAuthor() async {
+    if (_authorLoading) return;
+    final existing = _resolvedAuthor;
     if (existing != null && existing.username.trim().isNotEmpty) return;
-    final postId = _event.postId;
-    if (postId.isEmpty) return;
+    setState(() => _authorLoading = true);
     try {
-      final post = await ref.read(postsRepositoryProvider).fetchPost(postId);
-      final username = post.author.username.trim();
-      if (!mounted || username.isEmpty) return;
+      final resolved = await resolveEventSheetAuthor(
+        ref: ref,
+        postId: event.postId,
+        existing: existing,
+      );
+      if (!mounted || resolved == null) return;
       setState(() {
-        _event = _event.copyWith(
-          author: ExploreAuthor.fromFeedAuthor(
-            id: post.author.id,
-            username: username,
-            displayName: post.author.displayName,
-            avatarUrl: post.author.avatarUrl,
-            badge: post.author.badge,
-          ),
-        );
+        _author = resolved;
+        _event = _event.copyWith(author: resolved);
       });
-    } catch (_) {}
+    } finally {
+      if (mounted) setState(() => _authorLoading = false);
+    }
   }
 
   void _syncCalendarFromViewer() {
@@ -377,11 +443,23 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
       }
       if (!mounted) return;
       setState(() => _hiddenOnProfile = hide);
+      if (event.isAuthoredByMe) {
+        final hidden = ref.read(discoveryHiddenPostIdsProvider.notifier);
+        if (hide) {
+          hidden.markHidden(event.postId);
+        } else {
+          hidden.unhide(event.postId);
+        }
+      }
       // Toast before calendar refresh so the user still sees feedback.
       _toast(
         hide
-            ? 'Hidden from your public profile'
-            : 'Visible on your public profile again',
+            ? (event.isAuthoredByMe
+                  ? 'Hidden from feed and your profile. Share the link to invite others.'
+                  : 'Hidden from your profile')
+            : (event.isAuthoredByMe
+                  ? 'Visible in feed and on your profile again'
+                  : 'Visible on your profile again'),
       );
       widget.onCalendarChanged();
     } catch (e) {
@@ -422,8 +500,17 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   /// Show creator when this event is not authored by the signed-in user.
   bool get _showCreatorRow {
     if (event.isAuthoredByMe) return false;
-    final author = event.author;
+    final author = _resolvedAuthor;
     return author != null && author.username.trim().isNotEmpty;
+  }
+
+  void _openAttendees() {
+    if (event.postId.isEmpty || event.calendarCount < 1) return;
+    showFeedAttendeesSheet(
+      context: context,
+      postId: event.postId,
+      initialCount: event.calendarCount,
+    );
   }
 
   Future<void> _toggleCalendar() async {
@@ -624,11 +711,16 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
   }
 
   void _openOwnerProfile() {
-    final username = event.author?.username ?? '';
+    final username = _resolvedAuthor?.username ?? '';
     if (username.isEmpty) return;
     final router = GoRouter.of(context);
     Navigator.of(context).pop();
     router.push(ProfileScreen.pathForUser(username));
+  }
+
+  Future<void> _openEdit() async {
+    if (event.postId.isEmpty) return;
+    await openEditPostScreen(context, event.postId, closeParent: true);
   }
 
   @override
@@ -636,9 +728,10 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
     final place = event.placeLabel;
     final fullLocation = event.fullLocationLabel;
     final timeLabel = event.formattedTime;
-    final author = event.author;
+    final author = _resolvedAuthor;
     final showOwnInsights = event.isAuthoredByMe;
     final showGoingRow = showOwnInsights && _goingCount >= 1;
+    final showVisitorAttendees = !showOwnInsights && event.calendarCount >= 1;
     final showViewsRow = showOwnInsights && event.viewCount > 0;
     final showOwnerStatusToggle =
         widget.isOwnProfile && event.isAuthoredByMe && !event.isPast;
@@ -661,316 +754,439 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
             onTap: () {},
             child: Material(
               color: AppColors.background,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.sizeOf(context).height * 0.9,
-                  ),
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        top: BorderSide(
-                          color: AppColors.border,
-                          width: AppDimens.borderThick,
-                        ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+                ),
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      top: BorderSide(
+                        color: AppColors.border,
+                        width: AppDimens.borderThick,
                       ),
                     ),
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.fromLTRB(
-                        16,
-                        10,
-                        16,
-                        16 + MediaQuery.viewPaddingOf(context).bottom,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Center(
-                            child: Container(
-                              width: 40,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: AppColors.mutedForeground.withValues(
-                                  alpha: 0.35,
-                                ),
-                                borderRadius: BorderRadius.circular(2),
+                  ),
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      10,
+                      16,
+                      16 + MediaQuery.viewPaddingOf(context).bottom,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: AppColors.mutedForeground.withValues(
+                                alpha: 0.35,
                               ),
+                              borderRadius: BorderRadius.circular(2),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _showCreatorRow && author != null
-                                    ? EventSheetCreatorHeader(
-                                        avatarUrl: author.avatarUrl,
-                                        username: author.username,
-                                        badge: author.badge,
-                                        onTap: _openOwnerProfile,
-                                      )
-                                    : Text(
-                                        'EVENT DETAILS',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTextStyles.display(
-                                          20,
-                                          color: AppColors.primary,
-                                          letterSpacing: 0.05,
-                                        ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _showCreatorRow && author != null
+                                  ? EventSheetCreatorHeader(
+                                      avatarUrl: author.avatarUrl,
+                                      username: author.username,
+                                      badge: author.badge,
+                                      onTap: _openOwnerProfile,
+                                    )
+                                  : Text(
+                                      'EVENT DETAILS',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyles.display(
+                                        20,
+                                        color: AppColors.primary,
+                                        letterSpacing: 0.05,
                                       ),
-                              ),
-                              if (widget.isOwnProfile)
-                                PopupMenuButton<String>(
-                                  enabled: !_busy,
-                                  padding: EdgeInsets.zero,
-                                  offset: const Offset(0, 8),
-                                  color: AppColors.card,
-                                  shape: const RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.zero,
-                                    side: BorderSide(
-                                      color: AppColors.border,
-                                      width: AppDimens.border,
+                                    ),
+                            ),
+                            if (widget.isOwnProfile)
+                              PopupMenuButton<String>(
+                                enabled: !_busy,
+                                padding: EdgeInsets.zero,
+                                offset: const Offset(0, 8),
+                                color: AppColors.card,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                  side: BorderSide(
+                                    color: AppColors.border,
+                                    width: AppDimens.border,
+                                  ),
+                                ),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: PostMoreMenuIcon(),
+                                ),
+                                onSelected: (value) {
+                                  switch (value) {
+                                    case 'edit':
+                                      _openEdit();
+                                    case 'hide':
+                                      _setHiddenOnProfile(true);
+                                    case 'unhide':
+                                      _setHiddenOnProfile(false);
+                                    case 'delete':
+                                      _confirmDelete();
+                                    case 'not_going':
+                                      _notGoing();
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  PopupMenuItem(
+                                    value: _hiddenOnProfile ? 'unhide' : 'hide',
+                                    child: Text(
+                                      _hiddenOnProfile
+                                          ? 'Show on profile'
+                                          : 'Hide event',
+                                      style: AppTextStyles.body(
+                                        14,
+                                        weight: FontWeight.w700,
+                                      ),
                                     ),
                                   ),
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(8),
-                                    child: PostMoreMenuIcon(),
-                                  ),
-                                  onSelected: (value) {
-                                    switch (value) {
-                                      case 'hide':
-                                        _setHiddenOnProfile(true);
-                                      case 'unhide':
-                                        _setHiddenOnProfile(false);
-                                      case 'delete':
-                                        _confirmDelete();
-                                      case 'not_going':
-                                        _notGoing();
-                                    }
-                                  },
-                                  itemBuilder: (context) => [
+                                  if (event.isAuthoredByMe)
                                     PopupMenuItem(
-                                      value: _hiddenOnProfile
-                                          ? 'unhide'
-                                          : 'hide',
+                                      value: 'edit',
                                       child: Text(
-                                        _hiddenOnProfile
-                                            ? 'Show on profile'
-                                            : 'Hide event',
+                                        'Edit event',
                                         style: AppTextStyles.body(
                                           14,
                                           weight: FontWeight.w700,
                                         ),
                                       ),
                                     ),
-                                    if (event.isAuthoredByMe)
-                                      PopupMenuItem(
-                                        value: 'delete',
-                                        child: Text(
-                                          'Delete event',
-                                          style: AppTextStyles.body(
-                                            14,
-                                            weight: FontWeight.w700,
-                                            color: AppColors.destructive,
-                                          ),
+                                  if (event.isAuthoredByMe)
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: Text(
+                                        'Delete event',
+                                        style: AppTextStyles.body(
+                                          14,
+                                          weight: FontWeight.w700,
+                                          color: AppColors.destructive,
                                         ),
                                       ),
-                                    if (event.canMarkNotGoing)
-                                      PopupMenuItem(
-                                        value: 'not_going',
-                                        child: Text(
-                                          'Not going',
-                                          style: AppTextStyles.body(
-                                            14,
-                                            weight: FontWeight.w700,
-                                          ),
+                                    ),
+                                  if (event.canMarkNotGoing)
+                                    PopupMenuItem(
+                                      value: 'not_going',
+                                      child: Text(
+                                        'Not going',
+                                        style: AppTextStyles.body(
+                                          14,
+                                          weight: FontWeight.w700,
                                         ),
                                       ),
-                                  ],
-                                )
-                              else ...[
-                                FeedPostMoreMenu(
-                                  postId: event.postId,
-                                  isPast: event.isPast,
-                                  isOwnPost: event.isAuthoredByMe,
-                                  authorUsername:
-                                      event.author?.username ?? '',
+                                    ),
+                                ],
+                              )
+                            else ...[
+                              FeedPostMoreMenu(
+                                postId: event.postId,
+                                isPast: event.isPast,
+                                isOwnPost: event.isAuthoredByMe,
+                                authorUsername: author?.username ?? '',
+                                authorId: author?.id ?? '',
+                                closeParentOnEdit: true,
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () => Navigator.pop(context),
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: AppColors.secondary,
+                                  size: 26,
                                 ),
-                                IconButton(
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () => Navigator.pop(context),
-                                  icon: const Icon(
-                                    Icons.close,
-                                    color: AppColors.secondary,
-                                    size: 26,
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (event.imageUrl.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          AspectRatio(
+                            aspectRatio: 16 / 10,
+                            child: Material(
+                              color: AppColors.card,
+                              clipBehavior: Clip.hardEdge,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  BeTherNetworkImage(
+                                    url: event.imageUrl,
+                                    fit: BoxFit.cover,
+                                  ),
+                                  if (_hiddenOnProfile)
+                                    Positioned(
+                                      bottom: 12,
+                                      left: 12,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        color: AppColors.secondary.withValues(
+                                          alpha: 0.85,
+                                        ),
+                                        child: Text(
+                                          'HIDDEN ON PROFILE',
+                                          style: AppTextStyles.display(
+                                            10,
+                                            color: AppColors.background,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 14),
+                        Text(
+                          event.title,
+                          style: AppTextStyles.display(
+                            24,
+                            color: AppColors.secondary,
+                          ),
+                        ),
+                        if (caption.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          ExpandableCaption(
+                            key: ValueKey('profile-caption-${event.postId}'),
+                            text: caption,
+                            trimLines: 3,
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.muted.withValues(alpha: 0.55),
+                            border: Border.all(
+                              color: AppColors.border,
+                              width: AppDimens.borderThin,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Wrap(
+                                spacing: 16,
+                                runSpacing: 10,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  _MetaChip(
+                                    icon: Icons.calendar_today_outlined,
+                                    label: event.formattedDate,
+                                  ),
+                                  if (timeLabel != null && timeLabel.isNotEmpty)
+                                    _MetaChip(
+                                      icon: Icons.access_time,
+                                      label: timeLabel,
+                                      trailing: event.isEdited
+                                          ? const EventEditedBadge()
+                                          : null,
+                                    ),
+                                ],
+                              ),
+                              if (fullLocation.isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                _MetaChip(
+                                  icon: Icons.place_outlined,
+                                  label: fullLocation,
+                                  expanded: true,
+                                  maxLines: 3,
+                                ),
+                              ],
+                              if (showGoingRow && showViewsRow) ...[
+                                const SizedBox(height: 10),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Flexible(
+                                      child: _GoingInsightRow(
+                                        count: _goingCount,
+                                        people: _goingPeople,
+                                        loading: _goingLoading,
+                                        onOpenList: _openGoingList,
+                                        compact: true,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Flexible(
+                                      child: Align(
+                                        alignment: Alignment.centerRight,
+                                        child: _MetaChip(
+                                          icon: Icons.visibility_outlined,
+                                          label: event.viewCount == 1
+                                              ? '1 view'
+                                              : '${event.viewCount} views',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ] else if (showGoingRow) ...[
+                                const SizedBox(height: 10),
+                                _GoingInsightRow(
+                                  count: _goingCount,
+                                  people: _goingPeople,
+                                  loading: _goingLoading,
+                                  onOpenList: _openGoingList,
+                                ),
+                              ] else if (showViewsRow) ...[
+                                const SizedBox(height: 10),
+                                _MetaChip(
+                                  icon: Icons.visibility_outlined,
+                                  label: event.viewCount == 1
+                                      ? '1 view'
+                                      : '${event.viewCount} views',
+                                  expanded: true,
+                                  maxLines: 1,
+                                ),
+                              ],
+                              if (showVisitorAttendees) ...[
+                                const SizedBox(height: 10),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: _openAttendees,
+                                    child: _MetaChip(
+                                      icon: Icons.person_outline,
+                                      label: event.calendarCount == 1
+                                          ? '1 Person'
+                                          : '${event.calendarCount} People',
+                                    ),
                                   ),
                                 ),
                               ],
-                            ],
-                          ),
-                          if (event.imageUrl.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            AspectRatio(
-                              aspectRatio: 16 / 10,
-                              child: Material(
-                                color: AppColors.card,
-                                clipBehavior: Clip.hardEdge,
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    BeTherNetworkImage(
-                                      url: event.imageUrl,
-                                      fit: BoxFit.cover,
+                              if (showOwnerStatusToggle) ...[
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 44,
+                                  child: FilledButton(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: calendarButtonBackground(
+                                        _calendarStatus,
+                                      ),
+                                      foregroundColor: calendarButtonForeground(
+                                        _calendarStatus,
+                                      ),
+                                      shape: const RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.zero,
+                                      ),
                                     ),
-                                    if (_hiddenOnProfile)
-                                      Positioned(
-                                        bottom: 12,
-                                        left: 12,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          color: AppColors.secondary.withValues(
-                                            alpha: 0.85,
-                                          ),
-                                          child: Text(
-                                            'HIDDEN ON PROFILE',
-                                            style: AppTextStyles.display(
-                                              10,
-                                              color: AppColors.background,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 14),
-                          Text(
-                            event.title,
-                            style: AppTextStyles.display(
-                              24,
-                              color: AppColors.secondary,
-                            ),
-                          ),
-                          if (caption.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            ExpandableCaption(
-                              key: ValueKey('profile-caption-${event.postId}'),
-                              text: caption,
-                              trimLines: 3,
-                            ),
-                          ],
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.muted.withValues(alpha: 0.55),
-                              border: Border.all(
-                                color: AppColors.border,
-                                width: AppDimens.borderThin,
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Wrap(
-                                  spacing: 16,
-                                  runSpacing: 10,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    _MetaChip(
-                                      icon: Icons.calendar_today_outlined,
-                                      label: event.formattedDate,
-                                    ),
-                                    if (timeLabel != null &&
-                                        timeLabel.isNotEmpty)
-                                      _MetaChip(
-                                        icon: Icons.access_time,
-                                        label: timeLabel,
-                                      ),
-                                  ],
-                                ),
-                                if (fullLocation.isNotEmpty) ...[
-                                  const SizedBox(height: 10),
-                                  _MetaChip(
-                                    icon: Icons.place_outlined,
-                                    label: fullLocation,
-                                    expanded: true,
-                                    maxLines: 3,
-                                  ),
-                                ],
-                                if (showViewsRow) ...[
-                                  const SizedBox(height: 12),
-                                  _MetaChip(
-                                    icon: Icons.visibility_outlined,
-                                    label: event.viewCount == 1
-                                        ? '1 view'
-                                        : '${event.viewCount} views',
-                                    expanded: true,
-                                    maxLines: 1,
-                                  ),
-                                ],
-                                if (showGoingRow) ...[
-                                  const SizedBox(height: 14),
-                                  _GoingInsightRow(
-                                    count: _goingCount,
-                                    people: _goingPeople,
-                                    loading: _goingLoading,
-                                    onOpenList: _openGoingList,
-                                  ),
-                                ],
-                                if (showOwnerStatusToggle) ...[
-                                  const SizedBox(height: 12),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 44,
-                                    child: FilledButton(
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor:
-                                            calendarButtonBackground(
-                                              _calendarStatus,
-                                            ),
-                                        foregroundColor:
-                                            calendarButtonForeground(
-                                              _calendarStatus,
-                                            ),
-                                        shape: const RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.zero,
-                                        ),
-                                      ),
-                                      onPressed: _busy ? null : _setOwnerStatus,
-                                      child: _busy
-                                          ? SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: calendarButtonForeground(
-                                                  _calendarStatus,
-                                                ),
-                                              ),
-                                            )
-                                          : Text(
-                                              calendarButtonLabel(
+                                    onPressed: _busy ? null : _setOwnerStatus,
+                                    child: _busy
+                                        ? SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: calendarButtonForeground(
                                                 _calendarStatus,
                                               ),
-                                              style: AppTextStyles.display(
-                                                14,
-                                                color: calendarButtonForeground(
-                                                  _calendarStatus,
-                                                ),
+                                            ),
+                                          )
+                                        : Text(
+                                            calendarButtonLabel(
+                                              _calendarStatus,
+                                            ),
+                                            style: AppTextStyles.display(
+                                              14,
+                                              color: calendarButtonForeground(
+                                                _calendarStatus,
                                               ),
                                             ),
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Tap to switch Interested or Going. Delete the event to remove it.',
+                                  style: AppTextStyles.body(
+                                    12,
+                                    color: AppColors.mutedForeground,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ],
+                              if (event.isPast) ...[
+                                const SizedBox(height: 12),
+                                Container(
+                                  width: double.infinity,
+                                  height: 44,
+                                  alignment: Alignment.center,
+                                  color: AppColors.muted,
+                                  child: Text(
+                                    'PAST EVENT',
+                                    style: AppTextStyles.display(
+                                      14,
+                                      color: AppColors.mutedForeground,
                                     ),
                                   ),
+                                ),
+                              ] else if (showVisitorRsvp) ...[
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 44,
+                                  child: FilledButton(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: calendarButtonBackground(
+                                        _calendarStatus,
+                                      ),
+                                      foregroundColor: calendarButtonForeground(
+                                        _calendarStatus,
+                                      ),
+                                      shape: const RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                    ),
+                                    onPressed: _busy ? null : _toggleCalendar,
+                                    child: _busy
+                                        ? SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: calendarButtonForeground(
+                                                _calendarStatus,
+                                              ),
+                                            ),
+                                          )
+                                        : Text(
+                                            calendarButtonLabel(
+                                              _calendarStatus,
+                                            ),
+                                            style: AppTextStyles.display(
+                                              14,
+                                              color: calendarButtonForeground(
+                                                _calendarStatus,
+                                              ),
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                                if (_inCalendar) ...[
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Tap to switch Interested or Going. Delete the event to remove it.',
+                                    'Tap to change status or remove from your calendar.',
                                     style: AppTextStyles.body(
                                       12,
                                       color: AppColors.mutedForeground,
@@ -978,180 +1194,107 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                                     ),
                                   ),
                                 ],
-                                if (event.isPast) ...[
-                                  const SizedBox(height: 12),
-                                  Container(
-                                    width: double.infinity,
-                                    height: 44,
-                                    alignment: Alignment.center,
-                                    color: AppColors.muted,
-                                    child: Text(
-                                      'PAST EVENT',
-                                      style: AppTextStyles.display(
-                                        14,
-                                        color: AppColors.mutedForeground,
-                                      ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            if (event.hasTicketUrl)
+                              IconButton(
+                                tooltip: 'Open tickets',
+                                onPressed: () =>
+                                    openExternalUrl(context, event.ticketUrl!),
+                                icon: const Icon(Icons.link),
+                              )
+                            else
+                              const SizedBox(width: 48),
+                            const Spacer(),
+                            InkWell(
+                              onTap: _likesCount > 0 ? _openLikes : null,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 8,
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.favorite_border,
+                                      size: 20,
+                                      color: AppColors.foreground,
                                     ),
-                                  ),
-                                ] else if (showVisitorRsvp) ...[
-                                  const SizedBox(height: 12),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 44,
-                                    child: FilledButton(
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor:
-                                            calendarButtonBackground(
-                                              _calendarStatus,
-                                            ),
-                                        foregroundColor:
-                                            calendarButtonForeground(
-                                              _calendarStatus,
-                                            ),
-                                        shape: const RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.zero,
-                                        ),
-                                      ),
-                                      onPressed: _busy ? null : _toggleCalendar,
-                                      child: _busy
-                                          ? SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: calendarButtonForeground(
-                                                  _calendarStatus,
-                                                ),
-                                              ),
-                                            )
-                                          : Text(
-                                              calendarButtonLabel(
-                                                _calendarStatus,
-                                              ),
-                                              style: AppTextStyles.display(
-                                                14,
-                                                color: calendarButtonForeground(
-                                                  _calendarStatus,
-                                                ),
-                                              ),
-                                            ),
-                                    ),
-                                  ),
-                                  if (_inCalendar) ...[
-                                    const SizedBox(height: 8),
+                                    const SizedBox(width: 4),
                                     Text(
-                                      'Tap to change status or remove from your calendar.',
+                                      '$_likesCount',
                                       style: AppTextStyles.body(
-                                        12,
-                                        color: AppColors.mutedForeground,
-                                        height: 1.3,
+                                        14,
+                                        weight: FontWeight.w800,
                                       ),
                                     ),
                                   ],
-                                ],
-                              ],
+                                ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              if (event.hasTicketUrl)
-                                IconButton(
-                                  tooltip: 'Open tickets',
-                                  onPressed: () => openExternalUrl(
-                                    context,
-                                    event.ticketUrl!,
-                                  ),
-                                  icon: const Icon(Icons.link),
-                                )
-                              else
-                                const SizedBox(width: 48),
-                              const Spacer(),
-                              InkWell(
-                                onTap: _likesCount > 0 ? _openLikes : null,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 8,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.favorite_border,
-                                        size: 20,
-                                        color: AppColors.foreground,
+                            InkWell(
+                              onTap: event.postId.isEmpty
+                                  ? null
+                                  : _openComments,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 8,
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.chat_bubble_outline,
+                                      size: 20,
+                                      color: AppColors.foreground,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '$_commentsCount',
+                                      style: AppTextStyles.body(
+                                        14,
+                                        weight: FontWeight.w800,
                                       ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '$_likesCount',
-                                        style: AppTextStyles.body(
-                                          14,
-                                          weight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              InkWell(
-                                onTap: event.postId.isEmpty
-                                    ? null
-                                    : _openComments,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 8,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.chat_bubble_outline,
-                                        size: 20,
-                                        color: AppColors.foreground,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '$_commentsCount',
-                                        style: AppTextStyles.body(
-                                          14,
-                                          weight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                tooltip: 'Share',
-                                onPressed: event.postId.isEmpty
-                                    ? null
-                                    : () async {
-                                        try {
-                                          await sharePostContent(
-                                            postId: event.postId,
-                                            location: event.title,
-                                            imageUrl: event.imageUrl,
-                                            ticketUrl: event.ticketUrl,
-                                            venue: locationForShare,
-                                            date: event.formattedDate,
-                                          );
-                                        } catch (e) {
-                                          if (!context.mounted) return;
-                                          AppToast.show(
-                                            context,
-                                            e.toString().replaceFirst(
-                                              'Exception: ',
-                                              '',
-                                            ),
-                                          );
-                                        }
-                                      },
-                                icon: const Icon(Icons.share_outlined),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                            ),
+                            IconButton(
+                              tooltip: 'Share',
+                              onPressed: event.postId.isEmpty
+                                  ? null
+                                  : () async {
+                                      try {
+                                        await sharePostContent(
+                                          postId: event.postId,
+                                          location: event.title,
+                                          imageUrl: event.imageUrl,
+                                          ticketUrl: event.ticketUrl,
+                                          venue: locationForShare,
+                                          date: event.formattedDate,
+                                        );
+                                      } catch (e) {
+                                        if (!context.mounted) return;
+                                        AppToast.show(
+                                          context,
+                                          e.toString().replaceFirst(
+                                            'Exception: ',
+                                            '',
+                                          ),
+                                        );
+                                      }
+                                    },
+                              icon: const Icon(Icons.share_outlined),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -1159,6 +1302,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
             ),
           ),
         ),
+      ),
     );
   }
 }
@@ -1169,12 +1313,14 @@ class _MetaChip extends StatelessWidget {
     required this.label,
     this.expanded = false,
     this.maxLines = 3,
+    this.trailing,
   });
 
   final IconData icon;
   final String label;
   final bool expanded;
   final int maxLines;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -1199,6 +1345,10 @@ class _MetaChip extends StatelessWidget {
             ),
           ),
         ),
+        if (trailing != null) ...[
+          const SizedBox(width: 8),
+          trailing!,
+        ],
       ],
     );
   }
@@ -1210,96 +1360,65 @@ class _GoingInsightRow extends StatelessWidget {
     required this.people,
     required this.loading,
     required this.onOpenList,
+    this.compact = false,
   });
 
   final int count;
   final List<Map<String, dynamic>> people;
   final bool loading;
   final VoidCallback onOpenList;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final label = count == 1 ? '1 Person' : '$count People';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final row = Row(
+      mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
       children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onOpenList,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.people_outline,
-                    size: 16,
-                    color: AppColors.secondary,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: AppTextStyles.body(
-                        13.5,
-                        weight: FontWeight.w700,
-                        color: AppColors.foreground,
-                      ),
-                    ),
-                  ),
-                  const Icon(
-                    Icons.chevron_right,
-                    size: 18,
-                    color: AppColors.mutedForeground,
-                  ),
-                ],
-              ),
+        const Icon(
+          Icons.people_outline,
+          size: 16,
+          color: AppColors.secondary,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.body(
+              13.5,
+              weight: FontWeight.w700,
+              color: AppColors.foreground,
             ),
           ),
         ),
-        // if (loading && faces.isEmpty) ...[
-        //   const SizedBox(height: 10),
-        //   const SizedBox(
-        //     width: 18,
-        //     height: 18,
-        //     child: CircularProgressIndicator(
-        //       strokeWidth: 2,
-        //       color: AppColors.primary,
-        //     ),
-        //   ),
-        // ] else if (faces.isNotEmpty) ...[
-        //   const SizedBox(height: 10),
-        //   Material(
-        //     color: Colors.transparent,
-        //     child: InkWell(
-        //       onTap: onOpenList,
-        //       child: SizedBox(
-        //         height: 36,
-        //         child: Row(
-        //           children: [
-        //             for (var i = 0; i < faces.length; i++) ...[
-        //               if (i > 0) const SizedBox(width: 6),
-        //               _GoingFace(user: faces[i]),
-        //             ],
-        //             if (overflow > 0) ...[
-        //               const SizedBox(width: 8),
-        //               Text(
-        //                 '+$overflow',
-        //                 style: AppTextStyles.body(
-        //                   13,
-        //                   weight: FontWeight.w700,
-        //                   color: AppColors.mutedForeground,
-        //                 ),
-        //               ),
-        //             ],
-        //           ],
-        //         ),
-        //       ),
-        //     ),
-        //   ),
-        // ],
+        if (!compact) ...[
+          const Spacer(),
+          const Icon(
+            Icons.chevron_right,
+            size: 18,
+            color: AppColors.mutedForeground,
+          ),
+        ] else
+          const Icon(
+            Icons.chevron_right,
+            size: 18,
+            color: AppColors.mutedForeground,
+          ),
       ],
+    );
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onOpenList,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: row,
+        ),
+      ),
     );
   }
 }

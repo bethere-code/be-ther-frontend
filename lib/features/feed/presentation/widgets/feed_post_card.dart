@@ -8,6 +8,7 @@ import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../../../../core/design/widgets/author_avatar.dart';
+import '../../../../core/design/widgets/event_edited_badge.dart';
 import '../../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../../core/design/widgets/expandable_caption.dart';
 import '../../../../core/design/widgets/post_interaction_row.dart';
@@ -292,6 +293,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                   isPast: isPast,
                   isOwnPost: _isOwnPost,
                   authorUsername: username,
+                  authorId: post.author.id,
                 ),
                 // Container(
                 //   padding: const EdgeInsets.symmetric(
@@ -401,6 +403,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
             _EventDetails(
               details,
               isPast: isPast,
+              isEdited: post.isEdited,
               calendarStatus: effectiveStatus,
               inCalendar: effectiveInCalendar,
               isOwnPost: _isOwnPost,
@@ -442,6 +445,7 @@ class _EventDetails extends StatelessWidget {
   const _EventDetails(
     this.details, {
     this.isPast = false,
+    this.isEdited = false,
     this.calendarStatus,
     this.inCalendar = false,
     this.isOwnPost = false,
@@ -454,6 +458,7 @@ class _EventDetails extends StatelessWidget {
 
   final FeedEventDetails details;
   final bool isPast;
+  final bool isEdited;
   final String? calendarStatus;
   final bool inCalendar;
   final bool isOwnPost;
@@ -554,6 +559,7 @@ class _EventDetails extends StatelessWidget {
                   _EventDetailMeta(
                     icon: Icons.schedule_outlined,
                     label: displayTime,
+                    trailing: isEdited ? const EventEditedBadge() : null,
                   ),
               ],
             ),
@@ -690,6 +696,10 @@ class _EventDetailMeta extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 220),
             child: labelText,
           ),
+          if (trailing != null) ...[
+            const SizedBox(width: 8),
+            trailing!,
+          ],
         ],
       );
     }

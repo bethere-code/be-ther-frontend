@@ -26,6 +26,55 @@ class DeletedPostIdsNotifier extends Notifier<Set<String>> {
     state = {...state, id};
   }
 
+  void markDeletedMany(Iterable<String> postIds) {
+    final next = {...state};
+    var changed = false;
+    for (final raw in postIds) {
+      final id = raw.trim();
+      if (id.isEmpty || next.contains(id)) continue;
+      next.add(id);
+      changed = true;
+    }
+    if (changed) state = next;
+  }
+
+  void restoreMany(Iterable<String> postIds) {
+    final next = {...state};
+    var changed = false;
+    for (final raw in postIds) {
+      final id = raw.trim();
+      if (id.isEmpty) continue;
+      if (next.remove(id)) changed = true;
+    }
+    if (changed) state = next;
+  }
+
+  bool contains(String postId) => state.contains(postId.trim());
+}
+
+/// Author-hidden posts removed from feed/explore/search until caches refresh.
+final discoveryHiddenPostIdsProvider =
+    NotifierProvider<DiscoveryHiddenPostIdsNotifier, Set<String>>(
+  DiscoveryHiddenPostIdsNotifier.new,
+);
+
+class DiscoveryHiddenPostIdsNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void markHidden(String postId) {
+    final id = postId.trim();
+    if (id.isEmpty || state.contains(id)) return;
+    state = {...state, id};
+  }
+
+  void unhide(String postId) {
+    final id = postId.trim();
+    if (id.isEmpty || !state.contains(id)) return;
+    final next = {...state}..remove(id);
+    state = next;
+  }
+
   bool contains(String postId) => state.contains(postId.trim());
 }
 
@@ -48,9 +97,44 @@ class FeedLocalInsertsNotifier extends Notifier<List<FeedPost>> {
     state = [post, ...state.where((p) => p.id != id)];
   }
 
+  void removeWhere(bool Function(FeedPost post) test) {
+    final next = state.where((p) => !test(p)).toList(growable: false);
+    if (next.length == state.length) return;
+    state = next;
+  }
+
   void clear() {
     if (state.isEmpty) return;
     state = const [];
+  }
+}
+
+/// Edited events overlaid on cached lists until the next refresh.
+final editedPostsProvider =
+    NotifierProvider<EditedPostsNotifier, Map<String, FeedPost>>(
+  EditedPostsNotifier.new,
+);
+
+class EditedPostsNotifier extends Notifier<Map<String, FeedPost>> {
+  @override
+  Map<String, FeedPost> build() => const {};
+
+  void apply(FeedPost post) {
+    final id = post.id.trim();
+    if (id.isEmpty) return;
+    state = {...state, id: post};
+  }
+
+  void revert(String postId) {
+    final id = postId.trim();
+    if (id.isEmpty || !state.containsKey(id)) return;
+    final next = {...state}..remove(id);
+    state = next;
+  }
+
+  void clear() {
+    if (state.isEmpty) return;
+    state = const {};
   }
 }
 

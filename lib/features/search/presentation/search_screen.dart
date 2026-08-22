@@ -10,6 +10,7 @@ import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../explore/domain/explore_event.dart';
 import '../../explore/presentation/widgets/explore_event_tile.dart';
+import '../../feed/domain/edited_post_overlay.dart';
 import '../../feed/presentation/feed_providers.dart';
 import '../../profile/presentation/block_session.dart';
 import '../domain/search_post.dart';
@@ -211,7 +212,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   List<ExploreEvent> _displayItems(SearchPage page) {
     final deleted = ref.read(deletedPostIdsProvider);
-    final blocked = ref.read(sessionBlockedUsernamesProvider);
+    final discoveryHidden = ref.read(discoveryHiddenPostIdsProvider);
+    final blocked = ref.read(sessionBlockedAuthorsProvider);
+    final editedPosts = ref.read(editedPostsProvider);
     List<ExploreEvent> raw;
     if (_skip == 0) {
       raw = page.items;
@@ -220,14 +223,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     } else {
       raw = List<ExploreEvent>.unmodifiable(_results);
     }
-    if (deleted.isEmpty && blocked.isEmpty) return raw;
-    return raw
+    if (deleted.isEmpty &&
+        discoveryHidden.isEmpty &&
+        blocked.isEmpty &&
+        editedPosts.isEmpty) {
+      return raw;
+    }
+    final filtered = raw
         .where(
           (e) =>
               !deleted.contains(e.id) &&
-              !isAuthorSessionBlocked(blocked, e.author?.username),
+              !discoveryHidden.contains(e.id) &&
+              !isAuthorSessionBlocked(
+                blocked,
+                username: e.author?.username,
+                userId: e.author?.id,
+              ),
         )
         .toList(growable: false);
+    return overlayEditedExploreEvents(filtered, editedPosts);
   }
 
   @override
@@ -239,7 +253,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final params = (query: _activeQuery, skip: _skip);
     final asyncResults = ref.watch(searchResultsProvider(params));
     ref.watch(deletedPostIdsProvider);
-    ref.watch(sessionBlockedUsernamesProvider);
+    ref.watch(discoveryHiddenPostIdsProvider);
+    ref.watch(sessionBlockedAuthorsProvider);
+    ref.watch(editedPostsProvider);
     final genAtWatch = _generation;
 
     return AppShell(

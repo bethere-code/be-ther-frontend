@@ -8,6 +8,7 @@ import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_images.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_shell.dart';
+import '../../feed/domain/edited_post_overlay.dart';
 import '../../feed/presentation/feed_providers.dart';
 import '../../feed/presentation/feed_screen.dart';
 import '../../profile/presentation/block_session.dart';
@@ -47,7 +48,9 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
   Widget build(BuildContext context) {
     final events = ref.watch(exploreEventsProvider);
     final deletedIds = ref.watch(deletedPostIdsProvider);
-    final blockedUsernames = ref.watch(sessionBlockedUsernamesProvider);
+    final discoveryHiddenIds = ref.watch(discoveryHiddenPostIdsProvider);
+    final blockedAuthors = ref.watch(sessionBlockedAuthorsProvider);
+    final editedPosts = ref.watch(editedPostsProvider);
 
     return PopScope(
       canPop: false,
@@ -113,16 +116,20 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
               Expanded(
                 child: events.when(
                   data: (items) {
-                    final visible = items
-                        .where(
-                          (e) =>
-                              !deletedIds.contains(e.id) &&
-                              !isAuthorSessionBlocked(
-                                blockedUsernames,
-                                e.author?.username,
-                              ),
-                        )
-                        .toList(growable: false);
+                    final visible = overlayEditedExploreEvents(
+                      items
+                          .where(
+                            (e) =>
+                                !deletedIds.contains(e.id) &&
+                                !discoveryHiddenIds.contains(e.id) &&
+                                !isAuthorSessionBlocked(
+                                  blockedAuthors,
+                                  username: e.author?.username,
+                                  userId: e.author?.id,
+                                ),
+                          ),
+                      editedPosts,
+                    );
                     if (visible.isEmpty) {
                       return Center(
                         child: Text(
@@ -137,8 +144,13 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                     return RefreshIndicator(
                       color: AppColors.primary,
                       backgroundColor: AppColors.card,
-                      onRefresh: () =>
-                          ref.refresh(exploreEventsProvider.future),
+                      onRefresh: () {
+                        final future = ref.refresh(exploreEventsProvider.future);
+                        future.whenComplete(() {
+                          ref.read(editedPostsProvider.notifier).clear();
+                        });
+                        return future;
+                      },
                       child: MasonryGridView.count(
                         controller: _scrollController,
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),

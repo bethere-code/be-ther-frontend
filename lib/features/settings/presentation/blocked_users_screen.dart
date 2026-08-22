@@ -278,7 +278,7 @@ Future<void> _confirmUnblock(
   if (ok != true || !context.mounted) return;
 
   try {
-    await unblockUserOptimistic(ref, user.username);
+    await unblockUserOptimistic(ref, username: user.username);
     if (!context.mounted) return;
     AppToast.show(context, '$label unblocked');
   } catch (e) {

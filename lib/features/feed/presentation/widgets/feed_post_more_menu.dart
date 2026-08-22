@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:be_ther/core/ui/app_toast.dart';
 
+import '../add_post_screen.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
 import '../../../../core/design/app_text_styles.dart';
@@ -25,12 +27,16 @@ class FeedPostMoreMenu extends ConsumerWidget {
     this.isPast = false,
     this.isOwnPost = false,
     this.authorUsername = '',
+    this.authorId = '',
+    this.closeParentOnEdit = false,
   });
 
   final String postId;
   final bool isPast;
   final bool isOwnPost;
   final String authorUsername;
+  final String authorId;
+  final bool closeParentOnEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -103,7 +109,11 @@ class FeedPostMoreMenu extends ConsumerWidget {
   ) async {
     switch (value) {
       case 'edit':
-        AppToast.show(context, 'Edit coming soon');
+        await openEditPostScreen(
+          context,
+          postId,
+          closeParent: closeParentOnEdit,
+        );
       case 'delete':
         await _confirmDelete(context, ref);
       case 'event_cancelled':
@@ -220,7 +230,12 @@ class FeedPostMoreMenu extends ConsumerWidget {
     if (ok != true || !context.mounted) return;
 
     try {
-      await blockUserOptimistic(ref, username);
+      await blockUserOptimistic(
+        ref,
+        username: username,
+        authorId: authorId,
+        triggerPostId: postId,
+      );
       if (!context.mounted) return;
       AppToast.show(context, 'User blocked');
     } catch (e) {
