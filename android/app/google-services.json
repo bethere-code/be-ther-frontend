@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1025146222367",
+    "project_id": "be-ther-prod",
+    "storage_bucket": "be-ther-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1025146222367:android:a0c7e4820bd61d3fd9a22a",
+        "android_client_info": {
+          "package_name": "com.bether.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB3dz0TgcfcK6rQLUEMw3AwNq5c_yqgs04"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

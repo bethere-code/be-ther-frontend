@@ -35,10 +35,27 @@ class NotificationListTile extends StatelessWidget {
         return ' added your event to their calendar';
       case 'follow_request':
         return ' requested to follow you';
+      case 'follow_request_accepted':
+        return ' accepted your follow request';
       case 'follow':
       case 'star': // legacy
       default:
         return ' started following you';
+    }
+  }
+
+  static bool isOwnerFollowOutcome(String type) =>
+      type == 'follow_request_accepted_owner' ||
+      type == 'follow_request_rejected_owner';
+
+  static String ownerOutcomeVerb(String type) {
+    switch (type) {
+      case 'follow_request_accepted_owner':
+        return 'accepted';
+      case 'follow_request_rejected_owner':
+        return 'rejected';
+      default:
+        return '';
     }
   }
 
@@ -86,6 +103,8 @@ class NotificationListTile extends StatelessWidget {
     final eventTime = _formatEventTime(post);
     final hasEvent = (type == 'wishlist' || type == 'calendar') && post != null;
     final isFollowRequest = type == 'follow_request';
+    final isOwnerOutcome = NotificationListTile.isOwnerFollowOutcome(type);
+    final ownerOutcomeVerb = NotificationListTile.ownerOutcomeVerb(type);
     final createdAt = DateTime.tryParse(
       notification['createdAt']?.toString() ?? '',
     );
@@ -130,28 +149,59 @@ class NotificationListTile extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: Text.rich(
-                            TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: name,
-                                  style: AppTextStyles.body(
-                                    15.2,
-                                    weight: FontWeight.w700,
-                                    color: AppColors.foreground,
+                          child: isOwnerOutcome
+                              ? Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: 'You $ownerOutcomeVerb ',
+                                        style: AppTextStyles.body(
+                                          15.2,
+                                          weight: FontWeight.w600,
+                                          color: AppColors.foreground,
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text: name,
+                                        style: AppTextStyles.body(
+                                          15.2,
+                                          weight: FontWeight.w700,
+                                          color: AppColors.foreground,
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text: '\'s request',
+                                        style: AppTextStyles.body(
+                                          15.2,
+                                          weight: FontWeight.w600,
+                                          color: AppColors.foreground,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: name,
+                                        style: AppTextStyles.body(
+                                          15.2,
+                                          weight: FontWeight.w700,
+                                          color: AppColors.foreground,
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text: messageForType(type),
+                                        style: AppTextStyles.body(
+                                          15.2,
+                                          weight: FontWeight.w600,
+                                          color: AppColors.foreground,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                TextSpan(
-                                  text: messageForType(type),
-                                  style: AppTextStyles.body(
-                                    15.2,
-                                    weight: FontWeight.w600,
-                                    color: AppColors.foreground,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                         ),
                         if (timestamp.isNotEmpty) ...[
                           const SizedBox(width: 8),

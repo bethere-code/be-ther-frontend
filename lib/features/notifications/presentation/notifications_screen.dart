@@ -109,7 +109,12 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     if (!context.mounted) return;
 
     final isFollow =
-        type == 'follow' || type == 'star' || type == 'follow_request';
+        type == 'follow' ||
+        type == 'star' ||
+        type == 'follow_request' ||
+        type == 'follow_request_accepted' ||
+        type == 'follow_request_accepted_owner' ||
+        type == 'follow_request_rejected_owner';
     if (isFollow && username.isNotEmpty) {
       context.push(ProfileScreen.pathForUser(username));
       return;
