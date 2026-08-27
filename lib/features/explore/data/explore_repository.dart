@@ -1,13 +1,13 @@
 import 'package:dio/dio.dart';
 
-import '../domain/explore_event.dart';
+import '../domain/explore_page.dart';
 
 class ExploreRepository {
   ExploreRepository(this._dio);
 
   final Dio _dio;
 
-  Future<List<ExploreEvent>> fetchEvents({int skip = 0}) async {
+  Future<ExplorePage> fetchEvents({int skip = 0}) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(
         '/api/v1/explore/events',
@@ -21,11 +21,7 @@ class ExploreRepository {
       if (data is! Map<String, dynamic>) {
         throw Exception('Invalid explore response');
       }
-      final items = data['items'] as List<dynamic>? ?? [];
-      return items
-          .whereType<Map>()
-          .map((e) => ExploreEvent.fromJson(Map<String, dynamic>.from(e)))
-          .toList(growable: false);
+      return ExplorePage.fromJson(data);
     } on DioException catch (e) {
       final data = e.response?.data;
       if (data is Map<String, dynamic>) {

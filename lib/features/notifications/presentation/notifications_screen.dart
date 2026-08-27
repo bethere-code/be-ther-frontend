@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:be_ther/core/design/app_images.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/background_tasks/notification_syncer.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
@@ -35,7 +38,11 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _markAllRead());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Full list refresh on open (badge poll alone does not load items).
+      unawaited(ref.read(notificationSyncerProvider).syncNow());
+      _markAllRead();
+    });
   }
 
   @override

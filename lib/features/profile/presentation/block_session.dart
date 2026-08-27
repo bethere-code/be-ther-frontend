@@ -195,7 +195,7 @@ _PurgeSnapshot _purgeLocalAuthorContent(
 
   final explore = ref.read(exploreEventsProvider).asData?.value;
   if (explore != null) {
-    for (final event in explore) {
+    for (final event in explore.items) {
       if (_matchesAuthor(
         blockedUsername: username,
         blockedUserId: userId,

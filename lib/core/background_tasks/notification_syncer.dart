@@ -1,51 +1,63 @@
 import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/notifications/presentation/notifications_providers.dart';
 
+/// Keeps the alerts badge fresh without hammering the full notifications list.
+///
+/// Phase 1 interim (FCM replaces this in Phase 2.1):
+/// - Unread-count poll every [_unreadInterval] (badge only)
+/// - Full list refresh on [syncNow] (app resume / alerts screen)
 class NotificationSyncer {
-  final Ref ref;
-  Timer? _syncTimer;
-  static const Duration _syncInterval = Duration(seconds: 15);
-
   NotificationSyncer({required this.ref});
 
-  /// Start periodic notification sync
-  void start() {
-    // Initial sync
-    _syncNotifications();
+  final Ref ref;
+  Timer? _unreadTimer;
 
-    // Periodic sync every 15 seconds
-    _syncTimer = Timer.periodic(_syncInterval, (_) {
-      _syncNotifications();
+  /// Was 15s full-list poll (~67 req/s at 1k users). Now badge-only.
+  static const Duration _unreadInterval = Duration(seconds: 60);
+
+  /// Start badge polling. Does not fetch the full notifications list.
+  void start() {
+    unawaited(_refreshUnreadOnly());
+    _unreadTimer?.cancel();
+    _unreadTimer = Timer.periodic(_unreadInterval, (_) {
+      unawaited(_refreshUnreadOnly());
     });
   }
 
-  /// Perform a single notification sync
-  void _syncNotifications() {
-    unawaited(_refreshNotifications());
-  }
-
-  Future<void> _refreshNotifications() async {
+  Future<void> _refreshUnreadOnly() async {
     try {
-      final _ = await ref.refresh(notificationsProvider.future);
+      ref.invalidate(unreadNotificationCountProvider);
+      await ref.read(unreadNotificationCountProvider.future);
     } catch (_) {
       // Silently handle errors to avoid disrupting the app
     }
   }
 
-  /// Stop the periodic sync
+  Future<void> _refreshFullList() async {
+    try {
+      ref.invalidate(notificationsProvider);
+      await ref.read(notificationsProvider.future);
+    } catch (_) {
+      // Silently handle errors to avoid disrupting the app
+    }
+  }
+
   void stop() {
-    _syncTimer?.cancel();
-    _syncTimer = null;
+    _unreadTimer?.cancel();
+    _unreadTimer = null;
   }
 
-  /// Manually trigger a sync (e.g., on app resume)
+  /// App resume / alerts open — refresh badge + full list.
   Future<void> syncNow() async {
-    await _refreshNotifications();
+    await Future.wait([
+      _refreshUnreadOnly(),
+      _refreshFullList(),
+    ]);
   }
 
-  /// Dispose of resources
   void dispose() {
     stop();
   }
@@ -54,6 +66,3 @@ class NotificationSyncer {
 final notificationSyncerProvider = Provider<NotificationSyncer>((ref) {
   return NotificationSyncer(ref: ref);
 });
-
-// Helper to ignore unawaited futures
-void unawaited(Future<void>? future) {}

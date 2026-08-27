@@ -13,6 +13,8 @@ import '../../feed/presentation/feed_providers.dart';
 import '../../feed/presentation/feed_screen.dart';
 import '../../profile/presentation/block_session.dart';
 import '../../search/presentation/search_screen.dart';
+import '../domain/explore_event.dart';
+import '../domain/explore_page.dart';
 import 'explore_providers.dart';
 import 'widgets/explore_event_tile.dart';
 
@@ -28,9 +30,21 @@ class ExploreScreen extends ConsumerStatefulWidget {
 
 class _ExploreScreenState extends ConsumerState<ExploreScreen> {
   final _scrollController = ScrollController();
+  final List<ExploreEvent> _allItems = [];
+  int? _nextSkip;
+  bool _isLoadingMore = false;
+  bool _isRefreshing = false;
+  bool _hasBootstrapped = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
@@ -44,6 +58,63 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     );
   }
 
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 500) {
+      _loadMore();
+    }
+  }
+
+  void _applyFirstPage(ExplorePage page) {
+    _allItems
+      ..clear()
+      ..addAll(page.items);
+    _nextSkip = page.nextSkip;
+    _hasBootstrapped = true;
+  }
+
+  Future<void> _loadMore() async {
+    final skip = _nextSkip;
+    if (_isLoadingMore || skip == null) return;
+
+    setState(() => _isLoadingMore = true);
+    try {
+      final page = await ref.read(explorePageProvider(skip).future);
+      if (!mounted) return;
+
+      final seen = _allItems.map((e) => e.id).where((id) => id.isNotEmpty).toSet();
+      final fresh = page.items.where((item) {
+        final id = item.id;
+        return id.isEmpty || seen.add(id);
+      });
+
+      setState(() {
+        _allItems.addAll(fresh);
+        _nextSkip = page.nextSkip;
+        _isLoadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoadingMore = false);
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+    _nextSkip = null;
+    _isLoadingMore = false;
+    try {
+      final page = await ref.refresh(exploreEventsProvider.future);
+      if (!mounted) return;
+      ref.read(editedPostsProvider.notifier).clear();
+      setState(() => _applyFirstPage(page));
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final events = ref.watch(exploreEventsProvider);
@@ -51,6 +122,16 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     final discoveryHiddenIds = ref.watch(discoveryHiddenPostIdsProvider);
     final blockedAuthors = ref.watch(sessionBlockedAuthorsProvider);
     final editedPosts = ref.watch(editedPostsProvider);
+
+    // Seed local list from first provider page (same pattern as feed).
+    events.whenData((page) {
+      if (!_hasBootstrapped && !_isRefreshing) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _hasBootstrapped) return;
+          setState(() => _applyFirstPage(page));
+        });
+      }
+    });
 
     return PopScope(
       canPop: false,
@@ -115,19 +196,21 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
               const _TopUpcomingHeader(),
               Expanded(
                 child: events.when(
-                  data: (items) {
+                  data: (_) {
+                    final source = _hasBootstrapped
+                        ? _allItems
+                        : (events.asData?.value.items ?? const <ExploreEvent>[]);
                     final visible = overlayEditedExploreEvents(
-                      items
-                          .where(
-                            (e) =>
-                                !deletedIds.contains(e.id) &&
-                                !discoveryHiddenIds.contains(e.id) &&
-                                !isAuthorSessionBlocked(
-                                  blockedAuthors,
-                                  username: e.author?.username,
-                                  userId: e.author?.id,
-                                ),
-                          ),
+                      source.where(
+                        (e) =>
+                            !deletedIds.contains(e.id) &&
+                            !discoveryHiddenIds.contains(e.id) &&
+                            !isAuthorSessionBlocked(
+                              blockedAuthors,
+                              username: e.author?.username,
+                              userId: e.author?.id,
+                            ),
+                      ),
                       editedPosts,
                     );
                     if (visible.isEmpty) {
@@ -144,25 +227,38 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                     return RefreshIndicator(
                       color: AppColors.primary,
                       backgroundColor: AppColors.card,
-                      onRefresh: () {
-                        final future = ref.refresh(exploreEventsProvider.future);
-                        future.whenComplete(() {
-                          ref.read(editedPostsProvider.notifier).clear();
-                        });
-                        return future;
-                      },
-                      child: MasonryGridView.count(
+                      onRefresh: _refresh,
+                      child: CustomScrollView(
                         controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                         physics: const BouncingScrollPhysics(
                           parent: AlwaysScrollableScrollPhysics(),
                         ),
-                        crossAxisCount: ExploreEventTileLayout.crossAxisCount,
-                        crossAxisSpacing: ExploreEventTileLayout.gridSpacing,
-                        mainAxisSpacing: ExploreEventTileLayout.gridSpacing,
-                        itemCount: visible.length,
-                        itemBuilder: (context, i) =>
-                            ExploreEventTile(event: visible[i]),
+                        slivers: [
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                            sliver: SliverMasonryGrid.count(
+                              crossAxisCount: ExploreEventTileLayout.crossAxisCount,
+                              crossAxisSpacing: ExploreEventTileLayout.gridSpacing,
+                              mainAxisSpacing: ExploreEventTileLayout.gridSpacing,
+                              childCount: visible.length + (_isLoadingMore ? 1 : 0),
+                              itemBuilder: (context, i) {
+                                if (i >= visible.length) {
+                                  return const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Center(
+                                      child: CircularProgressIndicator(
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return RepaintBoundary(
+                                  child: ExploreEventTile(event: visible[i]),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   },
