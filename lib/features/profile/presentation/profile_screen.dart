@@ -230,16 +230,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Map<String, ProfileCalendarEvent> _eventsByDate(
+  Map<String, List<ProfileCalendarEvent>> _eventsByDate(
     List<Map<String, dynamic>> items,
   ) {
     final deleted = ref.read(deletedPostIdsProvider);
     final blocked = ref.read(sessionBlockedAuthorsProvider);
     final editedPosts = ref.read(editedPostsProvider);
-    final map = <String, ProfileCalendarEvent>{};
+    final map = <String, List<ProfileCalendarEvent>>{};
+    final seen = <String>{};
     for (final item in items) {
       var event = ProfileCalendarEvent.fromJson(item);
       event = overlayEditedProfileCalendarEvent(event, editedPosts);
+      if (event.postId.isNotEmpty && !seen.add(event.postId)) continue;
       if (deleted.contains(event.postId)) continue;
       if (isAuthorSessionBlocked(
         blocked,
@@ -249,37 +251,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         continue;
       }
       final key = DateFormat('yyyy-MM-dd').format(event.date);
-      map.putIfAbsent(key, () => event);
+      map.putIfAbsent(key, () => []).add(event);
     }
     return map;
-  }
-
-  List<ProfileCalendarEvent> _eventsChronological(
-    List<Map<String, dynamic>> items,
-  ) {
-    final deleted = ref.read(deletedPostIdsProvider);
-    final blocked = ref.read(sessionBlockedAuthorsProvider);
-    final editedPosts = ref.read(editedPostsProvider);
-    final events =
-        items
-            .map(ProfileCalendarEvent.fromJson)
-            .map((e) => overlayEditedProfileCalendarEvent(e, editedPosts))
-            .where(
-              (e) =>
-                  !deleted.contains(e.postId) &&
-                  !isAuthorSessionBlocked(
-                    blocked,
-                    username: e.author?.username,
-                    userId: e.author?.id,
-                  ),
-            )
-            .toList()
-          ..sort((a, b) {
-            final byDate = a.date.compareTo(b.date);
-            if (byDate != 0) return byDate;
-            return a.title.toLowerCase().compareTo(b.title.toLowerCase());
-          });
-    return events;
   }
 
   String _calendarViewMode(ProfileUser user, {required bool isOwn}) {
@@ -339,7 +313,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   }
 
   Widget _buildCalendarGrid({
-    required Map<String, ProfileCalendarEvent> eventsByDate,
+    required Map<String, List<ProfileCalendarEvent>> eventsByDate,
     required DateTime todayDate,
     required String username,
     required bool isOwnProfile,
@@ -362,26 +336,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         itemBuilder: (context, index) {
           final date = _gridStart.add(Duration(days: index));
           final dateKey = DateFormat('yyyy-MM-dd').format(date);
-          final event = eventsByDate[dateKey];
+          final dayEvents = eventsByDate[dateKey] ?? const <ProfileCalendarEvent>[];
           final isToday =
               date.year == todayDate.year &&
               date.month == todayDate.month &&
               date.day == todayDate.day;
           final isPast = date.isBefore(todayDate);
-          final faded = isPast && event == null;
+          final faded = isPast && dayEvents.isEmpty;
 
           return _CalendarDayCell(
+            key: ValueKey(dateKey),
             date: date,
-            event: event,
+            events: dayEvents,
             isToday: isToday,
             isMonthStart: date.day == 1,
             faded: faded,
             monthNames: _monthNames,
             dayNames: _dayNames,
-            onTap: event == null
+            onOpenEvent: dayEvents.isEmpty
                 ? null
-                : () => _openEvent(
+                : (event) => _openEvent(
                     event: event,
+                    dayEvents: dayEvents,
                     username: username,
                     isOwnProfile: isOwnProfile,
                   ),
@@ -393,12 +369,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
   void _openEvent({
     required ProfileCalendarEvent event,
+    required List<ProfileCalendarEvent> dayEvents,
     required String username,
     required bool isOwnProfile,
   }) {
+    final start = dayEvents.indexWhere((e) => e.postId == event.postId);
     showProfileEventSheet(
       context: context,
       event: event,
+      dayEvents: dayEvents,
+      initialIndex: start < 0 ? 0 : start,
       profileUsername: username,
       isOwnProfile: isOwnProfile,
       onCalendarChanged: () {
@@ -634,15 +614,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                     if (eventsOnly)
                       Expanded(
                         child: _EventsOnlyGrid(
-                          events: _eventsChronological(items),
+                          days: eventsByDate,
                           todayDate: todayDate,
                           monthNames: _monthNames,
                           dayNames: _dayNames,
                           onShowFullCalendar: isOwnProfile
                               ? () => _setOwnCalendarView('full')
                               : null,
-                          onOpenEvent: (event) => _openEvent(
+                          onOpenEvent: (event, dayEvents) => _openEvent(
                             event: event,
+                            dayEvents: dayEvents,
                             username: username,
                             isOwnProfile: isOwnProfile,
                           ),
@@ -821,7 +802,7 @@ class _PrivateProfilePaneState extends State<_PrivateProfilePane> {
 
 class _EventsOnlyGrid extends StatelessWidget {
   const _EventsOnlyGrid({
-    required this.events,
+    required this.days,
     required this.todayDate,
     required this.monthNames,
     required this.dayNames,
@@ -829,16 +810,20 @@ class _EventsOnlyGrid extends StatelessWidget {
     this.onShowFullCalendar,
   });
 
-  final List<ProfileCalendarEvent> events;
+  final Map<String, List<ProfileCalendarEvent>> days;
   final DateTime todayDate;
   final List<String> monthNames;
   final List<String> dayNames;
-  final void Function(ProfileCalendarEvent event) onOpenEvent;
+  final void Function(
+    ProfileCalendarEvent event,
+    List<ProfileCalendarEvent> dayEvents,
+  ) onOpenEvent;
   final VoidCallback? onShowFullCalendar;
 
   @override
   Widget build(BuildContext context) {
-    if (events.isEmpty) {
+    final keys = days.keys.toList()..sort();
+    if (keys.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -895,39 +880,38 @@ class _EventsOnlyGrid extends StatelessWidget {
       );
     }
 
-    // Same square cells as the full calendar — only days that have events.
     return GridView.builder(
       padding: EdgeInsets.zero,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 4,
         childAspectRatio: 1,
       ),
-      itemCount: events.length,
+      itemCount: keys.length,
       itemBuilder: (context, index) {
-        final event = events[index];
-        final date = DateTime(
-          event.date.year,
-          event.date.month,
-          event.date.day,
-        );
+        final dateKey = keys[index];
+        final dayEvents = days[dateKey]!;
+        final date = DateTime.tryParse(dateKey) ?? todayDate;
         final isToday =
             date.year == todayDate.year &&
             date.month == todayDate.month &&
             date.day == todayDate.day;
-        // Month banner when this event starts a new month vs the previous box.
-        final prev = index > 0 ? events[index - 1].date : null;
+        DateTime? prev;
+        if (index > 0) {
+          prev = DateTime.tryParse(keys[index - 1]);
+        }
         final isMonthStart =
             prev == null || prev.year != date.year || prev.month != date.month;
 
         return _CalendarDayCell(
+          key: ValueKey(dateKey),
           date: date,
-          event: event,
+          events: dayEvents,
           isToday: isToday,
           isMonthStart: isMonthStart,
           faded: false,
           monthNames: monthNames,
           dayNames: dayNames,
-          onTap: () => onOpenEvent(event),
+          onOpenEvent: (event) => onOpenEvent(event, dayEvents),
         );
       },
     );
@@ -1524,74 +1508,156 @@ class _CalendarNavBar extends StatelessWidget {
   }
 }
 
-class _CalendarDayCell extends StatelessWidget {
+class _CalendarDayCell extends StatefulWidget {
   const _CalendarDayCell({
+    super.key,
     required this.date,
-    required this.event,
+    required this.events,
     required this.isToday,
     required this.isMonthStart,
     required this.faded,
     required this.monthNames,
     required this.dayNames,
-    this.onTap,
+    this.onOpenEvent,
   });
 
   final DateTime date;
-  final ProfileCalendarEvent? event;
+  final List<ProfileCalendarEvent> events;
   final bool isToday;
   final bool isMonthStart;
   final bool faded;
   final List<String> monthNames;
   final List<String> dayNames;
-  final VoidCallback? onTap;
+  final void Function(ProfileCalendarEvent event)? onOpenEvent;
+
+  @override
+  State<_CalendarDayCell> createState() => _CalendarDayCellState();
+}
+
+class _CalendarDayCellState extends State<_CalendarDayCell> {
+  PageController? _pager;
+  var _page = 0;
+
+  List<ProfileCalendarEvent> get _events => widget.events;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_events.length > 1) {
+      _pager = PageController();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _CalendarDayCell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_events.length > 1 && _pager == null) {
+      _pager = PageController();
+      _page = 0;
+    } else if (_events.length <= 1 && _pager != null) {
+      _pager!.dispose();
+      _pager = null;
+      _page = 0;
+    } else if (_page >= _events.length) {
+      _page = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pager?.dispose();
+    super.dispose();
+  }
+
+  void _openAt(int index) {
+    final open = widget.onOpenEvent;
+    if (open == null || index < 0 || index >= _events.length) return;
+    open(_events[index]);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final monthLabel = '${monthNames[date.month - 1]} ${date.year}';
+    final date = widget.date;
+    final monthLabel =
+        '${widget.monthNames[date.month - 1]} ${date.year}';
+    final current = _events.isEmpty
+        ? null
+        : _events[_page.clamp(0, _events.length - 1)];
+    final dateColor = widget.isToday ? AppColors.primary : AppColors.foreground;
+    final dayColor =
+        widget.isToday ? AppColors.primary : AppColors.mutedForeground;
 
     return Opacity(
-      opacity: faded ? 0.4 : 1,
+      opacity: widget.faded ? 0.4 : 1,
       child: Material(
-        color: faded
+        color: widget.faded
             ? AppColors.black.withValues(alpha: 0.5)
-            : (isToday
+            : (widget.isToday
                   ? AppColors.primary.withValues(alpha: 0.1)
                   : AppColors.card),
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide.none,
-                right: const BorderSide(color: AppColors.border, width: 2),
-                bottom: const BorderSide(color: AppColors.border, width: 2),
-              ),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            border: Border(
+              left: BorderSide.none,
+              right: BorderSide(color: AppColors.border, width: 2),
+              bottom: BorderSide(color: AppColors.border, width: 2),
             ),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (event != null && event!.imageUrl.isNotEmpty)
-                  BeTherNetworkImage(url: event!.imageUrl, fit: BoxFit.cover),
-                if (event != null)
-                  DecoratedBox(
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (_events.length > 1)
+                PageView.builder(
+                  controller: _pager,
+                  itemCount: _events.length,
+                  onPageChanged: (i) => setState(() => _page = i),
+                  itemBuilder: (context, i) {
+                    final event = _events[i];
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _openAt(i),
+                      child: event.imageUrl.isEmpty
+                          ? const ColoredBox(color: AppColors.muted)
+                          : BeTherNetworkImage(
+                              url: event.imageUrl,
+                              fit: BoxFit.cover,
+                            ),
+                    );
+                  },
+                )
+              else if (current != null)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openAt(0),
+                  child: current.imageUrl.isEmpty
+                      ? const ColoredBox(color: AppColors.muted)
+                      : BeTherNetworkImage(
+                          url: current.imageUrl,
+                          fit: BoxFit.cover,
+                        ),
+                ),
+              if (current != null)
+                const IgnorePointer(
+                  child: DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
                         colors: [
-                          Colors.black.withValues(alpha: 0.9),
-                          Colors.black.withValues(alpha: 0.35),
-                          Colors.transparent,
+                          Color(0xE6000000),
+                          Color(0x59000000),
+                          Color(0x00000000),
                         ],
                       ),
                     ),
                   ),
-                // Bright banner so a new month is obvious while scrolling.
-                if (isMonthStart)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
+                ),
+              if (widget.isMonthStart)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: IgnorePointer(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 4,
@@ -1611,41 +1677,60 @@ class _CalendarDayCell extends StatelessWidget {
                       ),
                     ),
                   ),
-                Positioned(
-                  top: isMonthStart ? 28 : 4,
-                  left: 4,
+                ),
+              Positioned(
+                top: widget.isMonthStart ? 28 : 4,
+                left: 4,
+                child: IgnorePointer(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         '${date.day}',
-                        style: AppTextStyles.display(
-                          18,
-                          color: isToday
-                              ? AppColors.primary
-                              : AppColors.foreground,
-                        ),
+                        style: AppTextStyles.display(18, color: dateColor),
                       ),
                       Text(
-                        dayNames[date.weekday % 7],
+                        widget.dayNames[date.weekday % 7],
                         style: AppTextStyles.body(
                           10,
-                          color: isToday
-                              ? AppColors.primary
-                              : AppColors.mutedForeground,
+                          color: dayColor,
                           weight: FontWeight.w800,
                         ),
                       ),
                     ],
                   ),
                 ),
-                if (event != null)
-                  Positioned(
-                    left: 4,
-                    right: 4,
-                    bottom: 4,
+              ),
+              if (_events.length > 1)
+                Positioned(
+                  top: widget.isMonthStart ? 28 : 4,
+                  right: 4,
+                  child: IgnorePointer(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
+                      color: AppColors.secondary.withValues(alpha: 0.82),
+                      child: Text(
+                        '${_events.length}',
+                        style: AppTextStyles.display(
+                          10,
+                          color: AppColors.background,
+                          letterSpacing: 0.04,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (current != null)
+                Positioned(
+                  left: 4,
+                  right: 4,
+                  bottom: _events.length > 1 ? 14 : 4,
+                  child: IgnorePointer(
                     child: Text(
-                      event!.location,
+                      current.location,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.body(
@@ -1655,8 +1740,33 @@ class _CalendarDayCell extends StatelessWidget {
                       ),
                     ),
                   ),
-              ],
-            ),
+                ),
+              if (_events.length > 1)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 3,
+                  child: IgnorePointer(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (var i = 0; i < _events.length; i++)
+                          Container(
+                            width: 4,
+                            height: 4,
+                            margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: i == _page
+                                  ? Colors.white
+                                  : Colors.white.withValues(alpha: 0.4),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),

@@ -260,7 +260,14 @@ Future<void> showProfileEventSheet({
   required String profileUsername,
   required bool isOwnProfile,
   required VoidCallback onCalendarChanged,
+  List<ProfileCalendarEvent>? dayEvents,
+  int initialIndex = 0,
 }) {
+  final events = (dayEvents == null || dayEvents.isEmpty)
+      ? <ProfileCalendarEvent>[event]
+      : List<ProfileCalendarEvent>.from(dayEvents);
+  final start = initialIndex.clamp(0, events.length - 1);
+
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -269,27 +276,141 @@ Future<void> showProfileEventSheet({
     useSafeArea: false,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.secondary.withValues(alpha: 0.45),
-    builder: (context) => _ProfileEventSheet(
-      event: event,
-      profileUsername: profileUsername,
-      isOwnProfile: isOwnProfile,
-      onCalendarChanged: onCalendarChanged,
-    ),
+    builder: (context) {
+      if (events.length == 1) {
+        return _ProfileEventSheet(
+          event: events.first,
+          profileUsername: profileUsername,
+          isOwnProfile: isOwnProfile,
+          onCalendarChanged: onCalendarChanged,
+        );
+      }
+      return _ProfileEventDayPager(
+        events: events,
+        initialIndex: start,
+        profileUsername: profileUsername,
+        isOwnProfile: isOwnProfile,
+        onCalendarChanged: onCalendarChanged,
+      );
+    },
   );
+}
+
+class _ProfileEventDayPager extends StatefulWidget {
+  const _ProfileEventDayPager({
+    required this.events,
+    required this.initialIndex,
+    required this.profileUsername,
+    required this.isOwnProfile,
+    required this.onCalendarChanged,
+  });
+
+  final List<ProfileCalendarEvent> events;
+  final int initialIndex;
+  final String profileUsername;
+  final bool isOwnProfile;
+  final VoidCallback onCalendarChanged;
+
+  @override
+  State<_ProfileEventDayPager> createState() => _ProfileEventDayPagerState();
+}
+
+class _ProfileEventDayPagerState extends State<_ProfileEventDayPager> {
+  late final PageController _controller;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex;
+    _controller = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        PageView.builder(
+          controller: _controller,
+          itemCount: widget.events.length,
+          onPageChanged: (i) => setState(() => _index = i),
+          itemBuilder: (context, i) => _ProfileEventSheet(
+            key: ValueKey(widget.events[i].postId),
+            event: widget.events[i],
+            profileUsername: widget.profileUsername,
+            isOwnProfile: widget.isOwnProfile,
+            onCalendarChanged: widget.onCalendarChanged,
+            pageIndex: i,
+            pageCount: widget.events.length,
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 10 + MediaQuery.viewPaddingOf(context).bottom,
+          child: IgnorePointer(
+            child: _EventPageDots(
+              count: widget.events.length,
+              index: _index,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EventPageDots extends StatelessWidget {
+  const _EventPageDots({required this.count, required this.index});
+
+  final int count;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < count; i++)
+          Container(
+            width: i == index ? 8 : 6,
+            height: 6,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            decoration: BoxDecoration(
+              color: i == index
+                  ? AppColors.primary
+                  : AppColors.mutedForeground.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _ProfileEventSheet extends ConsumerStatefulWidget {
   const _ProfileEventSheet({
+    super.key,
     required this.event,
     required this.profileUsername,
     required this.isOwnProfile,
     required this.onCalendarChanged,
+    this.pageIndex = 0,
+    this.pageCount = 1,
   });
 
   final ProfileCalendarEvent event;
   final String profileUsername;
   final bool isOwnProfile;
   final VoidCallback onCalendarChanged;
+  final int pageIndex;
+  final int pageCount;
 
   @override
   ConsumerState<_ProfileEventSheet> createState() => _ProfileEventSheetState();
@@ -772,7 +893,8 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                       16,
                       10,
                       16,
-                      16 + MediaQuery.viewPaddingOf(context).bottom,
+                      (widget.pageCount > 1 ? 36 : 16) +
+                          MediaQuery.viewPaddingOf(context).bottom,
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -790,6 +912,18 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                             ),
                           ),
                         ),
+                        if (widget.pageCount > 1) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            '${widget.pageIndex + 1} / ${widget.pageCount}',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.body(
+                              11,
+                              color: AppColors.mutedForeground,
+                              weight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 8),
                         Row(
                           children: [

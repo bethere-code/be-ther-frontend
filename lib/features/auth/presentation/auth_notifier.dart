@@ -7,6 +7,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../core/analytics/analytics_tracker.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/push/push_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/auth_repository.dart';
 
@@ -236,6 +237,9 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> logout() async {
+    try {
+      await ref.read(pushServiceProvider).stopOnLogout();
+    } catch (_) {}
     try {
       await ref.read(analyticsTrackerProvider).onLogout();
     } catch (_) {}

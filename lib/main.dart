@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-// import 'package:flutter/rendering.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -9,12 +12,35 @@ import 'app.dart';
 import 'core/analytics/analytics_tracker.dart';
 import 'core/background_tasks/notification_syncer.dart';
 import 'core/network/connectivity_controller.dart';
+import 'core/push/push_service.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/auth_notifier.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  var firebaseReady = false;
+  try {
+    await Firebase.initializeApp();
+    firebaseReady = true;
+  } catch (e, st) {
+    // Hot-restart / missing native channel must not block the app.
+    debugPrint('Firebase.initializeApp failed: $e\n$st');
+  }
+
+  if (firebaseReady) {
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    FlutterError.onError = (details) {
+      FlutterError.presentError(details);
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+  }
+
   await SystemChrome.setPreferredOrientations(const [
     DeviceOrientation.portraitUp,
   ]);
@@ -26,7 +52,6 @@ Future<void> main() async {
         ? null
         : serverClientId,
   );
-  // debugRepaintRainbowEnabled = true;
   runApp(const ProviderScope(child: AppBootstrap()));
 }
 
@@ -37,18 +62,28 @@ class AppBootstrap extends ConsumerStatefulWidget {
   ConsumerState<AppBootstrap> createState() => _AppBootstrapState();
 }
 
-class _AppBootstrapState extends ConsumerState<AppBootstrap> with WidgetsBindingObserver {
+class _AppBootstrapState extends ConsumerState<AppBootstrap>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Initialize notification syncer on app startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(notificationSyncerProvider).start();
-      // Kick connectivity watch early (also watched by OfflineBarrier).
       ref.read(connectivityProvider);
       _syncAnalyticsTracker();
+      if (ref.read(authNotifierProvider).isAuthenticated) {
+        unawaitedPushStart();
+      }
     });
+  }
+
+  void unawaitedPushStart() {
+    final push = ref.read(pushServiceProvider);
+    final user = ref.read(authNotifierProvider).user;
+    final id = user?['_id']?.toString() ?? user?['id']?.toString();
+    push.setAnalyticsUser(id);
+    push.startAfterAuth();
   }
 
   void _syncAnalyticsTracker() {
@@ -59,7 +94,6 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> with WidgetsBinding
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // Stop notification syncer when app terminates
     ref.read(notificationSyncerProvider).stop();
     super.dispose();
   }
@@ -67,18 +101,25 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> with WidgetsBinding
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Immediately sync notifications when app resumes from background
       ref.read(notificationSyncerProvider).syncNow();
-      // Re-probe: OS may have restored network while we were suspended.
       ref.read(connectivityProvider.notifier).checkNow();
+      if (ref.read(authNotifierProvider).isAuthenticated) {
+        ref.read(pushServiceProvider).refreshCityTopic();
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(authNotifierProvider.select((s) => s.isAuthenticated), (prev, next) {
+    ref.listen(authNotifierProvider.select((s) => s.isAuthenticated), (
+      prev,
+      next,
+    ) {
       if (next == true) {
         ref.read(analyticsTrackerProvider).start(ref.read(appRouterProvider));
+        unawaitedPushStart();
+      } else if (prev == true && next == false) {
+        ref.read(pushServiceProvider).stopOnLogout();
       }
     });
     return const BeTherApp();

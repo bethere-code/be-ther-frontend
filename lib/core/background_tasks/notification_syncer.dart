@@ -4,53 +4,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/notifications/presentation/notifications_providers.dart';
 
-/// Keeps the alerts badge fresh without hammering the full notifications list.
+/// Keeps the alerts badge fresh via resume + push — no periodic poll.
 ///
-/// Phase 1 interim (FCM replaces this in Phase 2.1):
-/// - Unread-count poll every [_unreadInterval] (badge only)
-/// - Full list refresh on [syncNow] (app resume / alerts screen)
+/// Full list refresh on [syncNow] (app resume / alerts screen / push open).
 class NotificationSyncer {
   NotificationSyncer({required this.ref});
 
   final Ref ref;
-  Timer? _unreadTimer;
 
-  /// Was 15s full-list poll (~67 req/s at 1k users). Now badge-only.
-  static const Duration _unreadInterval = Duration(seconds: 60);
-
-  /// Start badge polling. Does not fetch the full notifications list.
+  /// One-shot badge refresh at start (no timer).
   void start() {
     unawaited(_refreshUnreadOnly());
-    _unreadTimer?.cancel();
-    _unreadTimer = Timer.periodic(_unreadInterval, (_) {
-      unawaited(_refreshUnreadOnly());
-    });
   }
 
   Future<void> _refreshUnreadOnly() async {
     try {
       ref.invalidate(unreadNotificationCountProvider);
       await ref.read(unreadNotificationCountProvider.future);
-    } catch (_) {
-      // Silently handle errors to avoid disrupting the app
-    }
+    } catch (_) {}
   }
 
   Future<void> _refreshFullList() async {
     try {
       ref.invalidate(notificationsProvider);
       await ref.read(notificationsProvider.future);
-    } catch (_) {
-      // Silently handle errors to avoid disrupting the app
-    }
+    } catch (_) {}
   }
 
-  void stop() {
-    _unreadTimer?.cancel();
-    _unreadTimer = null;
-  }
+  void stop() {}
 
-  /// App resume / alerts open — refresh badge + full list.
+  /// App resume / alerts open / push tap — refresh badge + full list.
   Future<void> syncNow() async {
     await Future.wait([
       _refreshUnreadOnly(),

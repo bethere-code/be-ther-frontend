@@ -62,6 +62,11 @@ dependencies:
   package_info_plus: ^10.0.0
   connectivity_plus: ^7.3.1
   fluttertoast: ^10.0.0
+  firebase_core: ^4.14.0
+  firebase_messaging: ^16.6.0
+  firebase_analytics: ^12.5.0
+  firebase_crashlytics: ^5.3.0
+  flutter_local_notifications: ^22.3.0
 
 dev_dependencies:
   flutter_test:

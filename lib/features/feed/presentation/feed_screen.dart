@@ -302,10 +302,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       });
     });
 
-    ref.listen<List<FeedPost>>(feedLocalInsertsProvider, (
-      prev,
-      next,
-    ) {
+    ref.listen<List<FeedPost>>(feedLocalInsertsProvider, (prev, next) {
       if (next.isEmpty) return;
       if (prev != null && next.length <= prev.length) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -341,14 +338,11 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 12),
-                  child: InkWell(
-                    onTap: _scrollToTop,
-                    child: Image.asset(
-                      AppImages.betherNewLogo,
-                      fit: BoxFit.contain,
-                    ),
+                InkWell(
+                  onTap: _scrollToTop,
+                  child: Image.asset(
+                    AppImages.beatherLogo,
+                    fit: BoxFit.contain,
                   ),
                 ),
                 const Spacer(),
