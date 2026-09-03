@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
@@ -15,14 +13,7 @@ import '../../profile/presentation/profile_providers.dart';
 import 'blocked_users_screen.dart';
 import 'widgets/profile_edit_section.dart';
 import 'package:be_ther/core/ui/app_toast.dart';
-
-Future<String>? _appVersionFuture;
-
-Future<String> _appVersion() {
-  return _appVersionFuture ??= PackageInfo.fromPlatform().then(
-    (pkg) => 'BE THER \nv${pkg.version} (${pkg.buildNumber})',
-  );
-}
+import 'settings_providers.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -403,24 +394,23 @@ class _CalendarViewButton extends StatelessWidget {
   }
 }
 
-class _AppVersionFooter extends StatelessWidget {
+class _AppVersionFooter extends ConsumerWidget {
   const _AppVersionFooter();
 
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _appVersion(),
-      builder: (context, snap) {
-        final text = snap.data;
-        if (text == null) return const SizedBox.shrink();
-        return Center(
-          child: Text(
-            text,
-            textAlign: TextAlign.center,
-            style: AppTextStyles.body(13, color: AppColors.mutedForeground),
-          ),
-        );
-      },
+  Widget build(BuildContext context, WidgetRef ref) {
+    final version = ref.watch(appVersionProvider);
+
+    return version.when(
+      data: (text) => Center(
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: AppTextStyles.body(13, color: AppColors.mutedForeground),
+        ),
+      ),
+      loading: () => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
     );
   }
 }
