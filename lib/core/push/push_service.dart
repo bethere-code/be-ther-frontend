@@ -1,19 +1,24 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/scheduler.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/auth/presentation/auth_notifier.dart';
 import '../../features/feed/data/places_repository.dart';
 import '../../features/notifications/presentation/notifications_providers.dart';
 import '../analytics/device_snapshot.dart';
 import '../analytics/fcm_token.dart';
 import '../background_tasks/notification_syncer.dart';
 import '../network/api_client.dart';
+import '../routing/app_router.dart';
+import '../routing/deep_link_listener.dart';
 import 'push_local_notifications.dart';
+import 'push_open.dart';
 
 /// Background isolate entry — must be top-level.
 /// Do NOT show a local notification here when [message.notification] is set;
@@ -176,6 +181,16 @@ class PushService {
 
   Future<void> _onOpened(RemoteMessage message) async {
     await _ref.read(notificationSyncerProvider).syncNow();
+    final loc = locationFromPushData(message.data);
+    if (loc == null || loc.isEmpty) return;
+    final auth = _ref.read(authNotifierProvider);
+    if (!auth.isReady || !auth.isAuthenticated) {
+      _ref.read(pendingDeepLinkProvider.notifier).setPending(loc);
+      return;
+    }
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _ref.read(appRouterProvider).go(loc);
+    });
   }
 
   /// Subscribe to `city_<slug>` from GPS reverse geocode when location allowed.
