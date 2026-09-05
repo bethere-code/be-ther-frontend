@@ -18,7 +18,9 @@ import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../core/design/widgets/be_ther_buttons.dart';
+import '../../../core/media/cover_aspect.dart';
 import '../../../core/media/default_event_image.dart';
+import '../../../core/media/measure_cover_aspect.dart';
 import '../../../core/media/ticket_link_preview.dart';
 import '../../../core/network/api_client.dart';
 import '../../auth/presentation/auth_notifier.dart';
@@ -142,6 +144,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
   String? _existingImageUrl;
   bool _usesDefaultCover = false;
+  double? _coverAspectRatio;
   bool _editLoading = false;
   FeedPost? _editingPost;
 
@@ -177,6 +180,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       _description.text = post.caption;
       _existingImageUrl = post.imageUrl;
       _usesDefaultCover = post.usesDefaultCover;
+      _coverAspectRatio = post.coverAspectRatio;
       _isGoing = post.status == 'going';
       _ticket.text = details.ticketUrl ?? '';
 
@@ -359,8 +363,12 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     try {
       final path = await _pickEventPhoto(context);
       if (!mounted || path == null) return;
+      final aspect = await measureCoverAspectRatio(path);
+      if (!mounted) return;
       setState(() {
         _imagePath = path;
+        _coverAspectRatio = aspect;
+        _usesDefaultCover = false;
         _imageFromTicketLink = false;
         _ticketPreviewMessage = null;
         _touched[_fieldImage] = true;
@@ -376,6 +384,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       _imagePath = null;
       _existingImageUrl = null;
       _usesDefaultCover = false;
+      _coverAspectRatio = null;
       _imageFromTicketLink = false;
       _ticketPreviewMessage = null;
     });
@@ -455,8 +464,12 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         return;
       }
 
+      final aspect = await measureCoverAspectRatio(savePath);
+      if (!mounted || requestId != _ticketPreviewRequestId) return;
       setState(() {
         _imagePath = savePath;
+        _coverAspectRatio = aspect;
+        _usesDefaultCover = false;
         _imageFromTicketLink = true;
         _ticketPreviewLoading = false;
         _ticketPreviewMessage = null;
@@ -759,18 +772,22 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
       String imageUrl;
       var usesDefaultCover = _usesDefaultCover;
+      var coverAspect = _coverAspectRatio;
       final pickedLocal = _imagePath != null && !_imagePath!.startsWith('http');
       if (pickedLocal && await File(_imagePath!).exists()) {
         compressedFile = await _compressPhoto(_imagePath!);
         imageUrl = await posts.uploadImage(compressedFile.path);
         usesDefaultCover = false;
+        coverAspect ??= await measureCoverAspectRatio(compressedFile.path);
       } else if (_isEditing && _existingImageUrl != null && _existingImageUrl!.isNotEmpty) {
         imageUrl = _existingImageUrl!;
+        coverAspect ??= _editingPost?.coverAspectRatio;
       } else {
         defaultCoverFile = await buildDefaultEventCoverFile();
         compressedFile = await _compressPhoto(defaultCoverFile.path);
         imageUrl = await posts.uploadImage(compressedFile.path);
         usesDefaultCover = true;
+        coverAspect = kCoverAspectDefault;
       }
 
       final payload = <String, dynamic>{
@@ -779,6 +796,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         'imageUrl': imageUrl,
         'caption': _description.text.trim(),
         'usesDefaultCover': usesDefaultCover,
+        'coverAspectRatio': ?coverAspect,
         'eventDetails': eventDetails,
       };
 
@@ -792,6 +810,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
             caption: _description.text.trim(),
             imageUrl: imageUrl,
             usesDefaultCover: usesDefaultCover,
+            coverAspectRatio: coverAspect,
             status: _isGoing ? 'going' : 'interested',
             place: StructuredPlaceFields(
               placeId: place.placeId,
@@ -1205,7 +1224,10 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                 const _SectionLabel('EVENT PHOTO (OPTIONAL)'),
                                 const SizedBox(height: 8),
                                 AspectRatio(
-                                  aspectRatio: 16 / 7,
+                                  aspectRatio: resolveCoverAspectRatio(
+                                    stored: _coverAspectRatio,
+                                    usesDefaultCover: _usesDefaultCover,
+                                  ),
                                   child: Stack(
                                     fit: StackFit.expand,
                                     children: [

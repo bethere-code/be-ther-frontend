@@ -359,7 +359,7 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                   if (event.imageUrl.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     AspectRatio(
-                      aspectRatio: 16 / 10,
+                      aspectRatio: event.displayCoverAspect,
                       child: Hero(
                         tag: event.heroTag,
                         child: Material(

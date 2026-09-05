@@ -13,6 +13,7 @@ import '../../../../core/design/widgets/event_edited_badge.dart';
 import '../../../../core/design/widgets/event_sheet_creator_row.dart';
 import '../../../../core/design/widgets/expandable_caption.dart';
 import '../../../../core/design/widgets/post_more_menu_button.dart';
+import '../../../../core/media/cover_aspect.dart';
 import '../../../../core/utils/event_date_utils.dart';
 import '../../../../core/utils/link_utils.dart';
 import '../../../explore/domain/explore_event.dart';
@@ -57,6 +58,8 @@ class ProfileCalendarEvent {
     this.hiddenOnProfile = false,
     this.caption,
     this.editedAt,
+    this.usesDefaultCover = false,
+    this.coverAspectRatio,
   });
 
   final String postId;
@@ -85,6 +88,13 @@ class ProfileCalendarEvent {
   final bool hiddenOnProfile;
   final String? caption;
   final DateTime? editedAt;
+  final bool usesDefaultCover;
+  final double? coverAspectRatio;
+
+  double get displayCoverAspect => resolveCoverAspectRatio(
+        stored: coverAspectRatio,
+        usesDefaultCover: usesDefaultCover,
+      );
 
   bool get isEdited => editedAt != null;
 
@@ -159,6 +169,8 @@ class ProfileCalendarEvent {
           ? (json['caption'] as String).trim()
           : null,
       editedAt: _parseEditedAt(json['editedAt']),
+      usesDefaultCover: json['usesDefaultCover'] as bool? ?? false,
+      coverAspectRatio: parseCoverAspectRatio(json['coverAspectRatio']),
     );
   }
 
@@ -200,6 +212,9 @@ class ProfileCalendarEvent {
       calendarStatus: calendarStatus ?? this.calendarStatus,
       hiddenOnProfile: hiddenOnProfile,
       caption: caption,
+      editedAt: editedAt,
+      usesDefaultCover: usesDefaultCover,
+      coverAspectRatio: coverAspectRatio,
     );
   }
 
@@ -251,6 +266,8 @@ ProfileCalendarEvent overlayEditedProfileCalendarEvent(
     hiddenOnProfile: event.hiddenOnProfile,
     caption: edit.caption.isNotEmpty ? edit.caption : event.caption,
     editedAt: edit.editedAt ?? DateTime.now(),
+    usesDefaultCover: edit.usesDefaultCover,
+    coverAspectRatio: edit.coverAspectRatio ?? event.coverAspectRatio,
   );
 }
 
@@ -1050,7 +1067,7 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                         if (event.imageUrl.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           AspectRatio(
-                            aspectRatio: 16 / 10,
+                            aspectRatio: event.displayCoverAspect,
                             child: Material(
                               color: AppColors.card,
                               clipBehavior: Clip.hardEdge,

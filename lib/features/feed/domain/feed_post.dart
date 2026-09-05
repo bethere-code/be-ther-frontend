@@ -1,3 +1,4 @@
+import '../../../core/media/cover_aspect.dart';
 import '../../../core/utils/event_date_utils.dart';
 
 class FeedPostAuthor {
@@ -131,6 +132,7 @@ class FeedPost {
     this.isEventPastApi,
     this.editedAt,
     this.usesDefaultCover = false,
+    this.coverAspectRatio,
   });
 
   final String id;
@@ -151,6 +153,14 @@ class FeedPost {
   final bool? isEventPastApi;
   final DateTime? editedAt;
   final bool usesDefaultCover;
+  /// Cover width÷height as uploaded; null on legacy posts.
+  final double? coverAspectRatio;
+
+  /// Layout slot for wide covers (feed / sheets).
+  double get displayCoverAspect => resolveCoverAspectRatio(
+        stored: coverAspectRatio,
+        usesDefaultCover: usesDefaultCover,
+      );
 
   bool get isEdited => editedAt != null;
 
@@ -218,6 +228,7 @@ class FeedPost {
       isEventPastApi: json['isEventPast'] is bool ? json['isEventPast'] as bool : null,
       editedAt: _parseEditedAt(json['editedAt']),
       usesDefaultCover: json['usesDefaultCover'] as bool? ?? false,
+      coverAspectRatio: parseCoverAspectRatio(json['coverAspectRatio']),
     );
   }
 
@@ -255,6 +266,7 @@ class FeedPost {
       isEventPastApi: isEventPastApi,
       editedAt: editedAt,
       usesDefaultCover: usesDefaultCover,
+      coverAspectRatio: coverAspectRatio,
     );
   }
 
@@ -275,6 +287,7 @@ class FeedPost {
         if (isEventPastApi != null) 'isEventPast': isEventPastApi,
         if (editedAt != null) 'editedAt': editedAt!.toIso8601String(),
         'usesDefaultCover': usesDefaultCover,
+        if (coverAspectRatio != null) 'coverAspectRatio': coverAspectRatio,
         'createdAt': createdAt.toIso8601String(),
         'authorId': {
           '_id': author.id,

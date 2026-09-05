@@ -9,6 +9,7 @@ FeedPost buildEditedFeedPost({
   required String caption,
   required String imageUrl,
   required bool usesDefaultCover,
+  double? coverAspectRatio,
   required String status,
   required StructuredPlaceFields place,
   String? date,
@@ -48,6 +49,7 @@ FeedPost buildEditedFeedPost({
     isEventPastApi: base.isEventPastApi,
     editedAt: editedAt ?? DateTime.now(),
     usesDefaultCover: usesDefaultCover,
+    coverAspectRatio: coverAspectRatio,
   );
 }
 
@@ -115,6 +117,8 @@ ExploreEvent overlayEditedExploreEvent(
     likesCount: event.likesCount,
     commentsCount: event.commentsCount,
     editedAt: edit.editedAt ?? DateTime.now(),
+    usesDefaultCover: edit.usesDefaultCover,
+    coverAspectRatio: edit.coverAspectRatio ?? event.coverAspectRatio,
   );
 }
 

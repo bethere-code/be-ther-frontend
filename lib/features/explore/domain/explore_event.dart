@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 
+import '../../../core/media/cover_aspect.dart';
 import '../../../core/utils/event_date_utils.dart';
 
 class ExploreAuthor {
@@ -85,6 +86,8 @@ class ExploreEvent {
     this.likesCount = 0,
     this.commentsCount = 0,
     this.editedAt,
+    this.usesDefaultCover = false,
+    this.coverAspectRatio,
   });
 
   final String id;
@@ -113,8 +116,15 @@ class ExploreEvent {
   final int likesCount;
   final int commentsCount;
   final DateTime? editedAt;
+  final bool usesDefaultCover;
+  final double? coverAspectRatio;
 
   bool get isEdited => editedAt != null;
+
+  double get displayCoverAspect => resolveCoverAspectRatio(
+        stored: coverAspectRatio,
+        usesDefaultCover: usesDefaultCover,
+      );
 
   String get postId => id;
 
@@ -235,6 +245,8 @@ class ExploreEvent {
       likesCount: likesCount,
       commentsCount: commentsCount,
       editedAt: _parseEditedAt(json['editedAt']),
+      usesDefaultCover: json['usesDefaultCover'] as bool? ?? false,
+      coverAspectRatio: parseCoverAspectRatio(json['coverAspectRatio']),
     );
   }
 
@@ -283,6 +295,8 @@ class ExploreEvent {
       likesCount: likesCount ?? this.likesCount,
       commentsCount: commentsCount ?? this.commentsCount,
       editedAt: editedAt ?? this.editedAt,
+      usesDefaultCover: usesDefaultCover,
+      coverAspectRatio: coverAspectRatio,
     );
   }
 

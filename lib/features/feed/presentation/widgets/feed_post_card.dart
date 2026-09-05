@@ -335,7 +335,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
             Hero(
               tag: 'post-image-$id',
               child: AspectRatio(
-                aspectRatio: 21 / 9,
+                aspectRatio: post.displayCoverAspect,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -375,7 +375,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
             )
           else
             AspectRatio(
-              aspectRatio: 21 / 9,
+              aspectRatio: post.displayCoverAspect,
               child: BeTherNetworkImage(url: imageUrl, fit: BoxFit.cover),
             ),
           Padding(
