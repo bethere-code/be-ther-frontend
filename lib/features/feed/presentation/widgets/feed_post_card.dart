@@ -31,11 +31,15 @@ class FeedPostCard extends ConsumerStatefulWidget {
     required this.post,
     this.recordFeedImpression = true,
     this.onInteractionChanged,
+    this.lifted = false,
   });
 
   final FeedPost post;
   final bool recordFeedImpression;
   final VoidCallback? onInteractionChanged;
+
+  /// White rounded card on the grey feed canvas (feed screen only for now).
+  final bool lifted;
 
   @override
   ConsumerState<FeedPostCard> createState() => _FeedPostCardState();
@@ -235,12 +239,28 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
     final relativeTime = getRelativeTime(post.createdAt);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 0),
-      decoration: const BoxDecoration(
+      margin: widget.lifted
+          ? const EdgeInsets.fromLTRB(
+              AppDimens.feedCardInset,
+              0,
+              AppDimens.feedCardInset,
+              AppDimens.feedCardGap,
+            )
+          : EdgeInsets.zero,
+      clipBehavior: widget.lifted ? Clip.antiAlias : Clip.none,
+      decoration: BoxDecoration(
         color: AppColors.card,
-        border: Border(
-          bottom: BorderSide(color: AppColors.border, width: AppDimens.border),
-        ),
+        borderRadius: widget.lifted
+            ? BorderRadius.circular(AppDimens.feedCardRadius)
+            : null,
+        border: widget.lifted
+            ? null
+            : const Border(
+                bottom: BorderSide(
+                  color: AppColors.border,
+                  width: AppDimens.border,
+                ),
+              ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -533,7 +553,7 @@ class _EventDetails extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(0, 8, 0, 0),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.muted.withValues(alpha: 0.5),
+        color: AppColors.card,
         border: const Border(
           top: BorderSide(
             color: AppColors.mutedForeground,
@@ -622,8 +642,8 @@ class _EventDetails extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       backgroundColor: calendarButtonBackground(calendarStatus),
                       foregroundColor: calendarButtonForeground(calendarStatus),
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppDimens.radius),
                       ),
                     ),
                     onPressed: isLoading ? null : onCalendarToggle,

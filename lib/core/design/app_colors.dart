@@ -21,4 +21,6 @@ abstract final class AppColors {
   static const border = Color(0xFF1A2332);
   static const ring = Color(0xFFD4745E);
   static const inputBackground = Color(0xFFFFFFFF);
+  /// Feed canvas behind lifted post cards (very light grey).
+  static const feedCanvas = Color(0xFFECECE8);
 }

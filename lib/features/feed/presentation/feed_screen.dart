@@ -14,6 +14,7 @@ import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
 import '../../../core/routing/app_route_observer.dart';
 import '../../../core/utils/popup_menu_utils.dart';
+import '../../auth/presentation/auth_notifier.dart';
 import '../../profile/presentation/block_session.dart';
 import '../../profile/presentation/profile_providers.dart';
 import '../data/posts_repository.dart';
@@ -23,6 +24,7 @@ import 'add_post_screen.dart';
 import 'feed_providers.dart';
 import 'widgets/feed_permissions_coordinator.dart';
 import 'widgets/feed_post_card.dart';
+import 'widgets/welcome_dialog.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
   const FeedScreen({super.key});
@@ -129,6 +131,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       _permissionCheckQueued = false;
       if (!mounted) return;
       if (ModalRoute.of(context)?.isCurrent != true) return;
+
+      final auth = ref.read(authNotifierProvider);
+      if (auth.pendingWelcome) {
+        ref.read(authNotifierProvider.notifier).consumePendingWelcome();
+        await showWelcomeDialog(context);
+        if (!mounted) return;
+        if (ModalRoute.of(context)?.isCurrent != true) return;
+      }
+
       final userRepo = ref.read(userRepositoryProvider);
       await FeedPermissionsCoordinator.ensure(
         context,
@@ -361,7 +372,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           ),
         ),
         child: Container(
-          color: AppColors.background,
+          color: AppColors.feedCanvas,
           child: feed.when(
             skipLoadingOnReload: true,
             skipLoadingOnRefresh: true,
@@ -405,6 +416,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                 onRefresh: _refresh,
                 child: ListView.builder(
                   controller: _scrollController,
+                  padding: const EdgeInsets.only(
+                    top: AppDimens.feedCardGap,
+                    bottom: AppDimens.feedCardGap,
+                  ),
                   physics: const BouncingScrollPhysics(
                     parent: AlwaysScrollableScrollPhysics(),
                   ),
@@ -422,6 +437,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                       child: FeedPostCard(
                         key: ValueKey(_itemId(item)),
                         post: item,
+                        lifted: true,
                       ),
                     );
                     if (index < localInserts.length &&
@@ -439,8 +455,13 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
             loading: () {
               if (localInserts.isEmpty) {
                 return ListView.builder(
+                  padding: const EdgeInsets.only(
+                    top: AppDimens.feedCardGap,
+                    bottom: AppDimens.feedCardGap,
+                  ),
                   itemCount: 5,
-                  itemBuilder: (context, index) => const PostSkeleton(),
+                  itemBuilder: (context, index) =>
+                      const PostSkeleton(lifted: true),
                 );
               }
               final visibleItems = _mergeVisibleItems(
@@ -455,6 +476,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                 onRefresh: _refresh,
                 child: ListView.builder(
                   controller: _scrollController,
+                  padding: const EdgeInsets.only(
+                    top: AppDimens.feedCardGap,
+                    bottom: AppDimens.feedCardGap,
+                  ),
                   physics: const AlwaysScrollableScrollPhysics(),
                   itemCount: visibleItems.length,
                   itemBuilder: (context, index) {
@@ -463,6 +488,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                       child: FeedPostCard(
                         key: ValueKey(_itemId(item)),
                         post: item,
+                        lifted: true,
                       ),
                     );
                   },
@@ -564,8 +590,8 @@ class _FeedEmptyState extends StatelessWidget {
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.primaryForeground,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppDimens.radius),
                 ),
               ),
               onPressed: onCreatePost,

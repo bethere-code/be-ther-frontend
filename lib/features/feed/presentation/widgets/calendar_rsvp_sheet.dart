@@ -49,8 +49,11 @@ class _CalendarRsvpSheet extends StatelessWidget {
 
     return Material(
       color: AppColors.background,
+      borderRadius: AppDimens.sheetTopRadius,
+      clipBehavior: Clip.antiAlias,
       child: DecoratedBox(
         decoration: const BoxDecoration(
+          borderRadius: AppDimens.sheetTopRadius,
           border: Border(
             top: BorderSide(
               color: AppColors.border,

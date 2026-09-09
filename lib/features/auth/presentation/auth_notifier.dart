@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../core/analytics/analytics_tracker.dart';
+import '../../../core/auth/welcome_pending.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/push/push_service.dart';
 import '../../../core/storage/token_storage.dart';
@@ -17,6 +18,7 @@ class AuthState {
     this.refreshToken,
     this.user,
     this.isReady = false,
+    this.pendingWelcome = false,
   });
 
   final String? accessToken;
@@ -26,6 +28,9 @@ class AuthState {
   /// False until [AuthNotifier.hydrateFromStorage] finishes (success or clear).
   final bool isReady;
 
+  /// Show the one-shot welcome dialog on next feed entry.
+  final bool pendingWelcome;
+
   bool get isAuthenticated => accessToken != null && accessToken!.isNotEmpty;
 
   AuthState copyWith({
@@ -33,6 +38,7 @@ class AuthState {
     String? refreshToken,
     Map<String, dynamic>? user,
     bool? isReady,
+    bool? pendingWelcome,
     bool clearUser = false,
   }) {
     return AuthState(
@@ -40,6 +46,7 @@ class AuthState {
       refreshToken: refreshToken ?? this.refreshToken,
       user: clearUser ? null : (user ?? this.user),
       isReady: isReady ?? this.isReady,
+      pendingWelcome: pendingWelcome ?? this.pendingWelcome,
     );
   }
 }
@@ -173,13 +180,25 @@ class AuthNotifier extends Notifier<AuthState> {
       refreshToken: tokens.refreshToken,
     );
     await _persistUser(tokens.user);
+    // Welcome: brand-new accounts, or Google (etc.) from the signup screen
+    // (`authAction: 'signup'` — including existing Google accounts).
+    final pendingWelcome = shouldPendingWelcome(
+      isNewUser: tokens.isNewUser,
+      authAction: authAction,
+    );
     state = AuthState(
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       user: tokens.user,
       isReady: true,
+      pendingWelcome: pendingWelcome,
     );
     unawaited(ref.read(analyticsTrackerProvider).onAuthenticated(authAction));
+  }
+
+  void consumePendingWelcome() {
+    if (!state.pendingWelcome) return;
+    state = state.copyWith(pendingWelcome: false);
   }
 
   Future<bool> tryRefresh() async {
@@ -237,15 +256,23 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> logout() async {
+    // Clear session first so the UI can leave immediately. Push / analytics /
+    // Google sign-out are slow network work and must not block the handoff.
+    await _storage.clear();
+    state = const AuthState(isReady: true);
+    unawaited(_cleanupAfterLogout());
+  }
+
+  Future<void> _cleanupAfterLogout() async {
     try {
       await ref.read(pushServiceProvider).stopOnLogout();
     } catch (_) {}
     try {
       await ref.read(analyticsTrackerProvider).onLogout();
     } catch (_) {}
-    await GoogleSignIn.instance.signOut();
-    await _storage.clear();
-    state = const AuthState(isReady: true);
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (_) {}
   }
 
   void updateUser(Map<String, dynamic> patch) {

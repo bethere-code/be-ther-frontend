@@ -20,7 +20,10 @@ Future<void> showFeedAttendeesSheet({
     context: context,
     isScrollControlled: true,
     backgroundColor: AppColors.card,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+    shape: const RoundedRectangleBorder(
+      borderRadius: AppDimens.sheetTopRadius,
+    ),
+    clipBehavior: Clip.antiAlias,
     builder: (ctx) =>
         _AttendeesSheet(postId: postId, initialCount: initialCount),
   );

@@ -279,12 +279,15 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
           onTap: () {},
           child: Material(
             color: AppColors.background,
+            borderRadius: AppDimens.sheetTopRadius,
+            clipBehavior: Clip.antiAlias,
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.sizeOf(context).height * 0.9,
               ),
               child: DecoratedBox(
                 decoration: const BoxDecoration(
+                  borderRadius: AppDimens.sheetTopRadius,
                   border: Border(
                     top: BorderSide(
                       color: AppColors.border,
@@ -497,8 +500,10 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                                 foregroundColor: calendarButtonForeground(
                                   effectiveStatus,
                                 ),
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.zero,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppDimens.radius,
+                                  ),
                                 ),
                               ),
                               onPressed: _calendarBusy

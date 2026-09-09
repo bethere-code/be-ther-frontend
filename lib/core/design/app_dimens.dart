@@ -30,4 +30,17 @@ abstract final class AppDimens {
   static const List<BoxShadow> railActiveShadowPressed = [
     BoxShadow(color: AppColors.border, offset: Offset(0, 1), blurRadius: 0),
   ];
+
+  /// Shared corner radius (feed cards, tiles, sheets, rail, CTAs).
+  static const double radius = 14;
+
+  /// Feed post cards on [AppColors.feedCanvas].
+  static const double feedCardInset = 10;
+  static const double feedCardGap = 10;
+  static const double feedCardRadius = radius;
+
+  /// Top corners for modal bottom sheets.
+  static const BorderRadius sheetTopRadius = BorderRadius.vertical(
+    top: Radius.circular(radius),
+  );
 }

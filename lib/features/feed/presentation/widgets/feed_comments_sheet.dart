@@ -24,7 +24,10 @@ Future<void> showFeedCommentsSheet({
     context: context,
     isScrollControlled: true,
     backgroundColor: AppColors.card,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+    shape: const RoundedRectangleBorder(
+      borderRadius: AppDimens.sheetTopRadius,
+    ),
+    clipBehavior: Clip.antiAlias,
     builder: (ctx) => _CommentsSheet(
       postId: postId,
       initialCount: initialCount,

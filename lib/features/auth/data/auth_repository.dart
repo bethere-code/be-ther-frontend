@@ -231,11 +231,13 @@ class AuthTokens {
     required this.accessToken,
     required this.refreshToken,
     this.user,
+    this.isNewUser = false,
   });
 
   final String accessToken;
   final String refreshToken;
   final Map<String, dynamic>? user;
+  final bool isNewUser;
 
   factory AuthTokens.fromJson(Map<String, dynamic> json) {
     return AuthTokens(
@@ -244,6 +246,7 @@ class AuthTokens {
       user: json['user'] is Map<String, dynamic>
           ? json['user'] as Map<String, dynamic>
           : null,
+      isNewUser: json['isNewUser'] == true,
     );
   }
 }

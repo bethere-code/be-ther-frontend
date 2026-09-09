@@ -160,6 +160,8 @@ class _GlobeButton extends StatelessWidget {
     if (active) {
       return Material(
         color: AppColors.primary,
+        borderRadius: BorderRadius.circular(AppDimens.radius),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => context.go('/explore'),
           child: Container(
@@ -167,6 +169,7 @@ class _GlobeButton extends StatelessWidget {
             width: _iconSize,
             padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppDimens.radius),
               border: Border.all(
                 color: AppColors.border,
                 width: AppDimens.borderThick,
@@ -300,6 +303,7 @@ class _RailIcon extends StatelessWidget {
         height: _squareSize,
         decoration: BoxDecoration(
           color: selected ? AppColors.primary : AppColors.secondary,
+          borderRadius: BorderRadius.circular(AppDimens.radius),
           border: Border.all(
             color: AppColors.border,
             width: AppDimens.borderThick,

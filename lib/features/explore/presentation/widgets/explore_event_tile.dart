@@ -178,9 +178,11 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
         return Material(
           color: AppColors.card,
           clipBehavior: Clip.antiAlias,
+          borderRadius: BorderRadius.circular(AppDimens.radius),
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: AppColors.card,
+              borderRadius: BorderRadius.circular(AppDimens.radius),
               border: Border.all(
                 color: AppColors.border,
                 width: AppDimens.borderThick,
@@ -203,11 +205,16 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
                             tag: event.heroTag,
                             child: Padding(
                               padding: const EdgeInsets.all(4),
-                              child: Material(
-                                type: MaterialType.transparency,
-                                child: BeTherNetworkImage(
-                                  url: event.imageUrl,
-                                  fit: BoxFit.cover,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(
+                                  AppDimens.radius - 2,
+                                ),
+                                child: Material(
+                                  type: MaterialType.transparency,
+                                  child: BeTherNetworkImage(
+                                    url: event.imageUrl,
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
                               ),
                             ),
@@ -520,11 +527,29 @@ class _ExploreCalendarButton extends StatelessWidget {
       height: ExploreEventTileLayout.calendarHeight,
       width: double.infinity,
       child: DecoratedBox(
-        decoration: BoxDecoration(color: bg),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: const BorderRadius.only(
+            bottomLeft: Radius.circular(
+              AppDimens.radius - AppDimens.borderThick,
+            ),
+            bottomRight: Radius.circular(
+              AppDimens.radius - AppDimens.borderThick,
+            ),
+          ),
+        ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: loading ? null : onPressed,
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(
+                AppDimens.radius - AppDimens.borderThick,
+              ),
+              bottomRight: Radius.circular(
+                AppDimens.radius - AppDimens.borderThick,
+              ),
+            ),
             child: Center(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),

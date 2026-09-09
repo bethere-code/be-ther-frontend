@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
+import '../../../core/routing/app_router.dart';
 import '../../../core/utils/link_utils.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../launch/presentation/launch_screen.dart';
@@ -232,7 +233,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 onTap: () async {
                   final ok = await showDialog<bool>(
                     context: context,
-                    builder: (ctx) => AlertDialog(
+                    useRootNavigator: true,
+                    builder: (dialogContext) => AlertDialog(
+                      backgroundColor: AppColors.background,
                       title: Text(
                         'LOG OUT?',
                         style: AppTextStyles.display(
@@ -243,23 +246,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       content: const Text('Are you sure you want to log out?'),
                       actions: [
                         TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
+                          onPressed: () => Navigator.of(
+                            dialogContext,
+                            rootNavigator: true,
+                          ).pop(false),
                           child: const Text('CANCEL'),
                         ),
                         FilledButton(
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.destructive,
                           ),
-                          onPressed: () => Navigator.pop(ctx, true),
+                          onPressed: () => Navigator.of(
+                            dialogContext,
+                            rootNavigator: true,
+                          ).pop(true),
                           child: const Text('LOG OUT'),
                         ),
                       ],
                     ),
                   );
-                  if (ok == true && context.mounted) {
-                    await ref.read(authNotifierProvider.notifier).logout();
-                    if (!context.mounted) return;
-                    context.go(LaunchScreen.path);
+                  if (ok != true || !mounted) return;
+                  showDialog<void>(
+                    context: context,
+                    useRootNavigator: true,
+                    barrierDismissible: false,
+                    barrierColor: AppColors.secondary.withValues(alpha: 0.35),
+                    builder: (_) => const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  );
+                  await ref.read(authNotifierProvider.notifier).logout();
+                  final nav = rootNavigatorKey.currentContext;
+                  if (nav != null && nav.mounted) {
+                    nav.go(LaunchScreen.path);
                   }
                 },
               ),

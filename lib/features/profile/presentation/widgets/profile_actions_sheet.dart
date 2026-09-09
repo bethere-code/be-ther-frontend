@@ -60,8 +60,11 @@ class _ProfileActionsSheet extends StatelessWidget {
     final bottom = MediaQuery.viewPaddingOf(context).bottom;
     return Material(
       color: AppColors.card,
+      borderRadius: AppDimens.sheetTopRadius,
+      clipBehavior: Clip.antiAlias,
       child: DecoratedBox(
         decoration: const BoxDecoration(
+          borderRadius: AppDimens.sheetTopRadius,
           border: Border(
             top: BorderSide(color: AppColors.border, width: AppDimens.borderThick),
           ),

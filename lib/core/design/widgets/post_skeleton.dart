@@ -4,7 +4,10 @@ import '../app_colors.dart';
 import '../app_dimens.dart';
 
 class PostSkeleton extends StatelessWidget {
-  const PostSkeleton({super.key});
+  const PostSkeleton({super.key, this.lifted = false});
+
+  /// Match feed post cards on [AppColors.feedCanvas].
+  final bool lifted;
 
   @override
   Widget build(BuildContext context) {
@@ -12,14 +15,28 @@ class PostSkeleton extends StatelessWidget {
       baseColor: AppColors.muted,
       highlightColor: AppColors.card,
       child: Container(
-        decoration: const BoxDecoration(
+        margin: lifted
+            ? const EdgeInsets.fromLTRB(
+                AppDimens.feedCardInset,
+                0,
+                AppDimens.feedCardInset,
+                AppDimens.feedCardGap,
+              )
+            : EdgeInsets.zero,
+        clipBehavior: lifted ? Clip.antiAlias : Clip.none,
+        decoration: BoxDecoration(
           color: AppColors.card,
-          border: Border(
-            bottom: BorderSide(
-              color: AppColors.border,
-              width: AppDimens.borderThick,
-            ),
-          ),
+          borderRadius: lifted
+              ? BorderRadius.circular(AppDimens.feedCardRadius)
+              : null,
+          border: lifted
+              ? null
+              : const Border(
+                  bottom: BorderSide(
+                    color: AppColors.border,
+                    width: AppDimens.borderThick,
+                  ),
+                ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

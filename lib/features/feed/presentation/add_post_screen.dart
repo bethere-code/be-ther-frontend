@@ -927,7 +927,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                 builder: (context, scrollController) {
                   return Material(
                     color: AppColors.background,
-                    clipBehavior: Clip.hardEdge,
+                    borderRadius: AppDimens.sheetTopRadius,
+                    clipBehavior: Clip.antiAlias,
                     child: Column(
                       children: [
                         const _SheetDragHandle(),
