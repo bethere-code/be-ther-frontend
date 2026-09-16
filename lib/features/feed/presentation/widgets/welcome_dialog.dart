@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_dimens.dart';
+import '../../../../core/design/app_images.dart';
 import '../../../../core/design/app_text_styles.dart';
 import '../add_post_screen.dart';
 
@@ -17,7 +18,7 @@ Future<void> showWelcomeDialog(BuildContext context) {
       return Dialog(
         backgroundColor: AppColors.background,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppDimens.radius),
           side: const BorderSide(
             color: AppColors.border,
             width: AppDimens.border,
@@ -38,7 +39,14 @@ Future<void> showWelcomeDialog(BuildContext context) {
                   letterSpacing: 0.02,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
+              Image.asset(
+                AppImages.welcomeSocialCalendar,
+                height: 148,
+                fit: BoxFit.contain,
+                excludeFromSemantics: true,
+              ),
+              const SizedBox(height: 16),
               Text(
                 'Create your first event and share what you\'re going to.',
                 textAlign: TextAlign.center,
@@ -91,7 +99,7 @@ Future<void> showWelcomeDialog(BuildContext context) {
                         minimumSize: const Size(0, 40),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(AppDimens.radius),
                           side: const BorderSide(
                             color: AppColors.border,
                             width: AppDimens.border,

@@ -11,11 +11,10 @@ import '../design/app_images.dart';
 /// Renders the BeTher logo on a brand background and writes a temp PNG
 /// suitable for upload when the user skips an event photo.
 ///
-/// Portrait (3:4) so explore/search masonry cards stay tall enough
-/// and don’t leave awkward gaps next to taller event photos.
+/// Landscape 16:9 so feed cards don’t stretch into a tall empty gradient.
 Future<File> buildDefaultEventCoverFile() async {
-  const width = 1080;
-  const height = 1440; // 3:4 portrait
+  const width = 1280;
+  const height = 720; // 16:9
 
   final logoData = await rootBundle.load(AppImages.beatherLogo);
   final codec = await ui.instantiateImageCodec(
@@ -47,7 +46,7 @@ Future<File> buildDefaultEventCoverFile() async {
   final glow = Paint()
     ..shader = ui.Gradient.radial(
       Offset(size.width * 0.5, size.height * 0.48),
-      size.width * 0.55,
+      size.width * 0.45,
       [
         AppColors.primary.withValues(alpha: 0.28),
         AppColors.primary.withValues(alpha: 0.0),
@@ -55,7 +54,7 @@ Future<File> buildDefaultEventCoverFile() async {
     );
   canvas.drawRect(rect, glow);
 
-  final maxLogoW = size.width * 0.62;
+  final maxLogoW = size.width * 0.55;
   final scale = maxLogoW / logo.width;
   final logoW = logo.width * scale;
   final logoH = logo.height * scale;

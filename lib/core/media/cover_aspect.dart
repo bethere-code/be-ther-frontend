@@ -2,8 +2,8 @@
 const kCoverAspect3x2 = 3 / 2;
 const kCoverAspect16x9 = 16 / 9;
 const kCoverAspect4x3 = 4 / 3;
-/// Default event cover from [buildDefaultEventCoverFile] is 1080×1440.
-const kCoverAspectDefault = 3 / 4;
+/// Default event cover from [buildDefaultEventCoverFile] is 1280×720 (16:9).
+const kCoverAspectDefault = kCoverAspect16x9;
 /// Legacy posts with no stored ratio (landscape-ish).
 const kCoverAspectLegacy = 16 / 9;
 
@@ -11,7 +11,6 @@ const kCoverAspectPresets = <double>[
   kCoverAspect3x2,
   kCoverAspect16x9,
   kCoverAspect4x3,
-  kCoverAspectDefault,
 ];
 
 /// Snap a measured ratio to the nearest allowed preset.
@@ -29,15 +28,16 @@ double snapCoverAspectRatio(double raw) {
   return best;
 }
 
-/// Slot ratio for feed / sheets. Prefer stored value; else default-cover or legacy.
+/// Slot ratio for feed / sheets. Default covers are always 16:9 (even older
+/// uploads that were generated taller — BoxFit.cover crops cleanly).
 double resolveCoverAspectRatio({
   double? stored,
   bool usesDefaultCover = false,
 }) {
+  if (usesDefaultCover) return kCoverAspectDefault;
   if (stored != null && stored >= 0.4 && stored <= 3.5) {
     return stored;
   }
-  if (usesDefaultCover) return kCoverAspectDefault;
   return kCoverAspectLegacy;
 }
 

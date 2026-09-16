@@ -214,6 +214,11 @@ class _RightRail extends ConsumerWidget {
 
   final ShellTab activeTab;
 
+  /// Matches [AppDimens.railActiveShadow] offset so selected chrome doesn't
+  /// steal gap from the tile below.
+  static const double _shadowSlot = 4;
+  static const double _tileGap = 3;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final unreadCount = ref.watch(unreadNotificationCountProvider);
@@ -221,57 +226,87 @@ class _RightRail extends ConsumerWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _RailIcon(
-          icon: Icons.home,
-          selected: activeTab == ShellTab.home,
-          onTap: () => context.push(FeedScreen.path),
+        _RailSlot(
+          shadowSlot: _shadowSlot,
+          child: _RailIcon(
+            icon: Icons.home,
+            selected: activeTab == ShellTab.home,
+            onTap: () => context.push(FeedScreen.path),
+          ),
         ),
-        const SizedBox(height: 8),
-        _RailIcon(
-          icon: Icons.add_box,
-          selected: activeTab == ShellTab.add,
-          onTap: () => context.push(AddPostScreen.path),
+        const SizedBox(height: _tileGap),
+        _RailSlot(
+          shadowSlot: _shadowSlot,
+          child: _RailIcon(
+            icon: Icons.add_box,
+            selected: activeTab == ShellTab.add,
+            onTap: () => context.push(AddPostScreen.path),
+          ),
         ),
-        const SizedBox(height: 8),
-        Stack(
-          children: [
-            _RailIcon(
-              icon: Icons.notifications_none,
-              selected: activeTab == ShellTab.notifications,
-              onTap: () => context.push(NotificationsScreen.path),
-            ),
-            unreadCount.when(
-              data: (count) {
-                if (count == 0) return const SizedBox.shrink();
-                return Positioned(
-                  top: 4,
-                  right: 4,
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.secondary, width: 2),
-                    ),
-                    child: Center(
-                      child: Text(
-                        count > 99 ? '99+' : '$count',
-                        style: AppTextStyles.display(
-                          count > 99 ? 10 : 12,
-                          color: AppColors.primaryForeground,
+        const SizedBox(height: _tileGap),
+        _RailSlot(
+          shadowSlot: _shadowSlot,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              _RailIcon(
+                icon: Icons.notifications_none,
+                selected: activeTab == ShellTab.notifications,
+                onTap: () => context.push(NotificationsScreen.path),
+              ),
+              unreadCount.when(
+                data: (count) {
+                  if (count == 0) return const SizedBox.shrink();
+                  return Positioned(
+                    top: 4,
+                    right: 4,
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.secondary,
+                          width: 2,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          count > 99 ? '99+' : '$count',
+                          style: AppTextStyles.display(
+                            count > 99 ? 10 : 12,
+                            color: AppColors.primaryForeground,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
-              loading: () => const SizedBox.shrink(),
-              error: (_, _) => const SizedBox.shrink(),
-            ),
-          ],
+                  );
+                },
+                loading: () => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
+              ),
+            ],
+          ),
         ),
       ],
+    );
+  }
+}
+
+/// Fixed footprint so active hard-shadow never changes spacing between tiles.
+class _RailSlot extends StatelessWidget {
+  const _RailSlot({required this.shadowSlot, required this.child});
+
+  final double shadowSlot;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: _RailIcon._squareSize,
+      height: _RailIcon._squareSize + shadowSlot,
+      child: Align(alignment: Alignment.topCenter, child: child),
     );
   }
 }
@@ -296,6 +331,7 @@ class _RailIcon extends StatelessWidget {
       onTap: onTap,
       haptic: true,
       scale: 0.96,
+      borderRadius: BorderRadius.circular(AppDimens.radius),
       shadowNormal: selected ? AppDimens.railActiveShadow : null,
       shadowPressed: selected ? AppDimens.railActiveShadowPressed : null,
       child: Container(

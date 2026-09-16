@@ -179,9 +179,9 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
           color: AppColors.card,
           clipBehavior: Clip.antiAlias,
           borderRadius: BorderRadius.circular(AppDimens.radius),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: AppColors.card,
+          child: Container(
+            // Frame paints above content so the cover stays inside the clip.
+            foregroundDecoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppDimens.radius),
               border: Border.all(
                 color: AppColors.border,
@@ -203,19 +203,11 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
                         Positioned.fill(
                           child: Hero(
                             tag: event.heroTag,
-                            child: Padding(
-                              padding: const EdgeInsets.all(4),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(
-                                  AppDimens.radius - 2,
-                                ),
-                                child: Material(
-                                  type: MaterialType.transparency,
-                                  child: BeTherNetworkImage(
-                                    url: event.imageUrl,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
+                            child: Material(
+                              type: MaterialType.transparency,
+                              child: BeTherNetworkImage(
+                                url: event.imageUrl,
+                                fit: BoxFit.cover,
                               ),
                             ),
                           ),

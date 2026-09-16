@@ -213,15 +213,15 @@ class _AuthOtpScreenState extends ConsumerState<AuthOtpScreen> {
                             counterText: '',
                             contentPadding: const EdgeInsets.symmetric(vertical: 14),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
+                              borderRadius: BorderRadius.circular(AppDimens.radius),
                               borderSide: BorderSide(color: AppColors.border, width: AppDimens.borderThick),
                             ),
                             enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
+                              borderRadius: BorderRadius.circular(AppDimens.radius),
                               borderSide: BorderSide(color: AppColors.border, width: AppDimens.borderThick),
                             ),
                             focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
+                              borderRadius: BorderRadius.circular(AppDimens.radius),
                               borderSide: BorderSide(color: AppColors.ring, width: AppDimens.borderThick),
                             ),
                           ),
@@ -239,6 +239,10 @@ class _AuthOtpScreenState extends ConsumerState<AuthOtpScreen> {
                 const SizedBox(height: 28),
                 BeTherPrimaryButton(
                   label: primaryCtaLabel,
+                  loading: _loading,
+                  loadingLabel: widget.flow == AuthOtpFlow.signup
+                      ? 'SIGNING UP'
+                      : 'VERIFYING',
                   enabled: !_loading,
                   onPressed: _verify,
                 ),

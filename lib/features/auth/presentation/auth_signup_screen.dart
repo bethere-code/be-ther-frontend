@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_colors.dart';
+import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/be_ther_buttons.dart';
+import '../../../core/design/widgets/loading_label.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_theme.dart';
 import 'auth_notifier.dart';
@@ -47,7 +49,9 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
   final _age = TextEditingController();
   final _password = TextEditingController();
 
-  bool _loading = false;
+  bool _busyOtp = false;
+  bool _busyGoogle = false;
+  bool get _busy => _busyOtp || _busyGoogle;
   bool _obscurePassword = true;
   String? _error;
   String? _nameError;
@@ -155,7 +159,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
   }
 
   void _scheduleUsernameAvailabilityCheck(String raw) {
-    if (_loading) return;
+    if (_busy) return;
     final username = raw.trim().toLowerCase();
     _usernameDebounce?.cancel();
     _usernameRequestId++;
@@ -230,7 +234,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
   }
 
   void _scheduleEmailAvailabilityCheck(String raw) {
-    if (_loading) return;
+    if (_busy) return;
     final email = raw.trim().toLowerCase();
     _emailDebounce?.cancel();
     _emailRequestId++;
@@ -304,9 +308,9 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
     setState(() {
       _error = null;
       if (!_applyFieldValidation()) return;
-      _loading = true;
+      _busyOtp = true;
     });
-    if (!_loading) return;
+    if (!_busyOtp) return;
     try {
       final ageText = _age.text.trim();
       final age = ageText.isEmpty ? null : int.tryParse(ageText);
@@ -337,7 +341,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
         _applyServerFieldErrors(message);
       });
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _busyOtp = false);
     }
   }
 
@@ -375,10 +379,10 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _fieldLabel('Name', required: true),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   TextField(
                     controller: _name,
-                    readOnly: _loading,
+                    readOnly: _busy,
                     textCapitalization: TextCapitalization.words,
                     onChanged: _onNameChanged,
                     decoration: InputDecoration(
@@ -401,7 +405,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   _fieldLabelWithStatus(
                     'Username',
                     required: true,
@@ -409,10 +413,10 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                     error: _usernameError,
                     available: _usernameAvailable,
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   TextField(
                     controller: _username,
-                    readOnly: _loading,
+                    readOnly: _busy,
                     inputFormatters: [
                       _LowercaseAlphanumericUsernameFormatter(),
                     ],
@@ -437,7 +441,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   _fieldLabelWithStatus(
                     'Email',
                     required: true,
@@ -445,10 +449,10 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                     error: _emailError,
                     available: _emailAvailable,
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   TextField(
                     controller: _email,
-                    readOnly: _loading,
+                    readOnly: _busy,
                     keyboardType: TextInputType.emailAddress,
                     autocorrect: false,
                     onChanged: _scheduleEmailAvailabilityCheck,
@@ -470,12 +474,12 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   _fieldLabel('Age', optional: true),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   TextField(
                     controller: _age,
-                    readOnly: _loading,
+                    readOnly: _busy,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     maxLength: 3,
@@ -510,9 +514,9 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 0),
                   _fieldLabel('Password', required: true),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   // Text(
                   //   'At least 8 characters; letters and numbers only (include both)',
                   //   style: AppTextStyles.body(
@@ -523,7 +527,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                   // const SizedBox(height: 4),
                   TextField(
                     controller: _password,
-                    readOnly: _loading,
+                    readOnly: _busy,
                     obscureText: _obscurePassword,
                     autocorrect: false,
                     onChanged: (_) => setState(() => _passwordError = null),
@@ -535,7 +539,7 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                               ? Icons.visibility
                               : Icons.visibility_off,
                         ),
-                        onPressed: _loading
+                        onPressed: _busy
                             ? null
                             : () => setState(
                                 () => _obscurePassword = !_obscurePassword,
@@ -565,8 +569,10 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                   ],
                   const SizedBox(height: 28),
                   BeTherPrimaryButton(
-                    label: _loading ? 'VERIFYING...' : 'VERIFY OTP',
-                    enabled: !_loading,
+                    label: 'VERIFY OTP',
+                    loading: _busyOtp,
+                    loadingLabel: 'VERIFYING',
+                    enabled: !_busy,
                     onPressed: _sendOtp,
                   ),
                   const SizedBox(height: 12),
@@ -580,20 +586,22 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                         style: OutlinedButton.styleFrom(
                           backgroundColor: AppColors.card,
                           side: BorderSide(color: AppColors.border, width: 2),
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppDimens.radius,
+                            ),
                           ),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
                             vertical: 10,
                           ),
                         ),
-                        onPressed: _loading
+                        onPressed: _busy
                             ? null
                             : () async {
                                 setState(() {
                                   _error = null;
-                                  _loading = true;
+                                  _busyGoogle = true;
                                 });
                                 try {
                                   // One Google action for both cases:
@@ -617,31 +625,45 @@ class _AuthSignupScreenState extends ConsumerState<AuthSignupScreen> {
                                       : 'Google sign-in failed. Please try again.';
                                   setState(() => _error = message);
                                 } finally {
-                                  if (mounted) setState(() => _loading = false);
+                                  if (mounted) {
+                                    setState(() => _busyGoogle = false);
+                                  }
                                 }
                               },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Image.asset(
-                              'assets/images/google.png',
-                              width: 18,
-                              height: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              _loading
-                                  ? 'CONNECTING...'
-                                  : 'Continue with Google',
-                              style: AppTextStyles.body(
-                                13,
-                                color: AppColors.foreground,
-                                weight: FontWeight.w700,
+                        child: _busyGoogle
+                            ? AuthBusyRow(
+                                label: 'CONNECTING',
+                                leading: Image.asset(
+                                  'assets/images/google.png',
+                                  width: 18,
+                                  height: 18,
+                                ),
+                                style: AppTextStyles.body(
+                                  13,
+                                  color: AppColors.foreground,
+                                  weight: FontWeight.w700,
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Image.asset(
+                                    'assets/images/google.png',
+                                    width: 18,
+                                    height: 18,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'Continue with Google',
+                                    style: AppTextStyles.body(
+                                      13,
+                                      color: AppColors.foreground,
+                                      weight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                   ),

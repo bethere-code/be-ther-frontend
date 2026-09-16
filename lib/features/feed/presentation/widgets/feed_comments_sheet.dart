@@ -371,23 +371,29 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
                                 horizontal: 14,
                                 vertical: 12,
                               ),
-                              border: const OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppDimens.radius,
+                                ),
+                                borderSide: const BorderSide(
                                   color: AppColors.border,
                                   width: AppDimens.border,
                                 ),
                               ),
-                              enabledBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppDimens.radius,
+                                ),
+                                borderSide: const BorderSide(
                                   color: AppColors.border,
                                   width: AppDimens.border,
                                 ),
                               ),
-                              focusedBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppDimens.radius,
+                                ),
+                                borderSide: const BorderSide(
                                   color: AppColors.primary,
                                   width: AppDimens.borderThick,
                                 ),

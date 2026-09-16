@@ -17,6 +17,7 @@ import '../background_tasks/notification_syncer.dart';
 import '../network/api_client.dart';
 import '../routing/app_router.dart';
 import '../routing/deep_link_listener.dart';
+import '../utils/device_timezone.dart';
 import 'push_local_notifications.dart';
 import 'push_open.dart';
 
@@ -75,6 +76,7 @@ class PushService {
       if (token != null && token.isNotEmpty) {
         await _registerToken(token);
       }
+      unawaited(_syncTimezone());
 
       _tokenSub = messaging.onTokenRefresh.listen((t) {
         unawaited(_registerToken(t));
@@ -139,6 +141,15 @@ class PushService {
       await dio.put(
         '/api/v1/users/me/fcm-devices',
         data: {'token': token, 'platform': platform},
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _syncTimezone() async {
+    try {
+      await _ref.read(apiClientProvider).patch(
+        '/api/v1/users/me',
+        data: {'timezone': deviceTimeZoneId()},
       );
     } catch (_) {}
   }

@@ -13,6 +13,7 @@ class Pressable extends StatefulWidget {
     this.scale = 0.97,
     this.shadowNormal,
     this.shadowPressed,
+    this.borderRadius,
   });
 
   final Widget child;
@@ -22,6 +23,8 @@ class Pressable extends StatefulWidget {
   final double scale;
   final List<BoxShadow>? shadowNormal;
   final List<BoxShadow>? shadowPressed;
+  /// Keeps hard offset shadows following rounded chrome (e.g. rail tiles).
+  final BorderRadius? borderRadius;
 
   @override
   State<Pressable> createState() => _PressableState();
@@ -89,6 +92,7 @@ class _PressableState extends State<Pressable>
             scale: _scaleAnim.value,
             child: DecoratedBox(
               decoration: BoxDecoration(
+                borderRadius: widget.borderRadius,
                 boxShadow: pressed
                     ? (widget.shadowPressed ?? widget.shadowNormal)
                     : widget.shadowNormal,

@@ -23,6 +23,7 @@ import '../../../core/media/default_event_image.dart';
 import '../../../core/media/measure_cover_aspect.dart';
 import '../../../core/media/ticket_link_preview.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/utils/device_timezone.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../explore/presentation/explore_providers.dart';
 import '../../profile/presentation/profile_providers.dart';
@@ -32,6 +33,7 @@ import '../domain/edited_post_overlay.dart';
 import '../domain/feed_post.dart';
 import 'feed_providers.dart';
 import 'widgets/event_place_field.dart';
+import 'widgets/share_event_dialog.dart';
 import 'package:be_ther/core/ui/app_toast.dart';
 
 FeedPost _feedItemFromCreatedPost(
@@ -765,6 +767,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         'venue': place.name,
         'time': ?_formatTimeForApi(),
         'ticketUrl': ?ticketUrl,
+        'timezone': deviceTimeZoneId(),
         'eventLocation': place.toJson(),
         if (_userLatLng != null)
           'userLocation': {'lat': _userLatLng!.lat, 'lng': _userLatLng!.lng},
@@ -867,7 +870,34 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         ref.invalidate(profileEventsProvider(username));
       }
       if (!mounted) return;
+      final createdId =
+          created['postId']?.toString() ?? created['_id']?.toString() ?? '';
+      final shareLocation = _eventName.text.trim();
+      final shareCaption = _description.text.trim();
+      final shareVenue = place.name;
+      final shareDate = _formatDateForApi();
+      final shareTicket = ticketUrl;
+      final shareImage = imageUrl;
+      final shouldPromptShare = !_private && createdId.isNotEmpty;
+      // Root context survives after this sheet pops.
+      final overlayContext = Navigator.of(context, rootNavigator: true).context;
       _popRoute();
+      if (!shouldPromptShare) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!overlayContext.mounted) return;
+        unawaited(
+          showShareEventDialog(
+            overlayContext,
+            postId: createdId,
+            location: shareLocation,
+            caption: shareCaption,
+            venue: shareVenue,
+            date: shareDate,
+            ticketUrl: shareTicket,
+            imageUrl: shareImage,
+          ),
+        );
+      });
     } on DioException catch (e) {
       if (!mounted) return;
       final message = PostsRepository(
@@ -1237,12 +1267,15 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                         child: Container(
                                           decoration: BoxDecoration(
                                             color: AppColors.muted,
+                                            borderRadius: BorderRadius.circular(
+                                              AppDimens.radius,
+                                            ),
                                             border: Border.all(
                                               color: AppColors.border,
                                               width: _fieldBorder,
                                             ),
                                           ),
-                                          clipBehavior: Clip.hardEdge,
+                                          clipBehavior: Clip.antiAlias,
                                           child: _imagePath == null
                                               ? Column(
                                                   mainAxisAlignment:
@@ -1402,29 +1435,29 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
           contentPadding ??
           const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
+        borderRadius: BorderRadius.circular(AppDimens.radius),
         borderSide: BorderSide(color: borderColor, width: _fieldBorder),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
+        borderRadius: BorderRadius.circular(AppDimens.radius),
         borderSide: BorderSide(color: borderColor, width: _fieldBorder),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
+        borderRadius: BorderRadius.circular(AppDimens.radius),
         borderSide: BorderSide(
           color: hasError ? AppColors.destructive : AppColors.primary,
           width: _fieldBorder,
         ),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
+        borderRadius: BorderRadius.circular(AppDimens.radius),
         borderSide: BorderSide(
           color: AppColors.destructive,
           width: _fieldBorder,
         ),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
+        borderRadius: BorderRadius.circular(AppDimens.radius),
         borderSide: BorderSide(
           color: AppColors.destructive,
           width: _fieldBorder,
@@ -1550,6 +1583,7 @@ class _PrivacyToggle extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
+        borderRadius: BorderRadius.circular(AppDimens.radius),
         border: Border.all(color: AppColors.border, width: AppDimens.border),
       ),
       child: Row(
@@ -1562,6 +1596,7 @@ class _PrivacyToggle extends StatelessWidget {
               color: isPrivate
                   ? AppColors.primary.withValues(alpha: 0.15)
                   : const Color(0xFFE8F5E9),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               isPrivate ? Icons.lock_rounded : Icons.public_rounded,
@@ -1615,6 +1650,7 @@ class _EventStatusToggle extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
+        borderRadius: BorderRadius.circular(AppDimens.radius),
         border: Border.all(color: AppColors.border, width: AppDimens.border),
       ),
       child: Row(
@@ -1627,6 +1663,7 @@ class _EventStatusToggle extends StatelessWidget {
               color: isGoing
                   ? AppColors.accent.withValues(alpha: 0.2)
                   : AppColors.primary.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               isGoing ? Icons.event_available_rounded : Icons.bookmark_rounded,

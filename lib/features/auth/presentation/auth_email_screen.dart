@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_colors.dart';
+import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/be_ther_buttons.dart';
+import '../../../core/design/widgets/loading_label.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_theme.dart';
 import 'auth_notifier.dart';
@@ -34,7 +36,9 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
   final _password = TextEditingController();
   bool _usePassword = false;
   bool _obscurePassword = true;
-  bool _loading = false;
+  bool _busyPrimary = false;
+  bool _busyGoogle = false;
+  bool get _busy => _busyPrimary || _busyGoogle;
   String? _error;
   String? _identifierError;
   String? _passwordError;
@@ -74,7 +78,7 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
     setState(() {
       _identifierError = null;
       _error = null;
-      _loading = true;
+      _busyPrimary = true;
     });
     try {
       final result = await ref
@@ -95,7 +99,7 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
           : 'Unable to continue. Please try again.';
       setState(() => _error = message);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _busyPrimary = false);
     }
   }
 
@@ -122,7 +126,7 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
       _identifierError = null;
       _passwordError = null;
       _error = null;
-      _loading = true;
+      _busyPrimary = true;
     });
     try {
       final tokens = await ref
@@ -137,14 +141,14 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
           : 'Login failed. Please try again.';
       setState(() => _error = message);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _busyPrimary = false);
     }
   }
 
   Future<void> _google() async {
     setState(() {
       _error = null;
-      _loading = true;
+      _busyGoogle = true;
     });
     try {
       final tokens = await ref.read(authRepositoryProvider).signInWithGoogle();
@@ -157,7 +161,7 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
           : 'Google sign-in failed. Please try again.';
       setState(() => _error = message);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _busyGoogle = false);
     }
   }
 
@@ -205,7 +209,7 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
                   const SizedBox(height: 8),
                   TextField(
                     controller: _identifier,
-                    readOnly: _loading,
+                    readOnly: _busy,
                     keyboardType: TextInputType.emailAddress,
                     onChanged: (_) => setState(() => _identifierError = null),
                     decoration: const InputDecoration(
@@ -235,13 +239,13 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _password,
-                      readOnly: _loading,
+                      readOnly: _busy,
                       obscureText: _obscurePassword,
                       onChanged: (_) => setState(() => _passwordError = null),
                       decoration: InputDecoration(
                         hintText: 'Enter password',
                         suffixIcon: IconButton(
-                          onPressed: _loading
+                          onPressed: _busy
                               ? null
                               : () => setState(
                                   () => _obscurePassword = !_obscurePassword,
@@ -277,10 +281,10 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
                   ],
                   const SizedBox(height: 24),
                   BeTherPrimaryButton(
-                    label: _loading
-                        ? (_usePassword ? 'SIGNING IN...' : 'VERIFYING...')
-                        : (_usePassword ? 'LOG IN' : 'VERIFY OTP'),
-                    enabled: !_loading,
+                    label: _usePassword ? 'LOG IN' : 'VERIFY OTP',
+                    loading: _busyPrimary,
+                    loadingLabel: _usePassword ? 'SIGNING IN' : 'VERIFYING',
+                    enabled: !_busy,
                     onPressed: _usePassword
                         ? _loginWithPassword
                         : _requestOtpLogin,
@@ -294,7 +298,7 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      onPressed: _loading
+                      onPressed: _busy
                           ? null
                           : () => setState(() {
                               _error = null;
@@ -323,37 +327,51 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
                         style: OutlinedButton.styleFrom(
                           backgroundColor: AppColors.card,
                           side: BorderSide(color: AppColors.border, width: 2),
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppDimens.radius,
+                            ),
                           ),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
                             vertical: 10,
                           ),
                         ),
-                        onPressed: _loading ? null : _google,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Image.asset(
-                              'assets/images/google.png',
-                              width: 18,
-                              height: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              _loading
-                                  ? 'CONNECTING...'
-                                  : 'Continue with Google',
-                              style: AppTextStyles.body(
-                                13,
-                                color: AppColors.foreground,
-                                weight: FontWeight.w700,
+                        onPressed: _busy ? null : _google,
+                        child: _busyGoogle
+                            ? AuthBusyRow(
+                                label: 'CONNECTING',
+                                leading: Image.asset(
+                                  'assets/images/google.png',
+                                  width: 18,
+                                  height: 18,
+                                ),
+                                style: AppTextStyles.body(
+                                  13,
+                                  color: AppColors.foreground,
+                                  weight: FontWeight.w700,
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Image.asset(
+                                    'assets/images/google.png',
+                                    width: 18,
+                                    height: 18,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'Continue with Google',
+                                    style: AppTextStyles.body(
+                                      13,
+                                      color: AppColors.foreground,
+                                      weight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                   ),

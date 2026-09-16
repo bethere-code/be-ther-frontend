@@ -51,21 +51,21 @@ class AppTheme {
         filled: true,
         fillColor: AppColors.inputBackground,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
+          borderRadius: BorderRadius.circular(AppDimens.radius),
           borderSide: BorderSide(
             color: AppColors.border,
             width: AppDimens.borderThick,
           ),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
+          borderRadius: BorderRadius.circular(AppDimens.radius),
           borderSide: BorderSide(
             color: AppColors.border,
             width: AppDimens.borderThick,
           ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
+          borderRadius: BorderRadius.circular(AppDimens.radius),
           borderSide: BorderSide(
             color: AppColors.ring,
             width: AppDimens.borderThick,
@@ -87,8 +87,9 @@ class AppTheme {
 
   /// Auth screens: thinner field rings than the rest of the app chrome.
   static ThemeData authFields(ThemeData theme) {
+    final radius = BorderRadius.circular(AppDimens.radius);
     OutlineInputBorder side(Color color) => OutlineInputBorder(
-      borderRadius: BorderRadius.zero,
+      borderRadius: radius,
       borderSide: BorderSide(color: color, width: AppDimens.borderThin),
     );
     return theme.copyWith(
@@ -96,6 +97,8 @@ class AppTheme {
         border: side(AppColors.border),
         enabledBorder: side(AppColors.border),
         focusedBorder: side(AppColors.ring),
+        errorBorder: side(AppColors.destructive),
+        focusedErrorBorder: side(AppColors.destructive),
       ),
     );
   }

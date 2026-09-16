@@ -384,36 +384,36 @@ class _EventPlaceFieldState extends ConsumerState<EventPlaceField> {
               vertical: 14,
             ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
+              borderRadius: BorderRadius.circular(AppDimens.radius),
               borderSide: BorderSide(
                 color: borderColor,
                 width: AppDimens.border,
               ),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
+              borderRadius: BorderRadius.circular(AppDimens.radius),
               borderSide: BorderSide(
                 color: borderColor,
                 width: AppDimens.border,
               ),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
+              borderRadius: BorderRadius.circular(AppDimens.radius),
               borderSide: BorderSide(
                 color: hasError ? AppColors.destructive : AppColors.primary,
                 width: AppDimens.border,
               ),
             ),
-            errorBorder: const OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppDimens.radius),
+              borderSide: const BorderSide(
                 color: AppColors.destructive,
                 width: AppDimens.border,
               ),
             ),
-            focusedErrorBorder: const OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppDimens.radius),
+              borderSide: const BorderSide(
                 color: AppColors.destructive,
                 width: AppDimens.border,
               ),
@@ -452,6 +452,8 @@ class _EventPlaceFieldState extends ConsumerState<EventPlaceField> {
                 child: Material(
                   color: AppColors.card,
                   elevation: 2,
+                  borderRadius: BorderRadius.circular(AppDimens.radius),
+                  clipBehavior: Clip.antiAlias,
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 220),
                     child: ListView.separated(
