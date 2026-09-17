@@ -185,12 +185,13 @@ class PushService {
       );
     }
 
+    // Badge from FCM; full list only if Alerts is already mounted/watching.
     _ref.invalidate(unreadNotificationCountProvider);
-    // Keep list fresh if user is already on Alerts.
-    _ref.invalidate(notificationsProvider);
+    _ref.read(notificationSyncerProvider).softInvalidateList();
   }
 
   Future<void> _onOpened(RemoteMessage message) async {
+    // Prefer navigation; badge refresh is enough unless Alerts is open.
     await _ref.read(notificationSyncerProvider).syncNow();
     final loc = locationFromPushData(message.data);
     if (loc == null || loc.isEmpty) return;

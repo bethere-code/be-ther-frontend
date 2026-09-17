@@ -114,12 +114,13 @@ class ConnectivityController extends Notifier<NetStatus> {
       }
       ref.invalidate(feedProvider);
       ref.invalidate(exploreEventsProvider);
-      ref.invalidate(notificationsProvider);
       ref.invalidate(unreadNotificationCountProvider);
       ref.invalidate(profileMeProvider);
       ref.invalidate(blockedUsersProvider);
       ref.invalidate(searchResultsProvider);
-      ref.read(notificationSyncerProvider).syncNow();
+      // Soft-stale list only — do not force GET /notifications while offline recovery.
+      ref.read(notificationSyncerProvider).softInvalidateList();
+      await ref.read(notificationSyncerProvider).refreshBadge(force: true);
     } finally {
       _recovering = false;
     }

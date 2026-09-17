@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -101,7 +103,8 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ref.read(notificationSyncerProvider).syncNow();
+      // Badge only — never force GET /notifications on every resume.
+      unawaited(ref.read(notificationSyncerProvider).refreshBadge());
       ref.read(connectivityProvider.notifier).checkNow();
       if (ref.read(authNotifierProvider).isAuthenticated) {
         ref.read(pushServiceProvider).refreshCityTopic();

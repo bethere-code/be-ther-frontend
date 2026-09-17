@@ -39,10 +39,14 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Full list refresh on open (badge poll alone does not load items).
-      unawaited(ref.read(notificationSyncerProvider).syncNow());
-      _markAllRead();
+      // One list GET on open — not badge+list via syncNow.
+      unawaited(_openAndMarkRead());
     });
+  }
+
+  Future<void> _openAndMarkRead() async {
+    await ref.read(notificationSyncerProvider).refreshList();
+    await _markAllRead();
   }
 
   @override
@@ -63,7 +67,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   Future<void> _markAllRead() async {
     try {
       await ref.read(notificationsRepositoryProvider).markAllRead();
-      ref.invalidate(notificationsProvider);
+      // Badge only — do not re-fetch the heavy list just to flip read flags.
       ref.invalidate(unreadNotificationCountProvider);
     } catch (_) {
       // Badge clears on next successful refresh; avoid blocking the screen.

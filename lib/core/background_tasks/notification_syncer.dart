@@ -4,42 +4,63 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/notifications/presentation/notifications_providers.dart';
 
-/// Keeps the alerts badge fresh via resume + push — no periodic poll.
+/// Badge via cheap unread-count + FCM; full list only when Alerts needs it.
 ///
-/// Full list refresh on [syncNow] (app resume / alerts screen / push open).
+/// Never force-fetch [notificationsProvider] on resume — that GET is heavy
+/// (populate + enrich) and was the main chatty / RAM spike.
 class NotificationSyncer {
   NotificationSyncer({required this.ref});
 
   final Ref ref;
 
-  /// One-shot badge refresh at start (no timer).
+  DateTime? _lastBadgeAt;
+  static const _badgeDebounce = Duration(seconds: 2);
+
+  /// Cold start: badge only.
   void start() {
-    unawaited(_refreshUnreadOnly());
+    unawaited(refreshBadge());
   }
 
-  Future<void> _refreshUnreadOnly() async {
+  /// Cheap badge refresh. Debounced so lifecycle flaps don't hammer the API.
+  Future<void> refreshBadge({bool force = false}) async {
+    final now = DateTime.now();
+    if (!force &&
+        _lastBadgeAt != null &&
+        now.difference(_lastBadgeAt!) < _badgeDebounce) {
+      return;
+    }
+    _lastBadgeAt = now;
     try {
       ref.invalidate(unreadNotificationCountProvider);
       await ref.read(unreadNotificationCountProvider.future);
     } catch (_) {}
   }
 
-  Future<void> _refreshFullList() async {
+  /// Force full list GET — only call when Alerts is open / pull-to-refresh.
+  Future<void> refreshList() async {
     try {
       ref.invalidate(notificationsProvider);
       await ref.read(notificationsProvider.future);
     } catch (_) {}
   }
 
-  void stop() {}
-
-  /// App resume / alerts open / push tap — refresh badge + full list.
-  Future<void> syncNow() async {
-    await Future.wait([
-      _refreshUnreadOnly(),
-      _refreshFullList(),
-    ]);
+  /// Mark list stale without fetching. Refetches only if something is watching.
+  void softInvalidateList() {
+    if (!ref.exists(notificationsProvider)) return;
+    ref.invalidate(notificationsProvider);
   }
+
+  /// Push open / rare “need everything” — badge always; list only if watched.
+  Future<void> syncNow() async {
+    await refreshBadge(force: true);
+    if (ref.exists(notificationsProvider)) {
+      await refreshList();
+    } else {
+      softInvalidateList();
+    }
+  }
+
+  void stop() {}
 
   void dispose() {
     stop();
