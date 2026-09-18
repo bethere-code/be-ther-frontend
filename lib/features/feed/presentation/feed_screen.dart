@@ -352,7 +352,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                 InkWell(
                   onTap: _scrollToTop,
                   child: Image.asset(
-                    AppImages.beatherLogo,
+                    AppImages.betherNewLogo,
+                    width: 60,
                     fit: BoxFit.contain,
                   ),
                 ),

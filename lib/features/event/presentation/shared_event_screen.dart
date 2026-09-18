@@ -37,7 +37,7 @@ class SharedEventScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final postAsync = ref.watch(sharedPostProvider(postId));
-    const headerHeight = kToolbarHeight;
+    const headerHeight = 52.0;
 
     return PopScope(
       canPop: false,
@@ -70,6 +70,7 @@ class SharedEventScreen extends ConsumerWidget {
                 ),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   IconButton(
                     onPressed: () => leave(context),
@@ -85,7 +86,7 @@ class SharedEventScreen extends ConsumerWidget {
                         alignment: Alignment.centerLeft,
                         child: Image.asset(
                           AppImages.betherNewLogo,
-                          height: 28,
+                          width: 60,
                           fit: BoxFit.contain,
                         ),
                       ),

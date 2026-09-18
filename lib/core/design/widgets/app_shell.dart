@@ -123,7 +123,8 @@ class _BottomBar extends ConsumerWidget {
                 child: SizedBox(
                   height: _leadingHeight,
                   child: Image.asset(
-                    AppImages.beatherLogo,
+                    AppImages.betherNewLogo,
+                    width: 60,
                     fit: BoxFit.contain,
                   ),
                 ),
