@@ -107,6 +107,7 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
       unawaited(ref.read(notificationSyncerProvider).refreshBadge());
       ref.read(connectivityProvider.notifier).checkNow();
       if (ref.read(authNotifierProvider).isAuthenticated) {
+        unawaited(ref.read(pushServiceProvider).retryAfterAuthIfNeeded());
         ref.read(pushServiceProvider).refreshCityTopic();
       }
     }

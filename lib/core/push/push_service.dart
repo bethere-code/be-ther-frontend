@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/scheduler.dart';
@@ -22,8 +23,6 @@ import 'push_local_notifications.dart';
 import 'push_open.dart';
 
 /// Background isolate entry — must be top-level.
-/// Do NOT show a local notification here when [message.notification] is set;
-/// the OS already displayed it (single-notification rule).
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Keep light — no Riverpod. Data-only silent sync has nothing to draw.
@@ -37,64 +36,115 @@ class PushService {
   StreamSubscription<String>? _tokenSub;
   StreamSubscription<RemoteMessage>? _fgSub;
   StreamSubscription<RemoteMessage>? _openSub;
-  bool _started = false;
+  bool _handlersWired = false;
+  bool _pushReady = false;
   String? _activeCityTopic;
 
   Future<void> startAfterAuth() async {
-    if (kIsWeb || _started) return;
+    if (kIsWeb) return;
     if (!Platform.isAndroid && !Platform.isIOS) return;
-    _started = true;
 
     try {
-      await PushLocalNotifications.ensureInitialized();
+      await PushLocalNotifications.ensureInitialized(
+        onTap: _onLocalNotificationTap,
+      );
       final messaging = FirebaseMessaging.instance;
 
-      // iOS + Android 13+: request permission once after login.
+      if (!_handlersWired) {
+        _fgSub = FirebaseMessaging.onMessage.listen(_onForeground);
+        _openSub = FirebaseMessaging.onMessageOpenedApp.listen(_onOpened);
+        _handlersWired = true;
+      }
+
       final settings = await messaging.requestPermission(
         alert: true,
         badge: true,
         sound: true,
         provisional: false,
       );
-      final enabled =
-          settings.authorizationStatus == AuthorizationStatus.authorized ||
-          settings.authorizationStatus == AuthorizationStatus.provisional;
+      final enabled = _permissionGranted(settings.authorizationStatus);
 
       if (Platform.isIOS) {
         await messaging.setForegroundNotificationPresentationOptions(
-          alert: false, // we show via local notifications in foreground
+          alert: false,
           badge: true,
           sound: false,
         );
       }
 
-      if (!enabled) return;
-
-      await messaging.subscribeToTopic(broadcastTopic);
-
-      final token = await messaging.getToken();
-      if (token != null && token.isNotEmpty) {
-        await _registerToken(token);
+      if (!enabled) {
+        _pushReady = false;
+        return;
       }
-      unawaited(_syncTimezone());
 
-      _tokenSub = messaging.onTokenRefresh.listen((t) {
-        unawaited(_registerToken(t));
-      });
-
-      _fgSub = FirebaseMessaging.onMessage.listen(_onForeground);
-      _openSub = FirebaseMessaging.onMessageOpenedApp.listen(_onOpened);
+      await _completePushRegistration(messaging);
 
       final initial = await messaging.getInitialMessage();
       if (initial != null) {
         unawaited(_onOpened(initial));
       }
-
-      unawaited(_syncCityTopic());
     } catch (_) {
-      // Push is best-effort — never block auth/shell.
-      _started = false;
+      _pushReady = false;
     }
+  }
+
+  /// After user enables notifications in OS settings — no second prompt.
+  Future<void> retryAfterAuthIfNeeded() async {
+    if (kIsWeb || _pushReady) return;
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+
+    try {
+      await PushLocalNotifications.ensureInitialized(
+        onTap: _onLocalNotificationTap,
+      );
+      final messaging = FirebaseMessaging.instance;
+
+      if (!_handlersWired) {
+        _fgSub = FirebaseMessaging.onMessage.listen(_onForeground);
+        _openSub = FirebaseMessaging.onMessageOpenedApp.listen(_onOpened);
+        _handlersWired = true;
+      }
+
+      final settings = await messaging.getNotificationSettings();
+      if (!_permissionGranted(settings.authorizationStatus)) {
+        return;
+      }
+
+      if (Platform.isIOS) {
+        await messaging.setForegroundNotificationPresentationOptions(
+          alert: false,
+          badge: true,
+          sound: false,
+        );
+      }
+
+      await _completePushRegistration(messaging);
+    } catch (_) {
+      _pushReady = false;
+    }
+  }
+
+  bool _permissionGranted(AuthorizationStatus status) {
+    return status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional;
+  }
+
+  Future<void> _completePushRegistration(FirebaseMessaging messaging) async {
+    await messaging.subscribeToTopic(broadcastTopic);
+
+    final token = await messaging.getToken();
+    if (token != null && token.isNotEmpty) {
+      await _registerToken(token);
+    }
+    unawaited(_syncTimezone());
+
+    await _tokenSub?.cancel();
+    _tokenSub = messaging.onTokenRefresh.listen((t) {
+      unawaited(_registerToken(t));
+    });
+
+    unawaited(_syncCityTopic());
+    _pushReady = true;
   }
 
   Future<void> stopOnLogout() async {
@@ -116,7 +166,8 @@ class PushService {
     _tokenSub = null;
     _fgSub = null;
     _openSub = null;
-    _started = false;
+    _handlersWired = false;
+    _pushReady = false;
     try {
       await FirebaseAnalytics.instance.setUserId(id: null);
       await FirebaseCrashlytics.instance.setUserIdentifier('');
@@ -164,6 +215,16 @@ class PushService {
     } catch (_) {}
   }
 
+  void _onLocalNotificationTap(String? payload) {
+    if (payload == null || payload.isEmpty) return;
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is! Map) return;
+      final data = Map<String, dynamic>.from(decoded);
+      unawaited(_navigateFromPushData(data));
+    } catch (_) {}
+  }
+
   Future<void> _onForeground(RemoteMessage message) async {
     final data = message.data;
     final type = data['type']?.toString() ?? '';
@@ -173,27 +234,27 @@ class PushService {
       return;
     }
 
-    // Single notification: OS does not show banners in foreground for FCM
-    // notification payloads on Android; we display exactly one local notif.
     final title = message.notification?.title ?? 'BE THER';
     final body = message.notification?.body;
     if (body != null && body.isNotEmpty) {
       await PushLocalNotifications.showForeground(
         title: title,
         body: body,
-        payload: data['notificationId']?.toString(),
+        data: Map<String, dynamic>.from(data),
       );
     }
 
-    // Badge from FCM; full list only if Alerts is already mounted/watching.
     _ref.invalidate(unreadNotificationCountProvider);
     _ref.read(notificationSyncerProvider).softInvalidateList();
   }
 
   Future<void> _onOpened(RemoteMessage message) async {
-    // Prefer navigation; badge refresh is enough unless Alerts is open.
+    await _navigateFromPushData(message.data);
+  }
+
+  Future<void> _navigateFromPushData(Map<String, dynamic> data) async {
     await _ref.read(notificationSyncerProvider).syncNow();
-    final loc = locationFromPushData(message.data);
+    final loc = locationFromPushData(data);
     if (loc == null || loc.isEmpty) return;
     final auth = _ref.read(authNotifierProvider);
     if (!auth.isReady || !auth.isAuthenticated) {
@@ -205,7 +266,6 @@ class PushService {
     });
   }
 
-  /// Subscribe to `city_<slug>` from GPS reverse geocode when location allowed.
   Future<void> _syncCityTopic() async {
     try {
       final loc = await readLocationIfAllowed();
@@ -234,7 +294,6 @@ class PushService {
     } catch (_) {}
   }
 
-  /// Re-run city topic when app resumes (location may have changed).
   Future<void> refreshCityTopic() => _syncCityTopic();
 }
 

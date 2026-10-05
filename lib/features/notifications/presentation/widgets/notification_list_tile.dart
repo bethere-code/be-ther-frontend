@@ -29,10 +29,15 @@ class NotificationListTile extends StatelessWidget {
 
   static String messageForType(String type) {
     switch (type) {
-      case 'wishlist':
-        return ' added your event to their wishlist';
       case 'calendar':
         return ' added your event to their calendar';
+      case 'like':
+        return ' liked your event';
+      case 'comment':
+        return ' commented on your event';
+      // Legacy rows only — bookmark no longer creates these.
+      case 'wishlist':
+        return ' saved your event';
       case 'follow_request':
         return ' requested to follow you';
       case 'follow_request_accepted':
@@ -101,7 +106,12 @@ class NotificationListTile extends StatelessWidget {
     final eventTitle = post?['location'] as String? ?? '';
     final eventDate = _formatEventDate(post);
     final eventTime = _formatEventTime(post);
-    final hasEvent = (type == 'wishlist' || type == 'calendar') && post != null;
+    final hasEvent =
+        (type == 'wishlist' ||
+            type == 'calendar' ||
+            type == 'like' ||
+            type == 'comment') &&
+        post != null;
     final isFollowRequest = type == 'follow_request';
     final isOwnerOutcome = NotificationListTile.isOwnerFollowOutcome(type);
     final ownerOutcomeVerb = NotificationListTile.ownerOutcomeVerb(type);
