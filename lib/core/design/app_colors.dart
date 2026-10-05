@@ -19,6 +19,8 @@ abstract final class AppColors {
   static const destructive = Color(0xFFDC2626);
   static const destructiveForeground = Color(0xFFFFFFFF);
   static const border = Color(0xFF1A2332);
+  /// Softened card outline (explore tiles + feed trial) — still navy, a notch lighter.
+  static const cardBorder = Color(0xFF3A4658);
   static const ring = Color(0xFFD4745E);
   static const inputBackground = Color(0xFFFFFFFF);
   /// Feed canvas behind lifted post cards (very light grey).

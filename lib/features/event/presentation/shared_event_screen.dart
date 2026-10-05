@@ -5,8 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
-import '../../../core/design/app_images.dart';
 import '../../../core/design/app_text_styles.dart';
+import '../../../core/design/widgets/app_brand_logo.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
 import '../../feed/presentation/feed_providers.dart';
@@ -58,7 +58,9 @@ class SharedEventScreen extends ConsumerWidget {
             preferredSize: const Size.fromHeight(headerHeight),
             child: Container(
               height: headerHeight,
-              padding: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppBrandLogo.headerInset,
+              ),
               alignment: Alignment.center,
               decoration: const BoxDecoration(
                 color: AppColors.secondary,
@@ -74,24 +76,19 @@ class SharedEventScreen extends ConsumerWidget {
                 children: [
                   IconButton(
                     onPressed: () => leave(context),
+                    iconSize: 24,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 44,
+                      minHeight: 44,
+                    ),
                     icon: const Icon(
                       Icons.arrow_back,
                       color: AppColors.background,
                     ),
                   ),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => context.go(FeedScreen.path),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Image.asset(
-                          AppImages.betherNewLogo,
-                          width: 60,
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ),
-                  ),
+                  AppBrandLogo(onTap: () => context.go(FeedScreen.path)),
+                  const Spacer(),
                   IconButton(
                     onPressed: () => context.push('/search'),
                     iconSize: 24,

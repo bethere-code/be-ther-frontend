@@ -15,10 +15,14 @@ class FeedPermissionsCoordinator {
 
   static bool _inFlight = false;
 
+  /// Soft-deny / permanent-deny: show settings sheet at most once per cold start
+  /// so we don't spam every feed revisit after "Not now".
+  static final Set<Permission> _settingsPromptedThisSession = {};
+
   static bool get _supported =>
       !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
-  /// Notification first, then location. Runs on every feed visit while not granted.
+  /// Notification first, then location.
   static Future<void> ensure(
     BuildContext context, {
     UserRepository? userRepository,
@@ -82,30 +86,23 @@ class FeedPermissionsCoordinator {
     required String body,
   }) async {
     var status = await permission.status;
-
     if (_isSatisfied(status)) return;
 
-    if (_needsSettings(status)) {
-      if (!context.mounted) return;
-      await _showOpenSettingsDialog(
-        context,
-        title: title,
-        body: body,
-      );
-      return;
+    // Still eligible for the OS sheet (first ask / soft deny) — try it.
+    // After a soft deny, Android often returns denied with no UI; we must
+    // still fall through to our settings prompt below.
+    if (!_needsSettings(status)) {
+      status = await permission.request();
+      if (_isSatisfied(status)) return;
     }
 
-    status = await permission.request();
-    if (_isSatisfied(status)) return;
-
-    if (_needsSettings(status)) {
-      if (!context.mounted) return;
-      await _showOpenSettingsDialog(
-        context,
-        title: title,
-        body: body,
-      );
-    }
+    if (!context.mounted) return;
+    await _showOpenSettingsDialog(
+      context,
+      permission: permission,
+      title: title,
+      body: body,
+    );
   }
 
   static bool _isSatisfied(PermissionStatus status) =>
@@ -116,42 +113,65 @@ class FeedPermissionsCoordinator {
 
   static Future<void> _showOpenSettingsDialog(
     BuildContext context, {
+    required Permission permission,
     required String title,
     required String body,
-  }) {
-    return showDialog<void>(
+  }) async {
+    if (_settingsPromptedThisSession.contains(permission)) return;
+    _settingsPromptedThisSession.add(permission);
+
+    if (!context.mounted) return;
+    await showDialog<void>(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        shape: RoundedRectangleBorder(
-          side: const BorderSide(color: AppColors.border, width: AppDimens.borderThick),
-          borderRadius: BorderRadius.zero,
-        ),
-        title: Text(title, style: AppTextStyles.display(22, color: AppColors.secondary)),
-        content: Text(body, style: AppTextStyles.body(14, color: AppColors.mutedForeground)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('OK', style: AppTextStyles.body(14, weight: FontWeight.w700)),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.primaryForeground,
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-            ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await openAppSettings();
-            },
-            child: Text(
-              'GO TO SETTINGS',
-              style: AppTextStyles.display(14, color: AppColors.primaryForeground),
+      barrierDismissible: true,
+      builder: (ctx) {
+        final r = BorderRadius.circular(AppDimens.feedCardRadius);
+        return AlertDialog(
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: r,
+            side: const BorderSide(
+              color: AppColors.cardBorder,
+              width: AppDimens.borderThin,
             ),
           ),
-        ],
-      ),
+          title: Text(
+            title,
+            style: AppTextStyles.display(22, color: AppColors.secondary),
+          ),
+          content: Text(
+            body,
+            style: AppTextStyles.body(14, color: AppColors.mutedForeground),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(
+                'NOT NOW',
+                style: AppTextStyles.body(14, weight: FontWeight.w700),
+              ),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.primaryForeground,
+                shape: RoundedRectangleBorder(borderRadius: r),
+              ),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await openAppSettings();
+              },
+              child: Text(
+                'GO TO SETTINGS',
+                style: AppTextStyles.display(
+                  15,
+                  color: AppColors.primaryForeground,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

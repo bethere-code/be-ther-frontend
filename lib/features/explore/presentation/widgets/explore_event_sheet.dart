@@ -367,6 +367,9 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                         tag: event.heroTag,
                         child: Material(
                           color: AppColors.card,
+                          borderRadius:
+                              BorderRadius.circular(AppDimens.radius),
+                          clipBehavior: Clip.antiAlias,
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
@@ -422,8 +425,9 @@ class _ExploreEventSheetState extends ConsumerState<_ExploreEventSheet> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: AppColors.muted.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(AppDimens.radius),
                       border: Border.all(
-                        color: AppColors.border,
+                        color: AppColors.cardBorder,
                         width: AppDimens.borderThin,
                       ),
                     ),

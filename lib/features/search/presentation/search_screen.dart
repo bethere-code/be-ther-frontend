@@ -291,71 +291,70 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   child: fieldQuery.isEmpty
                       ? const _SearchIdle()
                       : awaitingDebounce
-                          ? const _SearchLoadingGrid()
-                          : asyncResults.when(
-                              data: (page) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  _applyPage(page, genAtWatch);
-                                });
-                                if (_activeQuery.isEmpty) {
-                                  return const _SearchIdle();
-                                }
-                                return _SearchBody(
+                      ? const _SearchLoadingGrid()
+                      : asyncResults.when(
+                          data: (page) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              _applyPage(page, genAtWatch);
+                            });
+                            if (_activeQuery.isEmpty) {
+                              return const _SearchIdle();
+                            }
+                            return _SearchBody(
+                              query: _activeQuery,
+                              results: _displayItems(page),
+                              loadingMore: _loadingMore && _hasMore,
+                              scrollController: _scrollController,
+                              resultCount: _skip == 0
+                                  ? page.items.length
+                                  : _results.length,
+                              hasMore:
+                                  page.nextSkip != null ||
+                                  (_hasMore && _results.isNotEmpty),
+                            );
+                          },
+                          loading: () => _skip > 0 && _results.isNotEmpty
+                              ? _SearchBody(
                                   query: _activeQuery,
-                                  results: _displayItems(page),
-                                  loadingMore: _loadingMore && _hasMore,
-                                  scrollController: _scrollController,
-                                  resultCount: _skip == 0
-                                      ? page.items.length
-                                      : _results.length,
-                                  hasMore: page.nextSkip != null ||
-                                      (_hasMore && _results.isNotEmpty),
-                                );
-                              },
-                              loading: () => _skip > 0 && _results.isNotEmpty
-                                  ? _SearchBody(
-                                      query: _activeQuery,
-                                      results:
-                                          List<ExploreEvent>.unmodifiable(
-                                        _results,
-                                      ),
-                                      loadingMore: true,
-                                      scrollController: _scrollController,
-                                      resultCount: _results.length,
-                                      hasMore: true,
-                                    )
-                                  : const _SearchLoadingGrid(),
-                              error: (error, _) {
-                                final msg = '$error';
-                                if (msg.contains('cancelled') &&
-                                    _results.isNotEmpty &&
-                                    _appliedGeneration == _generation) {
-                                  return _SearchBody(
-                                    query: _activeQuery,
-                                    results: List<ExploreEvent>.unmodifiable(
-                                      _results,
-                                    ),
-                                    loadingMore: false,
-                                    scrollController: _scrollController,
-                                    resultCount: _results.length,
-                                    hasMore: _hasMore,
-                                  );
-                                }
-                                if (msg.contains('cancelled')) {
-                                  return const _SearchLoadingGrid();
-                                }
-                                return Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(24),
-                                    child: SelectableText(
-                                      msg,
-                                      style: AppTextStyles.body(14),
-                                    ),
+                                  results: List<ExploreEvent>.unmodifiable(
+                                    _results,
                                   ),
-                                );
-                              },
-                            ),
+                                  loadingMore: true,
+                                  scrollController: _scrollController,
+                                  resultCount: _results.length,
+                                  hasMore: true,
+                                )
+                              : const _SearchLoadingGrid(),
+                          error: (error, _) {
+                            final msg = '$error';
+                            if (msg.contains('cancelled') &&
+                                _results.isNotEmpty &&
+                                _appliedGeneration == _generation) {
+                              return _SearchBody(
+                                query: _activeQuery,
+                                results: List<ExploreEvent>.unmodifiable(
+                                  _results,
+                                ),
+                                loadingMore: false,
+                                scrollController: _scrollController,
+                                resultCount: _results.length,
+                                hasMore: _hasMore,
+                              );
+                            }
+                            if (msg.contains('cancelled')) {
+                              return const _SearchLoadingGrid();
+                            }
+                            return Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: SelectableText(
+                                  msg,
+                                  style: AppTextStyles.body(14),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                 ),
               ),
             ],
@@ -517,9 +516,8 @@ class _SearchBody extends StatelessWidget {
     return CustomScrollView(
       controller: scrollController,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      physics: const BouncingScrollPhysics(
-        parent: AlwaysScrollableScrollPhysics(),
-      ),
+      // Platform physics — do not force iOS bounce on Android.
+      physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         SliverToBoxAdapter(
           child: _ResultsHeader(count: resultCount, hasMore: hasMore),
@@ -531,9 +529,8 @@ class _SearchBody extends StatelessWidget {
             crossAxisSpacing: ExploreEventTileLayout.gridSpacing,
             mainAxisSpacing: ExploreEventTileLayout.gridSpacing,
             childCount: results.length,
-            itemBuilder: (context, index) => RepaintBoundary(
-              child: ExploreEventTile(event: results[index]),
-            ),
+            itemBuilder: (context, index) =>
+                RepaintBoundary(child: ExploreEventTile(event: results[index])),
           ),
         ),
         if (loadingMore)
@@ -747,10 +744,8 @@ class _SearchLoadingGrid extends StatelessWidget {
             crossAxisSpacing: ExploreEventTileLayout.gridSpacing,
             mainAxisSpacing: ExploreEventTileLayout.gridSpacing,
             itemCount: 6,
-            itemBuilder: (_, index) => _ExploreTileSkeleton(
-              animate: true,
-              tall: index.isOdd,
-            ),
+            itemBuilder: (_, index) =>
+                _ExploreTileSkeleton(animate: true, tall: index.isOdd),
           ),
         ),
       ],
@@ -825,11 +820,7 @@ class _ExploreTileSkeletonState extends State<_ExploreTileSkeleton>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _Bone(
-                      width: double.infinity,
-                      height: 14,
-                      opacity: opacity,
-                    ),
+                    _Bone(width: double.infinity, height: 14, opacity: opacity),
                     const SizedBox(height: 8),
                     _Bone(width: 96, height: 10, opacity: opacity),
                     if (widget.tall) ...[

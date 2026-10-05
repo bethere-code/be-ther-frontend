@@ -1073,7 +1073,9 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                             aspectRatio: event.displayCoverAspect,
                             child: Material(
                               color: AppColors.card,
-                              clipBehavior: Clip.hardEdge,
+                              borderRadius:
+                                  BorderRadius.circular(AppDimens.radius),
+                              clipBehavior: Clip.antiAlias,
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
@@ -1129,8 +1131,9 @@ class _ProfileEventSheetState extends ConsumerState<_ProfileEventSheet> {
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: AppColors.muted.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(AppDimens.radius),
                             border: Border.all(
-                              color: AppColors.border,
+                              color: AppColors.cardBorder,
                               width: AppDimens.borderThin,
                             ),
                           ),

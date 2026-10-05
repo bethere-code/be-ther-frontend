@@ -135,12 +135,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       if (!mounted || !_pendingJumpToToday) return;
       if (!_calendarScrollController.hasClients) return;
       _pendingJumpToToday = false;
-      final cell = MediaQuery.sizeOf(context).width / 4;
+      // Must match GridView cell height exactly or a sliver of the previous
+      // week stays visible under the nav (looks like a "gap").
+      final cell = _calendarRowHeight(context);
       // Today is at index [_daysPerChunk] after the cached past page.
       final offset = (_daysPerChunk / 4) * cell;
       final max = _calendarScrollController.position.maxScrollExtent;
       _calendarScrollController.jumpTo(offset.clamp(0.0, max));
     });
+  }
+
+  /// Square cell / week-row height from the grid's real layout width.
+  /// Border is painted (CustomPaint), not inset — do not subtract borderThin.
+  static double _calendarRowHeight(BuildContext context) {
+    final width =
+        MediaQuery.sizeOf(context).width - (AppDimens.feedCardInset * 2);
+    return width / 4;
   }
 
   /// Only the calendar grid scrolls for past/future — nav bar stays fixed.
@@ -318,52 +328,57 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     required String username,
     required bool isOwnProfile,
   }) {
-    // 4 equal square cells → one row height == cell width.
-    final rowHeight = MediaQuery.sizeOf(context).width / 4;
-    return NotificationListener<ScrollNotification>(
-      onNotification: _onCalendarScrollNotification,
-      child: GridView.builder(
-        controller: _calendarScrollController,
-        physics: AlwaysScrollableScrollPhysics(
-          parent: _WeekRowSnapScrollPhysics(rowHeight: rowHeight),
-        ),
-        padding: EdgeInsets.zero,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4,
-          childAspectRatio: 1,
-        ),
-        itemCount: _dayCount,
-        itemBuilder: (context, index) {
-          final date = _gridStart.add(Duration(days: index));
-          final dateKey = DateFormat('yyyy-MM-dd').format(date);
-          final dayEvents = eventsByDate[dateKey] ?? const <ProfileCalendarEvent>[];
-          final isToday =
-              date.year == todayDate.year &&
-              date.month == todayDate.month &&
-              date.day == todayDate.day;
-          final isPast = date.isBefore(todayDate);
-          final faded = isPast && dayEvents.isEmpty;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 4 equal squares → row height == cell width (real grid width).
+        final rowHeight = constraints.maxWidth / 4;
+        return NotificationListener<ScrollNotification>(
+          onNotification: _onCalendarScrollNotification,
+          child: GridView.builder(
+            controller: _calendarScrollController,
+            physics: AlwaysScrollableScrollPhysics(
+              parent: _WeekRowSnapScrollPhysics(rowHeight: rowHeight),
+            ),
+            padding: EdgeInsets.zero,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 4,
+              childAspectRatio: 1,
+            ),
+            itemCount: _dayCount,
+            itemBuilder: (context, index) {
+              final date = _gridStart.add(Duration(days: index));
+              final dateKey = DateFormat('yyyy-MM-dd').format(date);
+              final dayEvents =
+                  eventsByDate[dateKey] ?? const <ProfileCalendarEvent>[];
+              final isToday =
+                  date.year == todayDate.year &&
+                  date.month == todayDate.month &&
+                  date.day == todayDate.day;
+              final isPast = date.isBefore(todayDate);
+              final faded = isPast && dayEvents.isEmpty;
 
-          return _CalendarDayCell(
-            key: ValueKey(dateKey),
-            date: date,
-            events: dayEvents,
-            isToday: isToday,
-            isMonthStart: date.day == 1,
-            faded: faded,
-            monthNames: _monthNames,
-            dayNames: _dayNames,
-            onOpenEvent: dayEvents.isEmpty
-                ? null
-                : (event) => _openEvent(
-                    event: event,
-                    dayEvents: dayEvents,
-                    username: username,
-                    isOwnProfile: isOwnProfile,
-                  ),
-          );
-        },
-      ),
+              return _CalendarDayCell(
+                key: ValueKey(dateKey),
+                date: date,
+                events: dayEvents,
+                isToday: isToday,
+                isMonthStart: date.day == 1,
+                faded: faded,
+                monthNames: _monthNames,
+                dayNames: _dayNames,
+                onOpenEvent: dayEvents.isEmpty
+                    ? null
+                    : (event) => _openEvent(
+                        event: event,
+                        dayEvents: dayEvents,
+                        username: username,
+                        isOwnProfile: isOwnProfile,
+                      ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -571,12 +586,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           ),
           child: showPrivateCalendar
               ? ColoredBox(
-                  color: AppColors.background,
-                  child: Column(
-                    children: [
-                      profileInfo(lockCounts: true),
-                      const Expanded(child: ProfilePrivateNotice()),
-                    ],
+                  color: AppColors.feedCanvas,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimens.feedCardInset,
+                    ),
+                    child: Column(
+                      children: [
+                        _ProfileSectionCard(
+                          roundTop: false,
+                          child: profileInfo(lockCounts: true),
+                        ),
+                        const SizedBox(height: _ProfileSectionCard._gap),
+                        const Expanded(
+                          child: _ProfileSectionCard(
+                            roundBottom: false,
+                            child: ProfilePrivateNotice(),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 )
               : calendarAsync.when(
@@ -591,97 +620,133 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 _jumpCalendarToTodayIfNeeded();
               }
 
-              // Profile (natural height, capped) → fixed nav → scrolling calendar.
+              // Two cards: identity (top) + calendar (bottom), wireframe layout.
               return ColoredBox(
-                color: AppColors.background,
-                child: Column(
-                  children: [
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.sizeOf(context).height * 0.42,
-                      ),
-                      child: RefreshIndicator(
-                        color: AppColors.primary,
-                        backgroundColor: AppColors.card,
-                        onRefresh: () => _refresh(username),
-                        child: SingleChildScrollView(
-                          controller: _profileScrollController,
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          child: profileInfo(),
-                        ),
-                      ),
+                color: AppColors.feedCanvas,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimens.feedCardInset,
                     ),
-                    if (eventsOnly)
-                      Expanded(
-                        child: _EventsOnlyGrid(
-                          days: eventsByDate,
-                          todayDate: todayDate,
-                          monthNames: _monthNames,
-                          dayNames: _dayNames,
-                          onShowFullCalendar: isOwnProfile
-                              ? () => _setOwnCalendarView('full')
-                              : null,
-                          onOpenEvent: (event, dayEvents) => _openEvent(
-                            event: event,
-                            dayEvents: dayEvents,
-                            username: username,
-                            isOwnProfile: isOwnProfile,
+                  child: Column(
+                    children: [
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.sizeOf(context).height * 0.4,
+                        ),
+                        child: _ProfileSectionCard(
+                          roundTop: false,
+                          child: RefreshIndicator(
+                            color: AppColors.primary,
+                            backgroundColor: AppColors.card,
+                            onRefresh: () => _refresh(username),
+                            child: SingleChildScrollView(
+                              controller: _profileScrollController,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              child: profileInfo(),
+                            ),
                           ),
                         ),
-                      )
-                    else ...[
-                      _CalendarNavBar(
-                        onPrevious: () => _shiftWeek(-1),
-                        onToday: _goToToday,
-                        onNext: () => _shiftWeek(1),
                       ),
-                      Expanded(
-                        child: _buildCalendarGrid(
-                          eventsByDate: eventsByDate,
-                          todayDate: todayDate,
-                          username: username,
-                          isOwnProfile: isOwnProfile,
+                      const SizedBox(height: _ProfileSectionCard._gap),
+                      if (eventsOnly)
+                        Expanded(
+                          child: _ProfileSectionCard(
+                            roundBottom: false,
+                            child: _EventsOnlyGrid(
+                              days: eventsByDate,
+                              todayDate: todayDate,
+                              monthNames: _monthNames,
+                              dayNames: _dayNames,
+                              onShowFullCalendar: isOwnProfile
+                                  ? () => _setOwnCalendarView('full')
+                                  : null,
+                              onOpenEvent: (event, dayEvents) => _openEvent(
+                                event: event,
+                                dayEvents: dayEvents,
+                                username: username,
+                                isOwnProfile: isOwnProfile,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        Expanded(
+                          child: _ProfileSectionCard(
+                            roundBottom: false,
+                            child: Column(
+                              children: [
+                                _CalendarNavBar(
+                                  onPrevious: () => _shiftWeek(-1),
+                                  onToday: _goToToday,
+                                  onNext: () => _shiftWeek(1),
+                                ),
+                                Expanded(
+                                  child: _buildCalendarGrid(
+                                    eventsByDate: eventsByDate,
+                                    todayDate: todayDate,
+                                    username: username,
+                                    isOwnProfile: isOwnProfile,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
                     ],
-                  ],
+                  ),
                 ),
               );
             },
             loading: () => ColoredBox(
-              color: AppColors.background,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(child: profileInfo()),
-                  const SliverFillRemaining(
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                ],
+              color: AppColors.feedCanvas,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimens.feedCardInset,
+                    ),
+                child: Column(
+                  children: [
+                    _ProfileSectionCard(roundTop: false, child: profileInfo()),
+                    const SizedBox(height: _ProfileSectionCard._gap),
+                    const Expanded(
+                      child: _ProfileSectionCard(
+                        roundBottom: false,
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             error: (e, _) => ColoredBox(
-              color: AppColors.background,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(child: profileInfo()),
-                  SliverFillRemaining(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          _profileErrorMessage(e),
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.body(
-                            14,
-                            color: AppColors.destructive,
+              color: AppColors.feedCanvas,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimens.feedCardInset,
+                    ),
+                child: Column(
+                  children: [
+                    _ProfileSectionCard(roundTop: false, child: profileInfo()),
+                    const SizedBox(height: _ProfileSectionCard._gap),
+                    Expanded(
+                      child: _ProfileSectionCard(
+                        roundBottom: false,
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              _profileErrorMessage(e),
+                              textAlign: TextAlign.center,
+                              style: AppTextStyles.body(
+                                14,
+                                color: AppColors.destructive,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -689,6 +754,123 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       },
     );
   }
+}
+
+class _ProfileSectionCard extends StatelessWidget {
+  const _ProfileSectionCard({
+    required this.child,
+    this.roundTop = true,
+    this.roundBottom = true,
+  });
+
+  final Widget child;
+  /// Top identity card: false → straight top, no top border (meets header).
+  final bool roundTop;
+  /// Bottom calendar card: false → straight bottom, no bottom border (meets nav).
+  final bool roundBottom;
+
+  static const double _gap = 6;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = AppDimens.feedCardRadius;
+    final radius = BorderRadius.only(
+      topLeft: roundTop ? Radius.circular(r) : Radius.zero,
+      topRight: roundTop ? Radius.circular(r) : Radius.zero,
+      bottomLeft: roundBottom ? Radius.circular(r) : Radius.zero,
+      bottomRight: roundBottom ? Radius.circular(r) : Radius.zero,
+    );
+    // Material+shape+clip keeps calendar cells inside the radius.
+    // Selective borders can't use BoxDecoration (non-uniform Border + radius asserts).
+    return Material(
+      color: AppColors.card,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: radius),
+      clipBehavior: Clip.antiAlias,
+      child: CustomPaint(
+        foregroundPainter: _ProfileCardBorderPainter(
+          color: AppColors.cardBorder,
+          width: AppDimens.borderThin,
+          radius: r,
+          paintTop: roundTop,
+          paintBottom: roundBottom,
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+/// Left/right always; top/bottom only when that edge is rounded (not flush).
+class _ProfileCardBorderPainter extends CustomPainter {
+  const _ProfileCardBorderPainter({
+    required this.color,
+    required this.width,
+    required this.radius,
+    required this.paintTop,
+    required this.paintBottom,
+  });
+
+  final Color color;
+  final double width;
+  final double radius;
+  final bool paintTop;
+  final bool paintBottom;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = width
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true;
+    final inset = width / 2;
+    final rect = Rect.fromLTWH(
+      inset,
+      inset,
+      size.width - width,
+      size.height - width,
+    );
+    final rr = radius.clamp(0.0, rect.shortestSide / 2).toDouble();
+    final rad = Radius.circular(rr);
+    final path = Path();
+
+    // Clockwise from top-left; skip stroke on flush edges.
+    if (paintTop) {
+      path.moveTo(rect.left + rr, rect.top);
+      path.lineTo(rect.right - rr, rect.top);
+      path.arcToPoint(Offset(rect.right, rect.top + rr), radius: rad);
+    } else {
+      path.moveTo(rect.right, rect.top);
+    }
+
+    if (paintBottom) {
+      path.lineTo(rect.right, rect.bottom - rr);
+      path.arcToPoint(Offset(rect.right - rr, rect.bottom), radius: rad);
+      path.lineTo(rect.left + rr, rect.bottom);
+      path.arcToPoint(Offset(rect.left, rect.bottom - rr), radius: rad);
+    } else {
+      path.lineTo(rect.right, rect.bottom);
+      path.moveTo(rect.left, rect.bottom);
+    }
+
+    if (paintTop) {
+      path.lineTo(rect.left, rect.top + rr);
+      path.arcToPoint(Offset(rect.left + rr, rect.top), radius: rad);
+    } else {
+      path.lineTo(rect.left, rect.top);
+    }
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ProfileCardBorderPainter old) =>
+      color != old.color ||
+      width != old.width ||
+      radius != old.radius ||
+      paintTop != old.paintTop ||
+      paintBottom != old.paintBottom;
 }
 
 class _ProfileErrorPane extends StatelessWidget {
@@ -858,8 +1040,8 @@ class _EventsOnlyGrid extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.accent,
                       foregroundColor: AppColors.accentForeground,
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppDimens.radius),
                       ),
                     ),
                     onPressed: onShowFullCalendar,
@@ -1149,16 +1331,8 @@ class _ProfileInfoSectionState extends ConsumerState<_ProfileInfoSection> {
         (widget.user.settings.isPrivateProfile || widget.lockCounts);
 
     return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: const BoxDecoration(
-        color: AppColors.card,
-        border: Border(
-          bottom: BorderSide(
-            color: AppColors.border,
-            width: AppDimens.borderThick,
-          ),
-        ),
-      ),
+      padding: const EdgeInsets.all(20),
+      color: AppColors.card,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1431,15 +1605,15 @@ class _CalendarNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.muted,
+      color: AppColors.muted.withValues(alpha: 0.55),
       child: Container(
         height: _height,
         width: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: AppColors.border,
-              width: AppDimens.borderThick,
+              color: AppColors.cardBorder,
+              width: AppDimens.borderThin,
             ),
           ),
         ),
@@ -1462,6 +1636,8 @@ class _CalendarNavBar extends StatelessWidget {
               child: Center(
                 child: Material(
                   color: AppColors.accent,
+                  borderRadius: BorderRadius.circular(AppDimens.radius),
+                  clipBehavior: Clip.antiAlias,
                   child: InkWell(
                     onTap: onToday,
                     child: Container(
@@ -1470,8 +1646,9 @@ class _CalendarNavBar extends StatelessWidget {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(AppDimens.radius),
                         border: Border.all(
-                          color: AppColors.border,
+                          color: AppColors.cardBorder,
                           width: AppDimens.border,
                         ),
                       ),
@@ -1596,11 +1773,10 @@ class _CalendarDayCellState extends State<_CalendarDayCell> {
                   ? AppColors.primary.withValues(alpha: 0.1)
                   : AppColors.card),
         child: DecoratedBox(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border(
-              left: BorderSide.none,
-              right: BorderSide(color: AppColors.border, width: 2),
-              bottom: BorderSide(color: AppColors.border, width: 2),
+              right: BorderSide(color: AppColors.cardBorder, width: 1.5),
+              bottom: BorderSide(color: AppColors.cardBorder, width: 1.5),
             ),
           ),
           child: Stack(

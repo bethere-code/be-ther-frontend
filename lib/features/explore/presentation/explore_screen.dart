@@ -5,8 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
-import '../../../core/design/app_images.dart';
 import '../../../core/design/app_text_styles.dart';
+import '../../../core/design/widgets/app_brand_logo.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../feed/domain/edited_post_overlay.dart';
 import '../../feed/presentation/feed_providers.dart';
@@ -83,7 +83,10 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
       final page = await ref.read(explorePageProvider(skip).future);
       if (!mounted) return;
 
-      final seen = _allItems.map((e) => e.id).where((id) => id.isNotEmpty).toSet();
+      final seen = _allItems
+          .map((e) => e.id)
+          .where((id) => id.isNotEmpty)
+          .toSet();
       final fresh = page.items.where((item) {
         final id = item.id;
         return id.isEmpty || seen.add(id);
@@ -142,9 +145,13 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
         activeTab: ShellTab.explore,
         showRail: true,
         header: PreferredSize(
-          preferredSize: const Size.fromHeight(56),
+          preferredSize: const Size.fromHeight(52),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            height: 52,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppBrandLogo.headerInset,
+            ),
+            alignment: Alignment.center,
             decoration: const BoxDecoration(
               color: AppColors.secondary,
               border: Border(
@@ -156,14 +163,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
             ),
             child: Row(
               children: [
-                InkWell(
-                  onTap: _scrollToTop,
-                  child: Image.asset(
-                    AppImages.betherNewLogo,
-                    fit: BoxFit.contain,
-                    width: 60,
-                  ),
-                ),
+                AppBrandLogo(onTap: _scrollToTop),
                 Expanded(
                   child: Center(
                     child: Text(
@@ -176,12 +176,23 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                     ),
                   ),
                 ),
-                IconButton(
-                  onPressed: () => context.push(SearchScreen.path),
-                  icon: const Icon(
-                    Icons.search,
-                    color: AppColors.background,
-                    size: 26,
+                SizedBox(
+                  width: AppBrandLogo.slotWidth,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      onPressed: () => context.push(SearchScreen.path),
+                      iconSize: 24,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 44,
+                        minHeight: 44,
+                      ),
+                      icon: const Icon(
+                        Icons.search,
+                        color: AppColors.background,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -199,7 +210,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                   data: (_) {
                     final source = _hasBootstrapped
                         ? _allItems
-                        : (events.asData?.value.items ?? const <ExploreEvent>[]);
+                        : (events.asData?.value.items ??
+                              const <ExploreEvent>[]);
                     final visible = overlayEditedExploreEvents(
                       source.where(
                         (e) =>
@@ -230,17 +242,20 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                       onRefresh: _refresh,
                       child: CustomScrollView(
                         controller: _scrollController,
-                        physics: const BouncingScrollPhysics(
-                          parent: AlwaysScrollableScrollPhysics(),
-                        ),
+                        // Platform physics — do not force iOS bounce on Android.
+                        physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
                           SliverPadding(
                             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                             sliver: SliverMasonryGrid.count(
-                              crossAxisCount: ExploreEventTileLayout.crossAxisCount,
-                              crossAxisSpacing: ExploreEventTileLayout.gridSpacing,
-                              mainAxisSpacing: ExploreEventTileLayout.gridSpacing,
-                              childCount: visible.length + (_isLoadingMore ? 1 : 0),
+                              crossAxisCount:
+                                  ExploreEventTileLayout.crossAxisCount,
+                              crossAxisSpacing:
+                                  ExploreEventTileLayout.gridSpacing,
+                              mainAxisSpacing:
+                                  ExploreEventTileLayout.gridSpacing,
+                              childCount:
+                                  visible.length + (_isLoadingMore ? 1 : 0),
                               itemBuilder: (context, i) {
                                 if (i >= visible.length) {
                                   return const Padding(

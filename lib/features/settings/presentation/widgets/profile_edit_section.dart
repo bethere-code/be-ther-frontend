@@ -211,18 +211,8 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
 
         return Column(
           children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              decoration: const BoxDecoration(
-                color: AppColors.card,
-                border: Border(
-                  bottom: BorderSide(
-                    color: AppColors.border,
-                    width: AppDimens.borderThick,
-                  ),
-                ),
-              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
               child: Column(
                 children: [
                   GestureDetector(
@@ -309,17 +299,6 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                           ),
                         ),
                         const SizedBox(width: 5),
-                        // IconButton(
-                        //   tooltip: 'Edit username',
-                        //   onPressed: _saving ? null : () => _editUsername(user),
-                        //   visualDensity: VisualDensity.compact,
-                        //   padding: EdgeInsets.zero,
-                        //   // constraints: const BoxConstraints(
-                        //   //   minWidth: 40,
-                        //   //   minHeight: 40,
-                        //   // ),
-                        //   icon:
-                        // ),
                         InkWell(
                           onTap: _saving ? null : () => _editUsername(user),
                           child: const Icon(
@@ -334,6 +313,11 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                 ],
               ),
             ),
+            const Divider(
+              height: 1,
+              thickness: AppDimens.borderThin,
+              color: AppColors.cardBorder,
+            ),
             ListTile(
               title: Text(
                 'Name',
@@ -345,13 +329,16 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              trailing: const Icon(Icons.chevron_right),
+              trailing: const Icon(
+                Icons.chevron_right,
+                color: AppColors.mutedForeground,
+              ),
               onTap: _saving ? null : () => _editName(name),
             ),
             const Divider(
               height: 1,
               thickness: AppDimens.borderThin,
-              color: AppColors.border,
+              color: AppColors.cardBorder,
             ),
             ListTile(
               title: Text(
@@ -369,13 +356,11 @@ class _ProfileEditSectionState extends ConsumerState<ProfileEditSection> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              trailing: const Icon(Icons.chevron_right),
+              trailing: const Icon(
+                Icons.chevron_right,
+                color: AppColors.mutedForeground,
+              ),
               onTap: _saving ? null : () => _editBio(bio),
-            ),
-            const Divider(
-              height: 1,
-              thickness: AppDimens.borderThin,
-              color: AppColors.border,
             ),
           ],
         );
@@ -754,10 +739,10 @@ class _UsernameEditDialogState extends ConsumerState<_UsernameEditDialog> {
                 actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
                 shape: RoundedRectangleBorder(
                   side: const BorderSide(
-                    color: AppColors.border,
+                    color: AppColors.cardBorder,
                     width: AppDimens.borderThick,
                   ),
-                  borderRadius: BorderRadius.zero,
+                  borderRadius: BorderRadius.circular(AppDimens.feedCardRadius),
                 ),
                 title: Text(
                   'USERNAME',
@@ -800,18 +785,25 @@ class _UsernameEditDialogState extends ConsumerState<_UsernameEditDialog> {
                           horizontal: 16,
                           vertical: 14,
                         ),
-                        focusedBorder: const OutlineInputBorder(
-                          borderRadius: BorderRadius.zero,
-                          borderSide: BorderSide(
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppDimens.radius),
+                          borderSide: const BorderSide(
                             color: AppColors.ring,
                             width: AppDimens.border,
                           ),
                         ),
-                        border: const OutlineInputBorder(
-                          borderRadius: BorderRadius.zero,
-                          borderSide: BorderSide(
-                            color: AppColors.border,
-                            width: AppDimens.border,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppDimens.radius),
+                          borderSide: const BorderSide(
+                            color: AppColors.cardBorder,
+                            width: AppDimens.borderThin,
+                          ),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppDimens.radius),
+                          borderSide: const BorderSide(
+                            color: AppColors.cardBorder,
+                            width: AppDimens.borderThin,
                           ),
                         ),
                       ),

@@ -125,159 +125,173 @@ class NotificationListTile extends StatelessWidget {
         ? AppColors.card
         : Color.lerp(AppColors.card, AppColors.primary, 0.05)!;
 
-    return Material(
-      color: rowColor,
-      child: InkWell(
-        onTap: onOpen,
-        child: Container(
-          decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: AppColors.border,
-                width: AppDimens.borderThick,
-              ),
-            ),
-          ),
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: hasEvent
-                ? CrossAxisAlignment.start
-                : CrossAxisAlignment.center,
-            children: [
-              AuthorAvatar(
-                avatarUrl: avatar,
-                username: username,
-                badge: badge,
-                size: 48,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: isOwnerOutcome
-                              ? Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      TextSpan(
-                                        text: 'You $ownerOutcomeVerb ',
-                                        style: AppTextStyles.body(
-                                          15.2,
-                                          weight: FontWeight.w600,
-                                          color: AppColors.foreground,
-                                        ),
-                                      ),
-                                      TextSpan(
-                                        text: name,
-                                        style: AppTextStyles.body(
-                                          15.2,
-                                          weight: FontWeight.w700,
-                                          color: AppColors.foreground,
-                                        ),
-                                      ),
-                                      TextSpan(
-                                        text: '\'s request',
-                                        style: AppTextStyles.body(
-                                          15.2,
-                                          weight: FontWeight.w600,
-                                          color: AppColors.foreground,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      TextSpan(
-                                        text: name,
-                                        style: AppTextStyles.body(
-                                          15.2,
-                                          weight: FontWeight.w700,
-                                          color: AppColors.foreground,
-                                        ),
-                                      ),
-                                      TextSpan(
-                                        text: messageForType(type),
-                                        style: AppTextStyles.body(
-                                          15.2,
-                                          weight: FontWeight.w600,
-                                          color: AppColors.foreground,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                        ),
-                        if (timestamp.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            timestamp,
-                            style: AppTextStyles.body(
-                              12,
-                              weight: FontWeight.w600,
-                              color: AppColors.mutedForeground,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (hasEvent) ...[
-                      const SizedBox(height: 8),
-                      _EventSnippet(
-                        title: eventTitle.isNotEmpty ? eventTitle : 'Event',
-                        dateLabel: eventDate,
-                        timeLabel: eventTime,
-                        imageUrl: postImage,
-                        onTap: onOpen,
-                      ),
-                    ],
-                    if (isFollowRequest) ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          _FollowRequestAction(
-                            icon: Icons.check,
-                            label: 'Accept',
-                            filled: true,
-                            busy: actionsBusy,
-                            onPressed: onAcceptFollowRequest,
-                          ),
-                          const SizedBox(width: 10),
-                          _FollowRequestAction(
-                            icon: Icons.close,
-                            label: 'Reject',
-                            filled: false,
-                            busy: actionsBusy,
-                            onPressed: onRejectFollowRequest,
-                          ),
-                        ],
-                      ),
-                    ],
-                    // Profile link only for event notifications (not follows).
-                    if (hasEvent && username.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: () =>
-                            context.push(ProfileScreen.pathForUser(username)),
-                        child: Text(
-                          'View @$username',
-                          style: AppTextStyles.body(
-                            13.6,
-                            weight: FontWeight.w700,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppDimens.feedCardInset,
+        0,
+        AppDimens.feedCardInset,
+        AppDimens.feedCardGap,
+      ),
+      child: Material(
+        color: rowColor,
+        borderRadius: BorderRadius.circular(AppDimens.feedCardRadius),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onOpen,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: hasEvent
+                  ? CrossAxisAlignment.start
+                  : CrossAxisAlignment.center,
+              children: [
+                AuthorAvatar(
+                  avatarUrl: avatar,
+                  username: username,
+                  badge: badge,
+                  size: 48,
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: isOwnerOutcome
+                                ? Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: 'You $ownerOutcomeVerb ',
+                                          style: AppTextStyles.body(
+                                            15.2,
+                                            weight: FontWeight.w600,
+                                            color: AppColors.foreground,
+                                          ),
+                                        ),
+                                        WidgetSpan(
+                                          alignment:
+                                              PlaceholderAlignment.baseline,
+                                          baseline: TextBaseline.alphabetic,
+                                          child: GestureDetector(
+                                            onTap: username.isEmpty
+                                                ? null
+                                                : () => context.push(
+                                                    ProfileScreen.pathForUser(
+                                                      username,
+                                                    ),
+                                                  ),
+                                            child: Text(
+                                              name,
+                                              style: AppTextStyles.body(
+                                                15.2,
+                                                weight: FontWeight.w700,
+                                                color: AppColors.foreground,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: '\'s request',
+                                          style: AppTextStyles.body(
+                                            15.2,
+                                            weight: FontWeight.w600,
+                                            color: AppColors.foreground,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        WidgetSpan(
+                                          alignment:
+                                              PlaceholderAlignment.baseline,
+                                          baseline: TextBaseline.alphabetic,
+                                          child: GestureDetector(
+                                            onTap: username.isEmpty
+                                                ? null
+                                                : () => context.push(
+                                                    ProfileScreen.pathForUser(
+                                                      username,
+                                                    ),
+                                                  ),
+                                            child: Text(
+                                              name,
+                                              style: AppTextStyles.body(
+                                                15.2,
+                                                weight: FontWeight.w700,
+                                                color: AppColors.foreground,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: messageForType(type),
+                                          style: AppTextStyles.body(
+                                            15.2,
+                                            weight: FontWeight.w600,
+                                            color: AppColors.foreground,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                          ),
+                          if (timestamp.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              timestamp,
+                              style: AppTextStyles.body(
+                                12,
+                                weight: FontWeight.w600,
+                                color: AppColors.mutedForeground,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (hasEvent) ...[
+                        const SizedBox(height: 8),
+                        _EventSnippet(
+                          title: eventTitle.isNotEmpty ? eventTitle : 'Event',
+                          dateLabel: eventDate,
+                          timeLabel: eventTime,
+                          imageUrl: postImage,
+                          onTap: onOpen,
+                        ),
+                      ],
+                      if (isFollowRequest) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            _FollowRequestAction(
+                              icon: Icons.check,
+                              label: 'Accept',
+                              filled: true,
+                              busy: actionsBusy,
+                              onPressed: onAcceptFollowRequest,
+                            ),
+                            const SizedBox(width: 10),
+                            _FollowRequestAction(
+                              icon: Icons.close,
+                              label: 'Reject',
+                              filled: false,
+                              busy: actionsBusy,
+                              onPressed: onRejectFollowRequest,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -353,14 +367,17 @@ class _EventSnippet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.muted,
+      borderRadius: BorderRadius.circular(AppDimens.radius),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
+          foregroundDecoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppDimens.radius),
             border: Border.all(
-              color: AppColors.border,
-              width: AppDimens.border,
+              color: AppColors.cardBorder,
+              width: AppDimens.borderThick,
             ),
           ),
           child: Row(
@@ -370,12 +387,13 @@ class _EventSnippet extends StatelessWidget {
                 height: 64,
                 decoration: BoxDecoration(
                   color: AppColors.card,
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: AppColors.border,
+                    color: AppColors.cardBorder,
                     width: AppDimens.borderThin,
                   ),
                 ),
-                clipBehavior: Clip.hardEdge,
+                clipBehavior: Clip.antiAlias,
                 child: imageUrl.isNotEmpty
                     ? BeTherNetworkImage(url: imageUrl, fit: BoxFit.cover)
                     : const Icon(Icons.image, color: AppColors.mutedForeground),

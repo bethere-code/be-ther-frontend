@@ -15,6 +15,7 @@ import '../app_colors.dart';
 import '../app_dimens.dart';
 import '../app_images.dart';
 import '../app_text_styles.dart';
+import 'app_brand_logo.dart';
 import 'author_avatar.dart';
 import 'pressable.dart';
 
@@ -77,9 +78,9 @@ class _BottomBar extends ConsumerWidget {
 
   final ShellTab activeTab;
 
-  static const double _horizontalPadding = 16;
+  static const double _horizontalPadding = AppBrandLogo.headerInset;
   static const double _verticalPadding = 10;
-  static const double _leadingHeight = 40;
+  static const double _leadingHeight = AppBrandLogo.chromeHeight;
 
   static bool _isProfileRoute(BuildContext context) {
     final path = GoRouterState.of(context).uri.path;
@@ -99,7 +100,7 @@ class _BottomBar extends ConsumerWidget {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
-        onProfile ? 0 : _horizontalPadding,
+        _horizontalPadding,
         _verticalPadding,
         _horizontalPadding,
         _verticalPadding + bottomInset,
@@ -116,20 +117,7 @@ class _BottomBar extends ConsumerWidget {
       child: Row(
         children: [
           if (onProfile)
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => context.go(FeedScreen.path),
-                child: SizedBox(
-                  height: _leadingHeight,
-                  child: Image.asset(
-                    AppImages.betherNewLogo,
-                    width: 60,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
-            )
+            AppBrandLogo(onTap: () => context.go(FeedScreen.path))
           else
             AuthorAvatar(
               avatarUrl:

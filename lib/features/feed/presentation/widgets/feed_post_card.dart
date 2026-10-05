@@ -214,7 +214,8 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
   Widget build(BuildContext context) {
     final id = post.id;
     final store = ref.watch(calendarStatusStoreProvider);
-    final apiFallback = post.calendarStatus ??
+    final apiFallback =
+        post.calendarStatus ??
         (_isOwnPost
             ? (post.status == 'interested' ? 'interested' : 'going')
             : (post.inCalendar ? 'going' : null));
@@ -247,14 +248,19 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
               AppDimens.feedCardGap,
             )
           : EdgeInsets.zero,
-      clipBehavior: widget.lifted ? Clip.antiAlias : Clip.none,
+      // hardEdge is cheaper than antiAlias while scrolling; radius still clips.
+      clipBehavior: widget.lifted ? Clip.hardEdge : Clip.none,
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: widget.lifted
             ? BorderRadius.circular(AppDimens.feedCardRadius)
             : null,
+        // Trial: explore-style frame on feed — drop this branch to revert.
         border: widget.lifted
-            ? null
+            ? Border.all(
+                color: AppColors.cardBorder,
+                width: AppDimens.borderThick,
+              )
             : const Border(
                 bottom: BorderSide(
                   color: AppColors.border,
@@ -539,8 +545,9 @@ class _EventDetails extends StatelessWidget {
     final formattedAddress = details.eventLocation.formattedAddress.trim();
     final displayDate = _formatDisplayDate(dateRaw);
     final displayTime = _formatDisplayTime(time);
-    final displayVenue =
-        formattedAddress.isNotEmpty ? formattedAddress : venue?.trim();
+    final displayVenue = formattedAddress.isNotEmpty
+        ? formattedAddress
+        : venue?.trim();
     final hasDateTime =
         displayDate != null || (displayTime != null && displayTime.isNotEmpty);
     final hasVenue = displayVenue != null && displayVenue.isNotEmpty;
@@ -716,10 +723,7 @@ class _EventDetailMeta extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 220),
             child: labelText,
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 8),
-            trailing!,
-          ],
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         ],
       );
     }

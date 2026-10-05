@@ -69,7 +69,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final me = ref.watch(profileMeProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.feedCanvas,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -87,238 +87,255 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: me.when(
         data: (_) {
           return ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppDimens.feedCardInset,
+              8,
+              AppDimens.feedCardInset,
+              24,
+            ),
             children: [
-              _sectionTitle('PROFILE'),
-              const ProfileEditSection(),
-              SwitchListTile(
-                title: Text(
-                  _private ? 'Private Profile' : 'Public Profile',
-                  style: AppTextStyles.body(16, weight: FontWeight.w800),
-                ),
-                subtitle: Text(
-                  _private
-                      ? 'Only people who follow you can see your events in the feed, explore, and on your profile'
-                      : 'Anyone can find your public events in the feed, explore, and on your profile',
-                  style: AppTextStyles.body(
-                    13,
-                    color: AppColors.mutedForeground,
-                  ),
-                ),
-                value: _private,
-                onChanged: (v) async {
-                  setState(() => _private = v);
-                  await _save();
-                },
-              ),
-              SizedBox(height: 6),
-              const Divider(
-                height: 0.5,
-                thickness: AppDimens.borderThin,
-                color: AppColors.border,
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Text(
-                  'CALENDAR VIEW',
-                  style: AppTextStyles.display(
-                    13,
-                    color: AppColors.mutedForeground,
-                    letterSpacing: 0.08,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: Row(
+              _sectionLabel('PROFILE'),
+              _SettingsCard(
+                child: Column(
                   children: [
-                    Expanded(
-                      child: _CalendarViewButton(
-                        label: 'FULL CALENDAR',
-                        selected: _calendarView == 'full',
-                        onTap: () async {
-                          if (_calendarView == 'full') return;
-                          setState(() {
-                            _calendarView = 'full';
-                            _settingsReady = true;
-                          });
-                          await _save();
-                        },
+                    const ProfileEditSection(),
+                    const Divider(
+                      height: 1,
+                      thickness: AppDimens.borderThin,
+                      color: AppColors.cardBorder,
+                    ),
+                    SwitchListTile(
+                      title: Text(
+                        _private ? 'Private Profile' : 'Public Profile',
+                        style: AppTextStyles.body(16, weight: FontWeight.w800),
+                      ),
+                      subtitle: Text(
+                        _private
+                            ? 'Only people who follow you can see your events in the feed, explore, and on your profile'
+                            : 'Anyone can find your public events in the feed, explore, and on your profile',
+                        style: AppTextStyles.body(
+                          13,
+                          color: AppColors.mutedForeground,
+                        ),
+                      ),
+                      value: _private,
+                      onChanged: (v) async {
+                        setState(() => _private = v);
+                        await _save();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              _sectionLabel('CALENDAR VIEW'),
+              _SettingsCard(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _CalendarViewButton(
+                              label: 'FULL CALENDAR',
+                              selected: _calendarView == 'full',
+                              onTap: () async {
+                                if (_calendarView == 'full') return;
+                                setState(() {
+                                  _calendarView = 'full';
+                                  _settingsReady = true;
+                                });
+                                await _save();
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _CalendarViewButton(
+                              label: 'EVENTS ONLY',
+                              selected: _calendarView == 'events-only',
+                              onTap: () async {
+                                if (_calendarView == 'events-only') return;
+                                setState(() {
+                                  _calendarView = 'events-only';
+                                  _settingsReady = true;
+                                });
+                                await _save();
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Events only lists every event on your profile — past and upcoming.',
+                        style: AppTextStyles.body(
+                          12,
+                          color: AppColors.mutedForeground,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              _sectionLabel('NOTIFICATIONS'),
+              _SettingsCard(
+                child: SwitchListTile(
+                  title: Text(
+                    'Push Notifications',
+                    style: AppTextStyles.body(16, weight: FontWeight.w800),
+                  ),
+                  subtitle: Text(
+                    'Stars and wishlists',
+                    style: AppTextStyles.body(
+                      13,
+                      color: AppColors.mutedForeground,
+                    ),
+                  ),
+                  value: _push,
+                  onChanged: (v) async {
+                    setState(() => _push = v);
+                    await _save();
+                  },
+                ),
+              ),
+              _sectionLabel('ACCOUNT'),
+              _SettingsCard(
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: Text(
+                        'Blocked accounts',
+                        style: AppTextStyles.body(16, weight: FontWeight.w800),
+                      ),
+                      subtitle: Text(
+                        'People you blocked. Tap one to unblock.',
+                        style: AppTextStyles.body(
+                          13,
+                          color: AppColors.mutedForeground,
+                        ),
+                      ),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.mutedForeground,
+                      ),
+                      onTap: () => context.push(BlockedUsersScreen.path),
+                    ),
+                    const Divider(
+                      height: 1,
+                      thickness: AppDimens.borderThin,
+                      color: AppColors.cardBorder,
+                    ),
+                    ListTile(
+                      title: Text(
+                        'Log Out',
+                        style: AppTextStyles.body(
+                          16,
+                          weight: FontWeight.w800,
+                          color: AppColors.destructive,
+                        ),
+                      ),
+                      onTap: () async {
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          useRootNavigator: true,
+                          builder: (dialogContext) => AlertDialog(
+                            backgroundColor: AppColors.background,
+                            title: Text(
+                              'LOG OUT?',
+                              style: AppTextStyles.display(
+                                22,
+                                color: AppColors.secondary,
+                              ),
+                            ),
+                            content: const Text(
+                              'Are you sure you want to log out?',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(
+                                  dialogContext,
+                                  rootNavigator: true,
+                                ).pop(false),
+                                child: const Text('CANCEL'),
+                              ),
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.destructive,
+                                ),
+                                onPressed: () => Navigator.of(
+                                  dialogContext,
+                                  rootNavigator: true,
+                                ).pop(true),
+                                child: const Text('LOG OUT'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (ok != true || !mounted) return;
+                        showDialog<void>(
+                          context: context,
+                          useRootNavigator: true,
+                          barrierDismissible: false,
+                          barrierColor:
+                              AppColors.secondary.withValues(alpha: 0.35),
+                          builder: (_) => const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        );
+                        await ref.read(authNotifierProvider.notifier).logout();
+                        final nav = rootNavigatorKey.currentContext;
+                        if (nav != null && nav.mounted) {
+                          nav.go(LaunchScreen.path);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              _sectionLabel('SUPPORT'),
+              _SettingsCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                      child: Text(
+                        'Need help? \nJust drop us an email—we\'re here for you! 😊',
+                        style: AppTextStyles.body(
+                          14,
+                          color: AppColors.mutedForeground,
+                          weight: FontWeight.w500,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _CalendarViewButton(
-                        label: 'EVENTS ONLY',
-                        selected: _calendarView == 'events-only',
-                        onTap: () async {
-                          if (_calendarView == 'events-only') return;
-                          setState(() {
-                            _calendarView = 'events-only';
-                            _settingsReady = true;
-                          });
-                          await _save();
-                        },
+                    ListTile(
+                      leading: const Icon(
+                        Icons.mail_outline,
+                        color: AppColors.secondary,
+                      ),
+                      title: Text(
+                        'be.there.accnts@gmail.com',
+                        style: AppTextStyles.body(
+                          15,
+                          weight: FontWeight.w700,
+                          color: AppColors.secondary,
+                        ),
+                      ),
+                      onTap: () => unawaited(
+                        openExternalUrl(
+                          context,
+                          'mailto:be.there.accnts@gmail.com',
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Text(
-                  'Events only lists every event on your profile — past and upcoming.',
-                  style: AppTextStyles.body(
-                    12,
-                    color: AppColors.mutedForeground,
-                  ),
-                ),
-              ),
-              _sectionTitle('NOTIFICATIONS'),
-              SwitchListTile(
-                title: Text(
-                  'Push Notifications',
-                  style: AppTextStyles.body(16, weight: FontWeight.w800),
-                ),
-                subtitle: Text(
-                  'Stars and wishlists',
-                  style: AppTextStyles.body(
-                    13,
-                    color: AppColors.mutedForeground,
-                  ),
-                ),
-                value: _push,
-                onChanged: (v) async {
-                  setState(() => _push = v);
-                  await _save();
-                },
-              ),
-              const Divider(
-                height: 1,
-                thickness: AppDimens.borderThin,
-                color: AppColors.border,
-              ),
-              _sectionTitle('ACCOUNT'),
-              ListTile(
-                title: Text(
-                  'Blocked accounts',
-                  style: AppTextStyles.body(16, weight: FontWeight.w800),
-                ),
-                subtitle: Text(
-                  'People you blocked. Tap one to unblock.',
-                  style: AppTextStyles.body(
-                    13,
-                    color: AppColors.mutedForeground,
-                  ),
-                ),
-                trailing: const Icon(
-                  Icons.chevron_right,
-                  color: AppColors.mutedForeground,
-                ),
-                onTap: () => context.push(BlockedUsersScreen.path),
-              ),
-              // const Divider(
-              //   height: 1,
-              //   thickness: AppDimens.borderThin,
-              //   color: AppColors.border,
-              // ),
-              ListTile(
-                title: Text(
-                  'Log Out',
-                  style: AppTextStyles.body(
-                    16,
-                    weight: FontWeight.w800,
-                    color: AppColors.destructive,
-                  ),
-                ),
-                onTap: () async {
-                  final ok = await showDialog<bool>(
-                    context: context,
-                    useRootNavigator: true,
-                    builder: (dialogContext) => AlertDialog(
-                      backgroundColor: AppColors.background,
-                      title: Text(
-                        'LOG OUT?',
-                        style: AppTextStyles.display(
-                          22,
-                          color: AppColors.secondary,
-                        ),
-                      ),
-                      content: const Text('Are you sure you want to log out?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(
-                            dialogContext,
-                            rootNavigator: true,
-                          ).pop(false),
-                          child: const Text('CANCEL'),
-                        ),
-                        FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.destructive,
-                          ),
-                          onPressed: () => Navigator.of(
-                            dialogContext,
-                            rootNavigator: true,
-                          ).pop(true),
-                          child: const Text('LOG OUT'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (ok != true || !mounted) return;
-                  showDialog<void>(
-                    context: context,
-                    useRootNavigator: true,
-                    barrierDismissible: false,
-                    barrierColor: AppColors.secondary.withValues(alpha: 0.35),
-                    builder: (_) => const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  );
-                  await ref.read(authNotifierProvider.notifier).logout();
-                  final nav = rootNavigatorKey.currentContext;
-                  if (nav != null && nav.mounted) {
-                    nav.go(LaunchScreen.path);
-                  }
-                },
-              ),
-              const Divider(
-                height: 1,
-                thickness: AppDimens.borderThin,
-                color: AppColors.border,
-              ),
-              _sectionTitle('SUPPORT'),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-                child: Text(
-                  'Need help? \nJust drop us an email—we\'re here for you! 😊',
-                  style: AppTextStyles.body(
-                    14,
-                    color: AppColors.mutedForeground,
-                    weight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.mail_outline,
-                  color: AppColors.secondary,
-                ),
-                title: Text(
-                  'be.there.accnts@gmail.com',
-                  style: AppTextStyles.body(
-                    15,
-                    weight: FontWeight.w700,
-                    color: AppColors.secondary,
-                  ),
-                ),
-                onTap: () => unawaited(
-                  openExternalUrl(context, 'mailto:be.there.accnts@gmail.com'),
-                ),
-              ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               const _AppVersionFooter(),
             ],
           );
@@ -329,11 +346,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _sectionTitle(String text) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: AppColors.muted,
+  Widget _sectionLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
       child: Text(
         text,
         style: AppTextStyles.display(
@@ -369,6 +384,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 }
 
+/// Feed-style rounded card: Material + radius + clip + light border.
+class _SettingsCard extends StatelessWidget {
+  const _SettingsCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = BorderRadius.circular(AppDimens.feedCardRadius);
+    return Material(
+      color: AppColors.card,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: r,
+        side: const BorderSide(
+          color: AppColors.cardBorder,
+          width: AppDimens.borderThin,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: child,
+    );
+  }
+}
+
 class _CalendarViewButton extends StatelessWidget {
   const _CalendarViewButton({
     required this.label,
@@ -384,28 +424,30 @@ class _CalendarViewButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = selected ? AppColors.accent : AppColors.card;
     final fg = selected ? AppColors.accentForeground : AppColors.primary;
+    final r = BorderRadius.circular(AppDimens.radius);
     return SizedBox(
       height: 48,
       child: Material(
         color: bg,
+        shape: RoundedRectangleBorder(
+          borderRadius: r,
+          side: BorderSide(
+            color: AppColors.cardBorder,
+            width: selected ? AppDimens.border : AppDimens.borderThin,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: AppColors.border,
-                width: selected ? AppDimens.borderThick : AppDimens.border,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                style: AppTextStyles.display(
-                  13,
-                  color: fg,
-                  letterSpacing: 0.04,
-                ),
+          borderRadius: r,
+          child: Center(
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.display(
+                13,
+                color: fg,
+                letterSpacing: 0.04,
               ),
             ),
           ),

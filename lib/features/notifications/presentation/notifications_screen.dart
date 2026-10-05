@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:be_ther/core/design/app_images.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,7 +8,9 @@ import '../../../core/background_tasks/notification_syncer.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
+import '../../../core/design/widgets/app_brand_logo.dart';
 import '../../../core/design/widgets/app_shell.dart';
+import '../../../core/ui/app_toast.dart';
 import '../../explore/domain/explore_event.dart';
 import '../../explore/presentation/widgets/explore_event_sheet.dart';
 import '../../feed/presentation/calendar_status_store.dart';
@@ -18,7 +19,6 @@ import '../../profile/presentation/profile_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
 import 'notifications_providers.dart';
 import 'widgets/notification_list_tile.dart';
-import 'package:be_ther/core/ui/app_toast.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
@@ -183,9 +183,13 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       activeTab: ShellTab.notifications,
       showRail: true,
       header: PreferredSize(
-        preferredSize: const Size.fromHeight(56),
+        preferredSize: const Size.fromHeight(52),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+          height: 52,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppBrandLogo.headerInset,
+          ),
+          alignment: Alignment.center,
           decoration: const BoxDecoration(
             color: AppColors.secondary,
             border: Border(
@@ -196,42 +200,27 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             ),
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Matches Figma Make header spacer (no avatar in alerts header).
-              InkWell(
-                onTap: _scrollToTop,
-                child: Image.asset(
-                  AppImages.betherNewLogo,
-                  fit: BoxFit.contain,
-                  width: 60,
-                ),
-              ),
-              Center(
-                child: Text(
-                  'ALERTS',
-                  style: AppTextStyles.display(
-                    28,
-                    color: AppColors.primary,
-                    letterSpacing: 0.1,
+              AppBrandLogo(onTap: _scrollToTop),
+              Expanded(
+                child: Center(
+                  child: Text(
+                    'ALERTS',
+                    style: AppTextStyles.display(
+                      28,
+                      color: AppColors.primary,
+                      letterSpacing: 0.1,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 50),
-              // IconButton(
-              //   onPressed: () => _showMessagesInfo(context),
-              //   icon: const Icon(
-              //     Icons.mail_outline,
-              //     color: AppColors.background,
-              //     size: 24,
-              //   ),
-              // ),
+              const SizedBox(width: AppBrandLogo.slotWidth),
             ],
           ),
         ),
       ),
       child: ColoredBox(
-        color: AppColors.background,
+        color: AppColors.feedCanvas,
         child: list.when(
           data: (items) {
             if (items.isEmpty) {
@@ -267,8 +256,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               child: ListView.builder(
                 controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
-                // Full-width rows; right rail floats over content (Figma Make).
-                padding: EdgeInsets.zero,
+                padding: const EdgeInsets.only(top: AppDimens.feedCardGap),
                 itemCount: items.length,
                 itemBuilder: (context, i) {
                   final n = items[i];

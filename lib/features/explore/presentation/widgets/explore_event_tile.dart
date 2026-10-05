@@ -184,7 +184,7 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
             foregroundDecoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppDimens.radius),
               border: Border.all(
-                color: AppColors.border,
+                color: AppColors.cardBorder,
                 width: AppDimens.borderThick,
               ),
             ),
