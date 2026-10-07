@@ -185,7 +185,7 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
               borderRadius: BorderRadius.circular(AppDimens.radius),
               border: Border.all(
                 color: AppColors.cardBorder,
-                width: AppDimens.borderThick,
+                width: AppDimens.borderThin,
               ),
             ),
             child: Column(
@@ -260,7 +260,7 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
                             decoration: const BoxDecoration(
                               border: Border(
                                 top: BorderSide(
-                                  color: AppColors.border,
+                                  color: AppColors.cardBorder,
                                   width: AppDimens.borderThinnest,
                                 ),
                               ),
@@ -302,16 +302,14 @@ class _ExploreEventTileState extends ConsumerState<ExploreEventTile> {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
-                  child: _ExploreCalendarButton(
-                    calendarStatus: effectiveStatus,
-                    isPast: event.isPast,
-                    loading: _calendarBusy,
-                    onPressed: event.postId.isEmpty || event.isPast
-                        ? null
-                        : _handleCalendarTap,
-                  ),
+                // Flush to card bottom/sides — no inset under the frame border.
+                _ExploreCalendarButton(
+                  calendarStatus: effectiveStatus,
+                  isPast: event.isPast,
+                  loading: _calendarBusy,
+                  onPressed: event.postId.isEmpty || event.isPast
+                      ? null
+                      : _handleCalendarTap,
                 ),
               ],
             ),
@@ -522,12 +520,8 @@ class _ExploreCalendarButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: bg,
           borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(
-              AppDimens.radius - AppDimens.borderThick,
-            ),
-            bottomRight: Radius.circular(
-              AppDimens.radius - AppDimens.borderThick,
-            ),
+            bottomLeft: Radius.circular(AppDimens.radius),
+            bottomRight: Radius.circular(AppDimens.radius),
           ),
         ),
         child: Material(
@@ -535,12 +529,8 @@ class _ExploreCalendarButton extends StatelessWidget {
           child: InkWell(
             onTap: loading ? null : onPressed,
             borderRadius: const BorderRadius.only(
-              bottomLeft: Radius.circular(
-                AppDimens.radius - AppDimens.borderThick,
-              ),
-              bottomRight: Radius.circular(
-                AppDimens.radius - AppDimens.borderThick,
-              ),
+              bottomLeft: Radius.circular(AppDimens.radius),
+              bottomRight: Radius.circular(AppDimens.radius),
             ),
             child: Center(
               child: AnimatedSwitcher(

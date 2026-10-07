@@ -52,10 +52,12 @@ class AuthRepository {
         'password': password,
       };
       if (age != null) body['age'] = age;
+      print("requestSignupOtp: $body");
       final res = await _dio.post<Map<String, dynamic>>(
         '/api/v1/auth/signup/request-otp',
         data: body,
       );
+      print("requestSignupOtp: $res");
       _unwrap(res);
     } on DioException catch (e) {
       throw _toApiException(e, fallback: 'Failed to send verification code');
@@ -112,7 +114,11 @@ class AuthRepository {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
         '/api/v1/auth/login/password',
-        data: {'identifier': identifier, 'password': password, ...await _clientMeta()},
+        data: {
+          'identifier': identifier,
+          'password': password,
+          ...await _clientMeta(),
+        },
       );
       final data = _unwrap(res);
       return AuthTokens.fromJson(data as Map<String, dynamic>);

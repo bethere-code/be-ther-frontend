@@ -30,11 +30,14 @@ class PostSkeleton extends StatelessWidget {
               ? BorderRadius.circular(AppDimens.feedCardRadius)
               : null,
           border: lifted
-              ? null
+              ? Border.all(
+                  color: AppColors.cardBorder,
+                  width: AppDimens.borderThin,
+                )
               : const Border(
                   bottom: BorderSide(
-                    color: AppColors.border,
-                    width: AppDimens.borderThick,
+                    color: AppColors.cardBorder,
+                    width: AppDimens.borderThin,
                   ),
                 ),
         ),

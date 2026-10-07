@@ -516,8 +516,9 @@ class _SearchBody extends StatelessWidget {
     return CustomScrollView(
       controller: scrollController,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      // Platform physics — do not force iOS bounce on Android.
-      physics: const AlwaysScrollableScrollPhysics(),
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
       slivers: [
         SliverToBoxAdapter(
           child: _ResultsHeader(count: resultCount, hasMore: hasMore),

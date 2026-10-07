@@ -15,6 +15,7 @@ import '../../explore/domain/explore_event.dart';
 import '../../explore/presentation/widgets/explore_event_sheet.dart';
 import '../../feed/presentation/calendar_status_store.dart';
 import '../../feed/presentation/feed_providers.dart';
+import '../../feed/presentation/feed_screen.dart';
 import '../../profile/presentation/profile_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
 import 'notifications_providers.dart';
@@ -53,15 +54,6 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   void dispose() {
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _scrollToTop() {
-    if (!_scrollController.hasClients) return;
-    _scrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeOutCubic,
-    );
   }
 
   Future<void> _markAllRead() async {
@@ -201,7 +193,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
           ),
           child: Row(
             children: [
-              AppBrandLogo(onTap: _scrollToTop),
+              AppBrandLogo(onTap: () => context.go(FeedScreen.path)),
               Expanded(
                 child: Center(
                   child: Text(

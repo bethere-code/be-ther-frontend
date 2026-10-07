@@ -6,13 +6,6 @@ import 'network_image_mem_cache.dart';
 
 export 'network_image_mem_cache.dart';
 
-/// App-wide network image. Fixed-size slots must wrap this in [AspectRatio]
-/// (feed already does) so placeholder → bitmap never changes layout height.
-///
-/// Zero fade: CachedNetworkImage’s default 500ms/120ms fade runs an opacity
-/// animation on the UI thread when each cover resolves — that is the “jerk
-/// while the image loads” on Android feeds. Calendar feels smooth because it
-/// has no network decode + fade.
 class BeTherNetworkImage extends StatelessWidget {
   const BeTherNetworkImage({
     super.key,
@@ -45,11 +38,8 @@ class BeTherNetworkImage extends StatelessWidget {
           width: double.infinity,
           height: double.infinity,
           memCacheWidth: memW,
-          filterQuality: FilterQuality.low,
-          fadeInDuration: Duration.zero,
+          fadeInDuration: const Duration(milliseconds: 120),
           fadeOutDuration: Duration.zero,
-          placeholderFadeInDuration: Duration.zero,
-          useOldImageOnUrlChange: true,
           placeholder: (context, url) =>
               const ColoredBox(color: AppColors.muted),
           errorWidget: (context, url, error) => const ColoredBox(

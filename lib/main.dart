@@ -47,13 +47,6 @@ Future<void> main() async {
     DeviceOrientation.portraitUp,
   ]);
   SystemChrome.setSystemUIOverlayStyle(AppTheme.systemOverlayLightIcons);
-
-  // Feed covers are large; Flutter’s default 100 MiB image cache thrash-evicts
-  // them while scrolling, forcing re-decode → mid-scroll jerks. Calendar has
-  // no bitmaps so it feels smooth. Keep more decoded covers in RAM.
-  final imageCache = PaintingBinding.instance.imageCache;
-  imageCache.maximumSizeBytes = 250 << 20; // 250 MiB
-
   await dotenv.load(fileName: 'assets/env/app.env');
   final serverClientId = dotenv.maybeGet('GOOGLE_WEB_CLIENT_ID')?.trim();
   await GoogleSignIn.instance.initialize(

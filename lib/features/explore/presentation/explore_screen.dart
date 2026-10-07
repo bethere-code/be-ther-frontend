@@ -49,15 +49,6 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     super.dispose();
   }
 
-  void _scrollToTop() {
-    if (!_scrollController.hasClients) return;
-    _scrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     if (_scrollController.position.pixels >=
@@ -163,7 +154,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
             ),
             child: Row(
               children: [
-                AppBrandLogo(onTap: _scrollToTop),
+                AppBrandLogo(onTap: () => context.go(FeedScreen.path)),
                 Expanded(
                   child: Center(
                     child: Text(
@@ -242,8 +233,9 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                       onRefresh: _refresh,
                       child: CustomScrollView(
                         controller: _scrollController,
-                        // Platform physics — do not force iOS bounce on Android.
-                        physics: const AlwaysScrollableScrollPhysics(),
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
+                        ),
                         slivers: [
                           SliverPadding(
                             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),

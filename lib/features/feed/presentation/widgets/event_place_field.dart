@@ -308,7 +308,8 @@ class _EventPlaceFieldState extends ConsumerState<EventPlaceField> {
   @override
   Widget build(BuildContext context) {
     final hasError = widget.errorText != null && widget.errorText!.isNotEmpty;
-    final borderColor = hasError ? AppColors.destructive : AppColors.border;
+    final borderColor =
+        hasError ? AppColors.destructive : AppColors.cardBorder;
     final busy = _searching || _resolving || _gpsBusy;
 
     return Column(
@@ -387,35 +388,35 @@ class _EventPlaceFieldState extends ConsumerState<EventPlaceField> {
               borderRadius: BorderRadius.circular(AppDimens.radius),
               borderSide: BorderSide(
                 color: borderColor,
-                width: AppDimens.border,
+                width: AppDimens.borderThin,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppDimens.radius),
               borderSide: BorderSide(
                 color: borderColor,
-                width: AppDimens.border,
+                width: AppDimens.borderThin,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppDimens.radius),
               borderSide: BorderSide(
                 color: hasError ? AppColors.destructive : AppColors.primary,
-                width: AppDimens.border,
+                width: AppDimens.borderThin,
               ),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppDimens.radius),
               borderSide: const BorderSide(
                 color: AppColors.destructive,
-                width: AppDimens.border,
+                width: AppDimens.borderThin,
               ),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppDimens.radius),
               borderSide: const BorderSide(
                 color: AppColors.destructive,
-                width: AppDimens.border,
+                width: AppDimens.borderThin,
               ),
             ),
           ),

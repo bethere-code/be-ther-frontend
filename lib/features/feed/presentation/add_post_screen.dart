@@ -104,7 +104,7 @@ Future<void> openEditPostScreen(
 }
 
 class _AddPostScreenState extends ConsumerState<AddPostScreen> {
-  static const _fieldBorder = AppDimens.border;
+  static const _fieldBorder = AppDimens.borderThin;
   static const _hintColor = Color(0xFFB8BCC4);
 
   final _eventName = TextEditingController();
@@ -1271,7 +1271,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                               AppDimens.radius,
                                             ),
                                             border: Border.all(
-                                              color: AppColors.border,
+                                              color: AppColors.cardBorder,
                                               width: _fieldBorder,
                                             ),
                                           ),
@@ -1370,8 +1370,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                               color: AppColors.muted,
                               border: Border(
                                 top: BorderSide(
-                                  color: AppColors.border,
-                                  width: AppDimens.border,
+                                  color: AppColors.cardBorder,
+                                  width: AppDimens.borderThin,
                                 ),
                               ),
                             ),
@@ -1412,7 +1412,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     EdgeInsetsGeometry? contentPadding,
   }) {
     final hasError = errorText != null && errorText.isNotEmpty;
-    final borderColor = hasError ? AppColors.destructive : AppColors.border;
+    final borderColor =
+        hasError ? AppColors.destructive : AppColors.cardBorder;
 
     return InputDecoration(
       hintText: hint,
@@ -1584,7 +1585,10 @@ class _PrivacyToggle extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppDimens.radius),
-        border: Border.all(color: AppColors.border, width: AppDimens.border),
+        border: Border.all(
+          color: AppColors.cardBorder,
+          width: AppDimens.borderThin,
+        ),
       ),
       child: Row(
         children: [
@@ -1651,7 +1655,10 @@ class _EventStatusToggle extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppDimens.radius),
-        border: Border.all(color: AppColors.border, width: AppDimens.border),
+        border: Border.all(
+          color: AppColors.cardBorder,
+          width: AppDimens.borderThin,
+        ),
       ),
       child: Row(
         children: [

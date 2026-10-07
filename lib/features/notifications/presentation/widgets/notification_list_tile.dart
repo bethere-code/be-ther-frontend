@@ -134,7 +134,13 @@ class NotificationListTile extends StatelessWidget {
       ),
       child: Material(
         color: rowColor,
-        borderRadius: BorderRadius.circular(AppDimens.feedCardRadius),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimens.feedCardRadius),
+          side: const BorderSide(
+            color: AppColors.cardBorder,
+            width: AppDimens.borderThin,
+          ),
+        ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onOpen,
@@ -326,9 +332,10 @@ class _FollowRequestAction extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: bg,
+            borderRadius: BorderRadius.circular(AppDimens.radius),
             border: Border.all(
-              color: AppColors.border,
-              width: AppDimens.border,
+              color: AppColors.cardBorder,
+              width: AppDimens.borderThin,
             ),
           ),
           child: Row(
@@ -377,7 +384,7 @@ class _EventSnippet extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppDimens.radius),
             border: Border.all(
               color: AppColors.cardBorder,
-              width: AppDimens.borderThick,
+              width: AppDimens.borderThin,
             ),
           ),
           child: Row(

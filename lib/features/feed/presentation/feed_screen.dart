@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -12,7 +11,6 @@ import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_brand_logo.dart';
 import '../../../core/design/widgets/app_shell.dart';
-import '../../../core/design/widgets/network_image_mem_cache.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
 import '../../../core/routing/app_route_observer.dart';
 import '../../../core/utils/popup_menu_utils.dart';
@@ -191,31 +189,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       ..addAll(page.items);
     _nextSkip = page.nextSkip;
     _hasBootstrapped = true;
-    _precacheCovers(page.items);
-  }
-
-  /// Warm decode for upcoming covers off the critical scroll path.
-  void _precacheCovers(Iterable<FeedPost> posts) {
-    if (!mounted) return;
-    final dpr = MediaQuery.devicePixelRatioOf(context);
-    final slotW =
-        MediaQuery.sizeOf(context).width - (AppDimens.feedCardInset * 2);
-    final memW = networkImageMemCachePx(slotW, dpr);
-    var n = 0;
-    for (final post in posts) {
-      if (n >= 8) break;
-      final url = post.imageUrl;
-      if (url.isEmpty) continue;
-      n++;
-      unawaited(() async {
-        try {
-          await precacheImage(
-            ResizeImage(CachedNetworkImageProvider(url), width: memW),
-            context,
-          );
-        } catch (_) {}
-      }());
-    }
   }
 
   List<FeedPost> _mergeVisibleItems({
@@ -275,7 +248,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
         _nextSkip = page.nextSkip;
         _isLoadingMore = false;
       });
-      _precacheCovers(fresh);
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoadingMore = false);
@@ -444,9 +416,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                     top: AppDimens.feedCardGap,
                     bottom: AppDimens.feedCardGap,
                   ),
-                  // Platform physics (Clamping on Android, Bouncing on iOS).
-                  // Forcing Bouncing on Android adds fling "friction" / settle lag.
-                  physics: const AlwaysScrollableScrollPhysics(),
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
                   scrollCacheExtent: const ScrollCacheExtent.pixels(800),
                   itemCount: visibleItems.length + (_isLoadingMore ? 1 : 0),
                   itemBuilder: (context, index) {

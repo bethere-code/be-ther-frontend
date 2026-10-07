@@ -248,23 +248,22 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
               AppDimens.feedCardGap,
             )
           : EdgeInsets.zero,
-      // hardEdge is cheaper than antiAlias while scrolling; radius still clips.
-      clipBehavior: widget.lifted ? Clip.hardEdge : Clip.none,
+      clipBehavior: widget.lifted ? Clip.antiAlias : Clip.none,
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: widget.lifted
             ? BorderRadius.circular(AppDimens.feedCardRadius)
             : null,
-        // Trial: explore-style frame on feed — drop this branch to revert.
+        // Profile-style soft frame (cardBorder + thin). Revert width/color if needed.
         border: widget.lifted
             ? Border.all(
                 color: AppColors.cardBorder,
-                width: AppDimens.borderThick,
+                width: AppDimens.borderThin,
               )
             : const Border(
                 bottom: BorderSide(
-                  color: AppColors.border,
-                  width: AppDimens.border,
+                  color: AppColors.cardBorder,
+                  width: AppDimens.borderThin,
                 ),
               ),
       ),
@@ -366,35 +365,6 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                   fit: StackFit.expand,
                   children: [
                     BeTherNetworkImage(url: imageUrl, fit: BoxFit.cover),
-                    // Positioned(
-                    //   top: 12,
-                    //   right: 12,
-                    //   child: Container(
-                    //     padding: const EdgeInsets.symmetric(
-                    //       horizontal: 10,
-                    //       vertical: 8,
-                    //     ),
-                    //     color: AppColors.secondary.withValues(alpha: 0.9),
-                    //     child: Row(
-                    //       children: [
-                    //         const Icon(
-                    //           Icons.place,
-                    //           color: AppColors.background,
-                    //           size: 16,
-                    //         ),
-                    //         const SizedBox(width: 6),
-                    //         Text(
-                    //           country,
-                    //           style: AppTextStyles.display(
-                    //             12,
-                    //             color: AppColors.background,
-                    //             letterSpacing: 0.05,
-                    //           ),
-                    //         ),
-                    //       ],
-                    //     ),
-                    //   ),
-                    // ),
                   ],
                 ),
               ),
