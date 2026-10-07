@@ -8,6 +8,7 @@ import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_brand_logo.dart';
 import '../../../core/design/widgets/app_shell.dart';
+import '../../../core/routing/shell_nav.dart';
 import '../../feed/domain/edited_post_overlay.dart';
 import '../../feed/presentation/feed_providers.dart';
 import '../../feed/presentation/feed_screen.dart';
@@ -130,7 +131,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) context.go(FeedScreen.path);
+        if (!didPop) popShellOrGoHome(context);
       },
       child: AppShell(
         activeTab: ShellTab.explore,

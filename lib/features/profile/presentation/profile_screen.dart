@@ -13,6 +13,7 @@ import '../../../core/design/widgets/author_avatar.dart';
 import '../../../core/design/widgets/be_ther_network_image.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/routing/app_route_observer.dart';
+import '../../../core/routing/shell_nav.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../explore/presentation/explore_providers.dart';
 import '../../feed/presentation/feed_providers.dart';
@@ -501,7 +502,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final profileAsync = ref.watch(profileViewProvider(widget.username));
     final routeUsername = widget.username ?? '';
 
-    return profileAsync.when(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) popShellOrGoHome(context);
+      },
+      child: profileAsync.when(
       skipLoadingOnReload: true,
       skipLoadingOnRefresh: true,
       loading: () => AppShell(
@@ -752,6 +758,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           ),
         );
       },
+    ),
     );
   }
 }

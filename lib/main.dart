@@ -47,6 +47,11 @@ Future<void> main() async {
     DeviceOrientation.portraitUp,
   ]);
   SystemChrome.setSystemUIOverlayStyle(AppTheme.systemOverlayLightIcons);
+
+  // Feed / explore covers are large; default 100 MiB image cache thrash-evicts
+  // them while scrolling → re-decode mid-fling. Keep more decoded covers in RAM.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 200 << 20; // 200 MiB
+
   await dotenv.load(fileName: 'assets/env/app.env');
   final serverClientId = dotenv.maybeGet('GOOGLE_WEB_CLIENT_ID')?.trim();
   await GoogleSignIn.instance.initialize(

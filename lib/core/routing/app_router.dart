@@ -33,20 +33,35 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 CustomTransitionPage<void> _fadePage(GoRouterState state, Widget child) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
+    name: state.matchedLocation,
     child: child,
     transitionDuration: const Duration(milliseconds: 220),
     reverseTransitionDuration: const Duration(milliseconds: 160),
     transitionsBuilder: (context, animation, secondaryAnimation, pageChild) {
       if (MediaQuery.disableAnimationsOf(context)) return pageChild;
-      final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
       return FadeTransition(opacity: curved, child: pageChild);
     },
+  );
+}
+
+/// Main tabs (feed / explore / notifications / own profile). Instant swap —
+/// the 220ms fade was painting both screens at once and lighting the overlay.
+NoTransitionPage<void> _tabPage(GoRouterState state, Widget child) {
+  return NoTransitionPage<void>(
+    key: state.pageKey,
+    name: state.matchedLocation,
+    child: child,
   );
 }
 
 CustomTransitionPage<void> _sheetPage(GoRouterState state, Widget child) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
+    name: state.matchedLocation,
     opaque: false,
     barrierColor: Colors.transparent,
     child: child,
@@ -54,7 +69,10 @@ CustomTransitionPage<void> _sheetPage(GoRouterState state, Widget child) {
     reverseTransitionDuration: const Duration(milliseconds: 220),
     transitionsBuilder: (context, animation, secondaryAnimation, pageChild) {
       if (MediaQuery.disableAnimationsOf(context)) return pageChild;
-      final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
       return SlideTransition(
         position: Tween<Offset>(
           begin: const Offset(0, 0.08),
@@ -78,7 +96,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     overridePlatformDefaultLocation: true,
     observers: [
       appRouteObserver,
-      AnalyticsNavObserver(() => ref.read(analyticsTrackerProvider).onRouteChanged()),
+      AnalyticsNavObserver(
+        () => ref.read(analyticsTrackerProvider).onRouteChanged(),
+      ),
     ],
     refreshListenable: refresh,
     redirect: (context, state) {
@@ -105,7 +125,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       if (isSplash) return null;
 
-      final public = loc == LaunchScreen.path ||
+      final public =
+          loc == LaunchScreen.path ||
           // loc == OnboardingScreen.path ||
           loc == AuthEmailScreen.path ||
           loc == AuthSignupScreen.path ||
@@ -113,7 +134,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       if (!auth.isAuthenticated && !public) {
         if (SharedEventPaths.isEventLocation(loc) ||
-            (fromDeepLink != null && SharedEventPaths.isEventLocation(fromDeepLink))) {
+            (fromDeepLink != null &&
+                SharedEventPaths.isEventLocation(fromDeepLink))) {
           ref
               .read(pendingDeepLinkProvider.notifier)
               .setPending(fromDeepLink ?? loc);
@@ -121,7 +143,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return LaunchScreen.path;
       }
       if (auth.isAuthenticated &&
-          (loc == LaunchScreen.path || loc.startsWith('/auth/') /* || loc == OnboardingScreen.path */)) {
+          (loc == LaunchScreen.path ||
+              loc.startsWith(
+                '/auth/',
+              ) /* || loc == OnboardingScreen.path */ )) {
         final pending = ref.read(pendingDeepLinkProvider);
         if (pending != null && pending.isNotEmpty) {
           ref.read(pendingDeepLinkProvider.notifier).clearPending();
@@ -177,12 +202,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AuthEmailScreen.path,
         name: AuthEmailScreen.name,
-        pageBuilder: (context, state) => _fadePage(state, const AuthEmailScreen()),
+        pageBuilder: (context, state) =>
+            _fadePage(state, const AuthEmailScreen()),
       ),
       GoRoute(
         path: AuthSignupScreen.path,
         name: AuthSignupScreen.name,
-        pageBuilder: (context, state) => _fadePage(state, const AuthSignupScreen()),
+        pageBuilder: (context, state) =>
+            _fadePage(state, const AuthSignupScreen()),
       ),
       GoRoute(
         path: AuthOtpScreen.path,
@@ -205,7 +232,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: FeedScreen.path,
         name: FeedScreen.name,
-        pageBuilder: (context, state) => _fadePage(state, const FeedScreen()),
+        pageBuilder: (context, state) => _tabPage(state, const FeedScreen()),
       ),
       GoRoute(
         path: SharedEventScreen.path,
@@ -226,12 +253,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: ExploreScreen.path,
         name: ExploreScreen.name,
-        pageBuilder: (context, state) => _fadePage(state, const ExploreScreen()),
+        pageBuilder: (context, state) =>
+            _tabPage(state, const ExploreScreen()),
       ),
       GoRoute(
         path: ProfileScreen.path,
         name: ProfileScreen.name,
-        pageBuilder: (context, state) => _fadePage(state, const ProfileScreen()),
+        pageBuilder: (context, state) =>
+            _tabPage(state, const ProfileScreen()),
         routes: [
           GoRoute(
             path: ':username',
@@ -280,17 +309,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: NotificationsScreen.path,
         name: NotificationsScreen.name,
-        pageBuilder: (context, state) => _fadePage(state, const NotificationsScreen()),
+        pageBuilder: (context, state) =>
+            _tabPage(state, const NotificationsScreen()),
       ),
       GoRoute(
         path: AddPostScreen.path,
         name: AddPostScreen.name,
         pageBuilder: (context, state) {
           final editPostId = state.uri.queryParameters['edit'];
-          return _sheetPage(
-            state,
-            AddPostScreen(editPostId: editPostId),
-          );
+          return _sheetPage(state, AddPostScreen(editPostId: editPostId));
         },
       ),
       GoRoute(
@@ -301,12 +328,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: SettingsScreen.path,
         name: SettingsScreen.name,
-        pageBuilder: (context, state) => _fadePage(state, const SettingsScreen()),
+        pageBuilder: (context, state) =>
+            _fadePage(state, const SettingsScreen()),
       ),
       GoRoute(
         path: BlockedUsersScreen.path,
         name: BlockedUsersScreen.name,
-        pageBuilder: (context, state) => _fadePage(state, const BlockedUsersScreen()),
+        pageBuilder: (context, state) =>
+            _fadePage(state, const BlockedUsersScreen()),
       ),
     ],
   );
@@ -334,8 +363,6 @@ class _DeepLinkRecoveryPageState extends State<_DeepLinkRecoveryPage> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

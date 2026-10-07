@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import '../../../features/auth/presentation/auth_notifier.dart';
 import '../../../features/notifications/presentation/notifications_providers.dart';
 import '../../../features/profile/presentation/profile_providers.dart';
+import '../../routing/shell_nav.dart';
 import '../../theme/app_theme.dart';
 import '../app_colors.dart';
 import '../app_dimens.dart';
@@ -126,7 +127,7 @@ class _BottomBar extends ConsumerWidget {
                   user?['username'] as String? ?? me.value?.username ?? '',
               badge: badge,
               size: _leadingHeight,
-              onTap: () => context.push(ProfileScreen.path),
+              onTap: () => pushShellTab(context, ProfileScreen.path),
             ),
           const Spacer(),
           _GlobeButton(active: activeTab == ShellTab.explore),
@@ -152,7 +153,7 @@ class _GlobeButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppDimens.radius),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => context.go('/explore'),
+          onTap: () => pushShellTab(context, '/explore'),
           child: Container(
             height: _iconSize,
             width: _iconSize,
@@ -178,7 +179,7 @@ class _GlobeButton extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => context.go('/explore'),
+        onTap: () => pushShellTab(context, '/explore'),
         borderRadius: BorderRadius.circular(4),
         child: SizedBox(
           height: _iconSize,
@@ -220,7 +221,8 @@ class _RightRail extends ConsumerWidget {
           child: _RailIcon(
             icon: Icons.home,
             selected: activeTab == ShellTab.home,
-            onTap: () => context.push(FeedScreen.path),
+            // go clears stacked tabs back to home (intentional).
+            onTap: () => context.go(FeedScreen.path),
           ),
         ),
         const SizedBox(height: _tileGap),
@@ -241,7 +243,7 @@ class _RightRail extends ConsumerWidget {
               _RailIcon(
                 icon: Icons.notifications_none,
                 selected: activeTab == ShellTab.notifications,
-                onTap: () => context.push(NotificationsScreen.path),
+                onTap: () => pushShellTab(context, NotificationsScreen.path),
               ),
               unreadCount.when(
                 data: (count) {

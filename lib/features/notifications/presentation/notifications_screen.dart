@@ -10,6 +10,7 @@ import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_brand_logo.dart';
 import '../../../core/design/widgets/app_shell.dart';
+import '../../../core/routing/shell_nav.dart';
 import '../../../core/ui/app_toast.dart';
 import '../../explore/domain/explore_event.dart';
 import '../../explore/presentation/widgets/explore_event_sheet.dart';
@@ -171,7 +172,12 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   Widget build(BuildContext context) {
     final list = ref.watch(notificationsProvider);
 
-    return AppShell(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) popShellOrGoHome(context);
+      },
+      child: AppShell(
       activeTab: ShellTab.notifications,
       showRail: true,
       header: PreferredSize(
@@ -296,6 +302,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
