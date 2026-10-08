@@ -98,9 +98,9 @@ Future<void> openEditPostScreen(
     Navigator.of(context).maybePop();
   }
   if (!context.mounted) return;
-  await GoRouter.of(context).push(
-    '${AddPostScreen.path}?edit=${Uri.encodeComponent(postId.trim())}',
-  );
+  await GoRouter.of(
+    context,
+  ).push('${AddPostScreen.path}?edit=${Uri.encodeComponent(postId.trim())}');
 }
 
 class _AddPostScreenState extends ConsumerState<AddPostScreen> {
@@ -113,7 +113,9 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   final _tagInput = TextEditingController();
   final _sheetController = DraggableScrollableController();
 
-  final bool _private = false;
+  /// Event-level privacy (author-only). Account privacy is separate (Settings).
+  /// Kept false so followers still see events when the profile is private.
+  static const bool _private = false;
 
   /// false = Interested (default); true = Going / attending.
   bool _isGoing = false;
@@ -125,6 +127,15 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
   /// True when the current photo came from ticket-link metadata (not gallery).
   bool _imageFromTicketLink = false;
+
+  /// True when event name / description were filled from link preview —
+  /// only then may a later preview refresh them. User edits clear these.
+  bool _eventNameFromTicketLink = false;
+  bool _descriptionFromTicketLink = false;
+  bool _placeFromTicketLink = false;
+  bool _dateFromTicketLink = false;
+  bool _timeFromTicketLink = false;
+
   bool _ticketPreviewLoading = false;
   String? _ticketPreviewMessage;
   Timer? _ticketPreviewDebounce;
@@ -188,7 +199,9 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
       final dateRaw = details.date?.trim();
       if (dateRaw != null && dateRaw.isNotEmpty) {
-        _selectedDate = DateTime.tryParse(dateRaw.length >= 10 ? dateRaw.substring(0, 10) : dateRaw);
+        _selectedDate = DateTime.tryParse(
+          dateRaw.length >= 10 ? dateRaw.substring(0, 10) : dateRaw,
+        );
       }
       _selectedTime = _parseTimeFromApi(details.time);
 
@@ -196,7 +209,9 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       if (!loc.isEmpty) {
         _selectedPlace = StructuredPlace(
           placeId: loc.placeId,
-          name: loc.name.isNotEmpty ? loc.name : (details.venue ?? post.location),
+          name: loc.name.isNotEmpty
+              ? loc.name
+              : (details.venue ?? post.location),
           formattedAddress: loc.formattedAddress,
           locality: '',
           street: '',
@@ -259,7 +274,6 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         _taggedUsers.isNotEmpty ||
         _selectedDate != null ||
         _selectedTime != null ||
-        _private ||
         _isGoing;
   }
 
@@ -392,6 +406,32 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     });
   }
 
+  bool get _needsTicketPreviewImage =>
+      _imagePath == null || _imageFromTicketLink;
+
+  bool get _needsTicketPreviewEventName =>
+      _eventName.text.trim().isEmpty || _eventNameFromTicketLink;
+
+  bool get _needsTicketPreviewDescription =>
+      _description.text.trim().isEmpty || _descriptionFromTicketLink;
+
+  bool get _needsTicketPreviewPlace =>
+      _selectedPlace == null || _placeFromTicketLink;
+
+  bool get _needsTicketPreviewDate =>
+      _selectedDate == null || _dateFromTicketLink;
+
+  bool get _needsTicketPreviewTime =>
+      _selectedTime == null || _timeFromTicketLink;
+
+  bool get _needsAnyTicketPreview =>
+      _needsTicketPreviewImage ||
+      _needsTicketPreviewEventName ||
+      _needsTicketPreviewDescription ||
+      _needsTicketPreviewPlace ||
+      _needsTicketPreviewDate ||
+      _needsTicketPreviewTime;
+
   void _onTicketTextChanged() {
     _ticketPreviewDebounce?.cancel();
     final url = _normalizeTicketUrl();
@@ -406,8 +446,16 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
       return;
     }
 
+    if (!_needsAnyTicketPreview) return;
+
     if (url == _lastTicketPreviewUrl &&
-        (_imageFromTicketLink || _ticketPreviewLoading)) {
+        (_ticketPreviewLoading ||
+            _imageFromTicketLink ||
+            _eventNameFromTicketLink ||
+            _descriptionFromTicketLink ||
+            _placeFromTicketLink ||
+            _dateFromTicketLink ||
+            _timeFromTicketLink)) {
       return;
     }
 
@@ -417,8 +465,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
   }
 
   Future<void> _fetchTicketLinkPreview(String url) async {
-    // Never replace a photo the user picked from the gallery.
-    if (_imagePath != null && !_imageFromTicketLink) return;
+    // Nothing left to fill — user already provided image + name + description.
+    if (!_needsAnyTicketPreview) return;
 
     final requestId = ++_ticketPreviewRequestId;
     if (mounted) {
@@ -429,54 +477,167 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     }
 
     try {
-      // Resolve OG image on our server (WhatsApp-style). Phone scrapes are
-      // often blocked by Cloudflare on BookMyShow / similar ticket sites.
+      // Resolve OG on our server (WhatsApp-style). Phone scrapes are often
+      // blocked by Cloudflare on BookMyShow / similar ticket sites.
       final api = ref.read(apiClientProvider);
-      final imageUrl = await PostsRepository(api).fetchLinkPreviewImageUrl(url);
+      final preview = await PostsRepository(api).fetchLinkPreview(url);
       if (!mounted || requestId != _ticketPreviewRequestId) return;
 
-      if (_imagePath != null && !_imageFromTicketLink) {
-        setState(() => _ticketPreviewLoading = false);
-        return;
-      }
+      // Re-check after await — user may have typed while we fetched.
+      final fillImage = _needsTicketPreviewImage;
+      final fillName = _needsTicketPreviewEventName;
+      final fillDesc = _needsTicketPreviewDescription;
+      final fillPlace = _needsTicketPreviewPlace;
+      final fillDate = _needsTicketPreviewDate;
+      final fillTime = _needsTicketPreviewTime;
 
-      if (imageUrl == null) {
+      if (!fillImage &&
+          !fillName &&
+          !fillDesc &&
+          !fillPlace &&
+          !fillDate &&
+          !fillTime) {
         setState(() {
           _ticketPreviewLoading = false;
           _lastTicketPreviewUrl = url;
-          _ticketPreviewMessage = 'No preview image found for this link';
         });
         return;
       }
 
-      final savePath = await downloadPreviewImageToTemp(imageUrl);
-      if (!mounted || requestId != _ticketPreviewRequestId) return;
-
-      if (_imagePath != null && !_imageFromTicketLink) {
-        setState(() => _ticketPreviewLoading = false);
-        return;
-      }
-
-      if (savePath == null) {
+      if (preview.isEmpty) {
         setState(() {
           _ticketPreviewLoading = false;
           _lastTicketPreviewUrl = url;
-          _ticketPreviewMessage = 'Could not load preview image';
+          _ticketPreviewMessage = 'No preview found for this link';
         });
         return;
       }
 
-      final aspect = await measureCoverAspectRatio(savePath);
+      String? savePath;
+      double? aspect;
+      String? imageError;
+      if (fillImage && preview.imageUrl != null) {
+        savePath = await downloadPreviewImageToTemp(preview.imageUrl!);
+        if (!mounted || requestId != _ticketPreviewRequestId) return;
+        // User may have picked a gallery photo while download ran.
+        if (_imagePath != null && !_imageFromTicketLink) {
+          savePath = null;
+        } else if (savePath != null) {
+          aspect = await measureCoverAspectRatio(savePath);
+          if (!mounted || requestId != _ticketPreviewRequestId) return;
+        } else {
+          imageError = 'Could not load preview image';
+        }
+      } else if (fillImage && preview.imageUrl == null) {
+        // Title/desc may still apply; keep this soft so text autofill isn't masked.
+        imageError = 'No event cover found — you can upload one';
+      }
+
       if (!mounted || requestId != _ticketPreviewRequestId) return;
+
+      // Parse date/time only when still empty (backend already skipped past days).
+      DateTime? parsedDate;
+      if (fillDate && preview.date != null) {
+        parsedDate = DateTime.tryParse(preview.date!);
+        if (parsedDate != null) {
+          parsedDate = DateTime(
+            parsedDate.year,
+            parsedDate.month,
+            parsedDate.day,
+          );
+          if (parsedDate.isBefore(_today)) parsedDate = null;
+        }
+      }
+      TimeOfDay? parsedTime;
+      if (fillTime && preview.time != null && parsedDate != null) {
+        parsedTime = _parseTimeFromApi(preview.time);
+        if (parsedTime != null && _isDateTimeInPast(parsedDate, parsedTime)) {
+          parsedTime = null;
+        }
+      } else if (fillTime &&
+          preview.time != null &&
+          _selectedDate != null &&
+          !fillDate) {
+        parsedTime = _parseTimeFromApi(preview.time);
+        if (parsedTime != null &&
+            _isDateTimeInPast(_selectedDate!, parsedTime)) {
+          parsedTime = null;
+        }
+      }
+
+      // Final ownership check right before applying.
+      final applyImage =
+          savePath != null && (_imagePath == null || _imageFromTicketLink);
+      final applyName =
+          fillName &&
+          preview.title != null &&
+          (_eventName.text.trim().isEmpty || _eventNameFromTicketLink);
+      final applyDesc =
+          fillDesc &&
+          preview.description != null &&
+          (_description.text.trim().isEmpty || _descriptionFromTicketLink);
+      final applyPlace =
+          fillPlace &&
+          preview.place != null &&
+          (_selectedPlace == null || _placeFromTicketLink);
+      final applyDate =
+          fillDate &&
+          parsedDate != null &&
+          (_selectedDate == null || _dateFromTicketLink);
+      final applyTime =
+          fillTime &&
+          parsedTime != null &&
+          (_selectedTime == null || _timeFromTicketLink) &&
+          (applyDate || _selectedDate != null);
+
       setState(() {
-        _imagePath = savePath;
-        _coverAspectRatio = aspect;
-        _usesDefaultCover = false;
-        _imageFromTicketLink = true;
+        if (applyImage) {
+          _imagePath = savePath;
+          _coverAspectRatio = aspect;
+          _usesDefaultCover = false;
+          _imageFromTicketLink = true;
+          _touched[_fieldImage] = true;
+        }
+        if (applyName) {
+          _eventName.text = preview.title!;
+          _eventNameFromTicketLink = true;
+          _touched[_fieldEventName] = true;
+        }
+        if (applyDesc) {
+          _description.text = preview.description!;
+          _descriptionFromTicketLink = true;
+          _touched[_fieldDescription] = true;
+        }
+        if (applyPlace) {
+          _selectedPlace = preview.place;
+          _placeFromTicketLink = true;
+        }
+        if (applyDate) {
+          _selectedDate = parsedDate;
+          _dateFromTicketLink = true;
+          _touched[_fieldDate] = true;
+          _pastTimeRejected = false;
+        }
+        if (applyTime) {
+          _selectedTime = parsedTime;
+          _timeFromTicketLink = true;
+          _touched[_fieldTime] = true;
+          _pastTimeRejected = false;
+        }
         _ticketPreviewLoading = false;
-        _ticketPreviewMessage = null;
         _lastTicketPreviewUrl = url;
-        _touched[_fieldImage] = true;
+        // Soft message only when nothing useful applied and image was needed.
+        final appliedSomething =
+            applyImage ||
+            applyName ||
+            applyDesc ||
+            applyPlace ||
+            applyDate ||
+            applyTime;
+        _ticketPreviewMessage = appliedSomething
+            ? null
+            : (_imagePath == null ? imageError : null) ??
+                  'No preview found for this link';
       });
     } catch (_) {
       if (!mounted || requestId != _ticketPreviewRequestId) return;
@@ -681,10 +842,12 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
     setState(() {
       _selectedDate = picked;
+      _dateFromTicketLink = false;
       _pastTimeRejected = false;
       // Drop a time that would land in the past on the newly chosen day.
       if (_selectedTime != null && _isDateTimeInPast(picked, _selectedTime!)) {
         _selectedTime = null;
+        _timeFromTicketLink = false;
       }
     });
     // Continuously ask for time — user should not need a second tap.
@@ -731,6 +894,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     if (_isDateTimeInPast(_selectedDate!, picked)) {
       setState(() {
         _selectedTime = null;
+        _timeFromTicketLink = false;
         _pastTimeRejected = true;
       });
       return;
@@ -738,6 +902,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
 
     setState(() {
       _selectedTime = picked;
+      _timeFromTicketLink = false;
       _pastTimeRejected = false;
     });
   }
@@ -782,7 +947,9 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
         imageUrl = await posts.uploadImage(compressedFile.path);
         usesDefaultCover = false;
         coverAspect ??= await measureCoverAspectRatio(compressedFile.path);
-      } else if (_isEditing && _existingImageUrl != null && _existingImageUrl!.isNotEmpty) {
+      } else if (_isEditing &&
+          _existingImageUrl != null &&
+          _existingImageUrl!.isNotEmpty) {
         imageUrl = _existingImageUrl!;
         coverAspect ??= _editingPost?.coverAspectRatio;
       } else {
@@ -1021,6 +1188,8 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                       TextCapitalization.sentences,
                                   textInputAction: TextInputAction.next,
                                   onChanged: (_) {
+                                    // User edit — never let later link previews overwrite.
+                                    _eventNameFromTicketLink = false;
                                     _markTouched(_fieldEventName);
                                     setState(() {});
                                   },
@@ -1049,6 +1218,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                       TextCapitalization.sentences,
                                   textInputAction: TextInputAction.newline,
                                   onChanged: (_) {
+                                    _descriptionFromTicketLink = false;
                                     _markTouched(_fieldDescription);
                                     setState(() {});
                                   },
@@ -1081,10 +1251,14 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                   onSelected: (place) {
                                     setState(() {
                                       _selectedPlace = place;
+                                      _placeFromTicketLink = false;
                                     });
                                   },
                                   onCleared: () {
-                                    setState(() => _selectedPlace = null);
+                                    setState(() {
+                                      _selectedPlace = null;
+                                      _placeFromTicketLink = false;
+                                    });
                                   },
                                   onUserLatLng: (coords) {
                                     setState(() => _userLatLng = coords);
@@ -1176,14 +1350,6 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 16),
-                                // _PrivacyToggle(
-                                //   isPrivate: _private,
-                                //   onChanged: (v) {
-                                //     _unfocus();
-                                //     setState(() => _private = v);
-                                //   },
-                                // ),
-                                // const SizedBox(height: 16),
                                 const _SectionLabel('TICKET URL (OPTIONAL)'),
                                 const SizedBox(height: 8),
                                 TextField(
@@ -1357,6 +1523,23 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                                     setState(() => _isGoing = v);
                                   },
                                 ),
+                                if (ref
+                                        .watch(profileMeProvider)
+                                        .asData
+                                        ?.value
+                                        .settings
+                                        .isPrivateProfile ==
+                                    true) ...[
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'Your account is private — only people who follow you, can see your events in the feed, explore, and on your profile. Change this anytime in Settings.',
+                                    style: AppTextStyles.body(
+                                      12,
+                                      color: AppColors.primary,
+                                      weight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 60),
                               ],
                             ),
@@ -1378,7 +1561,9 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
                             child: BeTherPrimaryButton(
                               label: _busy
                                   ? (_isEditing ? 'UPDATING…' : 'POSTING…')
-                                  : (_isEditing ? 'UPDATE EVENT' : 'POST EVENT'),
+                                  : (_isEditing
+                                        ? 'UPDATE EVENT'
+                                        : 'POST EVENT'),
                               enabled: !_busy && !_editLoading,
                               onPressed: _post,
                             ),
@@ -1412,8 +1597,7 @@ class _AddPostScreenState extends ConsumerState<AddPostScreen> {
     EdgeInsetsGeometry? contentPadding,
   }) {
     final hasError = errorText != null && errorText.isNotEmpty;
-    final borderColor =
-        hasError ? AppColors.destructive : AppColors.cardBorder;
+    final borderColor = hasError ? AppColors.destructive : AppColors.cardBorder;
 
     return InputDecoration(
       hintText: hint,
@@ -1566,76 +1750,6 @@ class _BrightSwitch extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ignore: unused_element
-class _PrivacyToggle extends StatelessWidget {
-  const _PrivacyToggle({required this.isPrivate, required this.onChanged});
-
-  final bool isPrivate;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppDimens.radius),
-        border: Border.all(
-          color: AppColors.cardBorder,
-          width: AppDimens.borderThin,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: isPrivate
-                  ? AppColors.primary.withValues(alpha: 0.15)
-                  : const Color(0xFFE8F5E9),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              isPrivate ? Icons.lock_rounded : Icons.public_rounded,
-              color: isPrivate ? AppColors.primary : const Color(0xFF2E7D32),
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isPrivate ? 'Private Event' : 'Public Event',
-                  style: AppTextStyles.body(16, weight: FontWeight.w700),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  isPrivate
-                      ? 'Only tagged users can see this'
-                      : 'Visible to everyone',
-                  style: AppTextStyles.body(
-                    13,
-                    color: AppColors.mutedForeground,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _BrightSwitch(
-            value: isPrivate,
-            onChanged: onChanged,
-            activeColor: AppColors.primary,
-          ),
-        ],
       ),
     );
   }

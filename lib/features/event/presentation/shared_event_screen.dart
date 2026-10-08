@@ -9,9 +9,11 @@ import '../../../core/design/app_text_styles.dart';
 import '../../../core/design/widgets/app_brand_logo.dart';
 import '../../../core/design/widgets/app_shell.dart';
 import '../../../core/design/widgets/post_skeleton.dart';
+import '../../feed/data/posts_repository.dart';
 import '../../feed/presentation/feed_providers.dart';
 import '../../feed/presentation/feed_screen.dart';
 import '../../feed/presentation/widgets/feed_post_card.dart';
+import '../../profile/presentation/profile_screen.dart';
 
 class SharedEventScreen extends ConsumerWidget {
   const SharedEventScreen({super.key, required this.postId});
@@ -112,10 +114,24 @@ class SharedEventScreen extends ConsumerWidget {
               loading: () => ListView(
                 children: const [PostSkeleton()],
               ),
-              error: (error, _) => _ErrorState(
-                message: error.toString().replaceFirst('Exception: ', ''),
-                onBack: () => leave(context),
-              ),
+              error: (error, _) {
+                if (error is PrivateEventAccess) {
+                  return _PrivateEventState(
+                    access: error,
+                    onBack: () => leave(context),
+                    onViewProfile: error.ownerUsername == null ||
+                            error.ownerUsername!.isEmpty
+                        ? null
+                        : () => context.push(
+                              ProfileScreen.pathForUser(error.ownerUsername!),
+                            ),
+                  );
+                }
+                return _ErrorState(
+                  message: error.toString().replaceFirst('Exception: ', ''),
+                  onBack: () => leave(context),
+                );
+              },
               data: (item) => ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
@@ -131,6 +147,82 @@ class SharedEventScreen extends ConsumerWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PrivateEventState extends StatelessWidget {
+  const _PrivateEventState({
+    required this.access,
+    required this.onBack,
+    this.onViewProfile,
+  });
+
+  final PrivateEventAccess access;
+  final VoidCallback onBack;
+  final VoidCallback? onViewProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = access.ownerName?.trim();
+    const title = 'Private event';
+    final body = access.message;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.lock_outline_rounded,
+              size: 48,
+              color: AppColors.primary.withValues(alpha: 0.9),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: AppTextStyles.display(20, color: AppColors.secondary),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              body,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.body(14, color: AppColors.mutedForeground),
+            ),
+            if (access.isProfilePrivate &&
+                name != null &&
+                name.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Follow $name in Be Ther to see their events.',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body(
+                  13,
+                  color: AppColors.mutedForeground,
+                  weight: FontWeight.w600,
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            if (onViewProfile != null) ...[
+              FilledButton(
+                onPressed: onViewProfile,
+                child: Text(
+                  name != null && name.isNotEmpty
+                      ? 'VIEW $name\'S PROFILE'
+                      : 'VIEW PROFILE',
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            OutlinedButton(
+              onPressed: onBack,
+              child: const Text('BACK TO FEED'),
+            ),
+          ],
         ),
       ),
     );

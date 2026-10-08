@@ -111,7 +111,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                       subtitle: Text(
                         _private
-                            ? 'Only people who follow you can see your events in the feed, explore, and on your profile'
+                            ? 'Only people who follow you, can see your events in the feed, explore, and on your profile'
                             : 'Anyone can find your public events in the feed, explore, and on your profile',
                         style: AppTextStyles.body(
                           13,
@@ -278,8 +278,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           context: context,
                           useRootNavigator: true,
                           barrierDismissible: false,
-                          barrierColor:
-                              AppColors.secondary.withValues(alpha: 0.35),
+                          barrierColor: AppColors.secondary.withValues(
+                            alpha: 0.35,
+                          ),
                           builder: (_) => const Center(
                             child: CircularProgressIndicator(
                               color: AppColors.primary,
@@ -444,11 +445,7 @@ class _CalendarViewButton extends StatelessWidget {
             child: Text(
               label,
               textAlign: TextAlign.center,
-              style: AppTextStyles.display(
-                13,
-                color: fg,
-                letterSpacing: 0.04,
-              ),
+              style: AppTextStyles.display(13, color: fg, letterSpacing: 0.04),
             ),
           ),
         ),

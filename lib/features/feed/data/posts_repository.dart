@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../domain/comment.dart';
 import '../domain/feed_post.dart';
+import 'places_repository.dart';
 
 class PostsRepository {
   PostsRepository(this._dio);
@@ -34,6 +35,8 @@ class PostsRepository {
       }
       return FeedPost.fromJson(Map<String, dynamic>.from(post));
     } on DioException catch (e) {
+      final private = PrivateEventAccess.fromDio(e);
+      if (private != null) throw private;
       throw Exception(_apiMessage(e, fallback: 'Failed to load event'));
     }
   }
@@ -369,7 +372,7 @@ class PostsRepository {
   }
 
   /// Server-side OG preview for external ticket links (BookMyShow, etc.).
-  Future<String?> fetchLinkPreviewImageUrl(String pageUrl) async {
+  Future<TicketLinkPreview> fetchLinkPreview(String pageUrl) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(
         '/api/v1/link-preview',
@@ -379,12 +382,44 @@ class PostsRepository {
         res.data,
         fallbackMessage: 'Could not load link preview',
       );
-      final imageUrl = data['imageUrl']?.toString().trim();
-      if (imageUrl == null || imageUrl.isEmpty) return null;
-      return imageUrl;
+      String? clean(String? key) {
+        final v = data[key]?.toString().trim();
+        return (v == null || v.isEmpty) ? null : v;
+      }
+
+      StructuredPlace? place;
+      final placeRaw = data['place'];
+      if (placeRaw is Map<String, dynamic>) {
+        place = StructuredPlace.fromJson(placeRaw);
+        if (place.lat == 0 && place.lng == 0 && place.placeId.isEmpty) {
+          place = null;
+        }
+      } else if (placeRaw is Map) {
+        place = StructuredPlace.fromJson(Map<String, dynamic>.from(placeRaw));
+        if (place.lat == 0 && place.lng == 0 && place.placeId.isEmpty) {
+          place = null;
+        }
+      }
+
+      return TicketLinkPreview(
+        url: clean('url') ?? pageUrl,
+        imageUrl: clean('imageUrl'),
+        title: clean('title'),
+        description: clean('description'),
+        venueQuery: clean('venueQuery'),
+        place: place,
+        date: clean('date'),
+        time: clean('time'),
+      );
     } on DioException catch (e) {
       throw Exception(_apiMessage(e, fallback: 'Could not load link preview'));
     }
+  }
+
+  /// Convenience for callers that only need the cover image.
+  Future<String?> fetchLinkPreviewImageUrl(String pageUrl) async {
+    final preview = await fetchLinkPreview(pageUrl);
+    return preview.imageUrl;
   }
 
   Map<String, dynamic> _extractData(
@@ -436,6 +471,78 @@ class PostsRepository {
     if (dioMessage.isNotEmpty) return dioMessage;
     return fallback;
   }
+}
+
+/// 403 from GET /posts/:id when the viewer cannot see a private post/profile.
+class PrivateEventAccess implements Exception {
+  const PrivateEventAccess({
+    required this.message,
+    required this.code,
+    this.ownerName,
+    this.ownerUsername,
+  });
+
+  final String message;
+  final String code;
+  final String? ownerName;
+  final String? ownerUsername;
+
+  bool get isProfilePrivate => code == 'PRIVATE_PROFILE';
+
+  static PrivateEventAccess? fromDio(DioException e) {
+    if (e.response?.statusCode != 403) return null;
+    final data = e.response?.data;
+    if (data is! Map) return null;
+    final error = data['error'];
+    if (error is! Map) return null;
+    final map = Map<String, dynamic>.from(error);
+    final code = map['code']?.toString() ?? '';
+    if (code != 'PRIVATE_PROFILE' && code != 'PRIVATE_EVENT') return null;
+    final message = map['message']?.toString().trim();
+    return PrivateEventAccess(
+      message: (message != null && message.isNotEmpty)
+          ? message
+          : 'This event is private',
+      code: code,
+      ownerName: map['ownerName']?.toString(),
+      ownerUsername: map['ownerUsername']?.toString(),
+    );
+  }
+
+  @override
+  String toString() => message;
+}
+
+/// Open Graph / Twitter card fields from [PostsRepository.fetchLinkPreview].
+class TicketLinkPreview {
+  const TicketLinkPreview({
+    required this.url,
+    this.imageUrl,
+    this.title,
+    this.description,
+    this.venueQuery,
+    this.place,
+    this.date,
+    this.time,
+  });
+
+  final String url;
+  final String? imageUrl;
+  final String? title;
+  final String? description;
+  final String? venueQuery;
+  final StructuredPlace? place;
+  /// `YYYY-MM-DD` when upcoming; null if unknown or past.
+  final String? date;
+  /// `HH:mm` when known and still upcoming; else null.
+  final String? time;
+
+  bool get isEmpty =>
+      (imageUrl == null || imageUrl!.isEmpty) &&
+      (title == null || title!.isEmpty) &&
+      (description == null || description!.isEmpty) &&
+      place == null &&
+      (date == null || date!.isEmpty);
 }
 
 class FeedPage {

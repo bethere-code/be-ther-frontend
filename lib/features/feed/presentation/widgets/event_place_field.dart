@@ -138,11 +138,17 @@ class _EventPlaceFieldState extends ConsumerState<EventPlaceField> {
   @override
   void didUpdateWidget(covariant EventPlaceField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected == null && oldWidget.selected != null) {
-      _suppressTextListener = true;
+    if (widget.selected == oldWidget.selected) return;
+    _suppressTextListener = true;
+    if (widget.selected == null) {
       _controller.clear();
-      _suppressTextListener = false;
+    } else {
+      _controller.text = widget.selected!.displayLabel;
+      if (_suggestions.isNotEmpty) {
+        _suggestions = [];
+      }
     }
+    _suppressTextListener = false;
   }
 
   @override
