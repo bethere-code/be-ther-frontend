@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/config/app_env.dart';
 import 'core/design/app_colors.dart';
 import 'core/design/widgets/offline_screen.dart';
 import 'core/routing/app_router.dart';
@@ -35,13 +36,21 @@ class BeTherApp extends ConsumerWidget {
           Locale('en'),
         ],
         builder: (context, child) {
-          return DeepLinkListener(
+          final app = DeepLinkListener(
             child: OfflineBarrier(
               child: ColoredBox(
                 color: AppColors.background,
                 child: child ?? const SizedBox.shrink(),
               ),
             ),
+          );
+          if (!isDevBackend) return app;
+          return Banner(
+            message: 'DEV',
+            location: BannerLocation.topEnd,
+            textDirection: TextDirection.ltr,
+            layoutDirection: TextDirection.ltr,
+            child: app,
           );
         },
       ),

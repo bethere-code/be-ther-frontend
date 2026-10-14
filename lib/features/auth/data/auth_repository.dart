@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../../core/analytics/device_snapshot.dart';
 import '../../../core/analytics/fcm_token.dart';
@@ -163,6 +164,43 @@ class AuthRepository {
       return AuthTokens.fromJson(data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw _toApiException(e, fallback: 'Google sign-in failed');
+    }
+  }
+
+  /// Null when the user dismisses the Apple sheet.
+  Future<AuthTokens?> signInWithApple() async {
+    final AuthorizationCredentialAppleID credential;
+    try {
+      credential = await SignInWithApple.getAppleIDCredential(
+        scopes: const [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) return null;
+      throw ApiException('Apple sign-in failed. Please try again.');
+    }
+    final identityToken = credential.identityToken;
+    if (identityToken == null || identityToken.isEmpty) {
+      throw ApiException('Missing Apple identity token');
+    }
+    // Apple shares the name only on the first sign-in; the backend stores it then.
+    final givenName = credential.givenName?.trim();
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/auth/apple',
+        data: {
+          'identityToken': identityToken,
+          'authorizationCode': credential.authorizationCode,
+          if (givenName != null && givenName.isNotEmpty) 'givenName': givenName,
+          ...await _clientMeta(),
+        },
+      );
+      final data = _unwrap(res);
+      return AuthTokens.fromJson(data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw _toApiException(e, fallback: 'Apple sign-in failed');
     }
   }
 

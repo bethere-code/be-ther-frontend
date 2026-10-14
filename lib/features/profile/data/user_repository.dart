@@ -112,6 +112,23 @@ class UserRepository {
     }
   }
 
+  Future<void> deleteMe() async {
+    try {
+      final res = await _dio.delete<Map<String, dynamic>>('/api/v1/users/me');
+      if (res.data == null || res.data!['ok'] != true) {
+        throw ApiException(
+          _messageFromBody(res.data, 'Could not delete account'),
+          statusCode: res.statusCode,
+        );
+      }
+    } on DioException catch (e) {
+      throw ApiException(
+        _errorFromDio(e, fallback: 'Could not delete account'),
+        statusCode: e.response?.statusCode,
+      );
+    }
+  }
+
   Future<String> uploadImage(String filePath) async {
     try {
       final form = FormData.fromMap({

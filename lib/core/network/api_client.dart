@@ -23,7 +23,7 @@ bool _isAuthPath(String path) {
 final apiClientProvider = Provider<Dio>((ref) {
   final baseUrl = dotenv.maybeGet('API_BASE_URL')?.trim();
   if (baseUrl == null || baseUrl.isEmpty) {
-    throw StateError('API_BASE_URL missing in assets/env/app.env');
+    throw StateError('API_BASE_URL missing in assets/env/*.env');
   }
 
   final dio = Dio(

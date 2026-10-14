@@ -13,6 +13,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'app.dart';
 import 'core/analytics/analytics_tracker.dart';
 import 'core/background_tasks/notification_syncer.dart';
+import 'core/config/app_env.dart';
 import 'core/network/connectivity_controller.dart';
 import 'core/push/push_service.dart';
 import 'core/routing/app_router.dart';
@@ -52,7 +53,7 @@ Future<void> main() async {
   // them while scrolling → re-decode mid-fling. Keep more decoded covers in RAM.
   PaintingBinding.instance.imageCache.maximumSizeBytes = 200 << 20; // 200 MiB
 
-  await dotenv.load(fileName: 'assets/env/app.env');
+  await dotenv.load(fileName: appEnvFile);
   final serverClientId = dotenv.maybeGet('GOOGLE_WEB_CLIENT_ID')?.trim();
   await GoogleSignIn.instance.initialize(
     serverClientId: serverClientId == null || serverClientId.isEmpty

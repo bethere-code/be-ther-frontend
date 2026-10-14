@@ -9,6 +9,7 @@ import '../../../core/design/widgets/be_ther_buttons.dart';
 import '../../../core/design/widgets/loading_label.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_theme.dart';
+import 'apple_sign_in_button.dart';
 import 'auth_notifier.dart';
 import 'auth_otp_route_extra.dart';
 import 'auth_otp_screen.dart';
@@ -38,7 +39,8 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
   bool _obscurePassword = true;
   bool _busyPrimary = false;
   bool _busyGoogle = false;
-  bool get _busy => _busyPrimary || _busyGoogle;
+  bool _busyApple = false;
+  bool get _busy => _busyPrimary || _busyGoogle || _busyApple;
   String? _error;
   String? _identifierError;
   String? _passwordError;
@@ -162,6 +164,27 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
       setState(() => _error = message);
     } finally {
       if (mounted) setState(() => _busyGoogle = false);
+    }
+  }
+
+  Future<void> _apple() async {
+    setState(() {
+      _error = null;
+      _busyApple = true;
+    });
+    try {
+      final tokens = await ref.read(authRepositoryProvider).signInWithApple();
+      if (tokens == null) return;
+      await ref.read(authNotifierProvider.notifier).applyTokens(tokens);
+      if (!mounted) return;
+      context.go('/feed');
+    } catch (e) {
+      final message = e is ApiException
+          ? e.message
+          : 'Apple sign-in failed. Please try again.';
+      setState(() => _error = message);
+    } finally {
+      if (mounted) setState(() => _busyApple = false);
     }
   }
 
@@ -374,6 +397,10 @@ class _AuthEmailScreenState extends ConsumerState<AuthEmailScreen> {
                               ),
                       ),
                     ),
+                  ),
+                  AppleSignInButton(
+                    busy: _busyApple,
+                    onPressed: _busy ? null : _apple,
                   ),
                   const SizedBox(height: 8),
                   Center(

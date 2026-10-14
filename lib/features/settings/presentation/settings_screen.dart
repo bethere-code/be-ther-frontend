@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_dimens.dart';
 import '../../../core/design/app_text_styles.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/utils/link_utils.dart';
 import '../../auth/presentation/auth_notifier.dart';
@@ -294,6 +295,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         }
                       },
                     ),
+                    const Divider(
+                      height: 1,
+                      thickness: AppDimens.borderThin,
+                      color: AppColors.cardBorder,
+                    ),
+                    ListTile(
+                      title: Text(
+                        'Delete Account',
+                        style: AppTextStyles.body(
+                          16,
+                          weight: FontWeight.w800,
+                          color: AppColors.destructive,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Permanently delete your account and everything in it.',
+                        style: AppTextStyles.body(
+                          13,
+                          color: AppColors.mutedForeground,
+                        ),
+                      ),
+                      onTap: _deleteAccount,
+                    ),
                   ],
                 ),
               ),
@@ -359,6 +383,67 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _deleteAccount() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.background,
+        title: Text(
+          'DELETE ACCOUNT?',
+          style: AppTextStyles.display(22, color: AppColors.secondary),
+        ),
+        content: const Text(
+          'This permanently deletes your profile, events, comments, likes, '
+          'and followers. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dialogContext, rootNavigator: true).pop(false),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.destructive,
+            ),
+            onPressed: () =>
+                Navigator.of(dialogContext, rootNavigator: true).pop(true),
+            child: const Text('DELETE'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final rootNav = Navigator.of(context, rootNavigator: true);
+    showDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      barrierColor: AppColors.secondary.withValues(alpha: 0.35),
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      ),
+    );
+    try {
+      await ref.read(userRepositoryProvider).deleteMe();
+    } catch (e) {
+      rootNav.pop();
+      if (mounted) {
+        AppToast.show(
+          context,
+          e is ApiException ? e.message : 'Could not delete account',
+        );
+      }
+      return;
+    }
+    await ref.read(authNotifierProvider.notifier).logout();
+    final nav = rootNavigatorKey.currentContext;
+    if (nav != null && nav.mounted) {
+      nav.go(LaunchScreen.path);
+    }
   }
 
   Future<void> _save() async {

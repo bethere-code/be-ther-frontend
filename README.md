@@ -35,13 +35,17 @@ lib/
 
 ## Run Locally
 
-1. Update `assets/env/app.env`:
-   - `API_BASE_URL` — Android emulator: `http://10.0.2.2:3000`; iOS simulator / desktop / web: `http://127.0.0.1:3000`
-   - Optional `GOOGLE_WEB_CLIENT_ID` — same Web client ID as the backend (`GOOGLE_WEB_CLIENT_ID` in `be-ther-backend/.env`)
+1. Environments (`assets/env/`):
+   - `prod.env` — production API (`https://be-ther.com/api/`). **Release builds (AAB / App Store) always use this.**
+   - `dev.env` — dev API with its own database (`https://dev.be-ther.com/api/`). For a local backend set
+     `API_BASE_URL` to `http://10.0.2.2:3000` (Android emulator) or `http://127.0.0.1:3000` (iOS simulator).
 2. Install packages:
    - `flutter pub get`
-3. Run:
-   - `flutter run`
+3. Run (debug):
+   - Prod: `flutter run` (or "Be Ther (prod)" in Cursor / VS Code)
+   - Dev: `flutter run --dart-define=APP_ENV=dev` (or "Be Ther (dev)") — shows a red DEV banner
+4. Release (always prod, no flags needed):
+   - `flutter build appbundle` / Xcode Archive
 
 ## Connect Mongo, R2, OTP email, and Google
 

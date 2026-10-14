@@ -9,5 +9,9 @@
 		<string>applinks:be-ther.com</string>
 		<string>applinks:www.be-ther.com</string>
 	</array>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>
